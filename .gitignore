@@ -1,0 +1,16 @@
+# Datos originales de LucasArts y todo lo derivado de ellos: no se redistribuyen
+/V1/
+/V2/
+/preview/
+/preview_log.txt
+/dump_out/
+/tmp_obj/
+
+# Salidas de montaje y de pruebas
+*.bin
+*.sym
+*.exe
+*.o
+**/build/
+__pycache__/
+*~

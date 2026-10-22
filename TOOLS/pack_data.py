@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""Empaqueta los datos NO graficos de Maniac Mansion (scripts, codigo de objetos, cajas y objetos de cada sala,
+dueno y estado de los objetos) en DATA.BIN, que el programa del ZX81 carga de la SD al arrancar.
+
+Uso: pack_data.py DIRECTORIO_LFL SALIDA.BIN [--first-page N] [--all]
+  --first-page  primera pagina de la RAM extendida que ocupan los datos (16 por omision)
+  --all         incluye los scripts y salas sinteticos de las pruebas (ids >= 180 y salas >= 60), con el mismo
+                reparto en paginas que world.bin (pruebas del cargador: --first-page 8)
+
+Formato (little endian; las cuatro tablas son tal cual se copian en memoria, ver SCUMM/ENGINE/loader.asm):
+  +0      "SDAT"
+  +4      u8   version (1)
+  +5      u8   numero de paginas
+  +6      u8   primera pagina
+  +7      u8   0
+  +8      u16  bytes de cada pagina (6144: lo que cabe en la ventana de datos $2000-$37FF)
+  +10     6 bytes sin uso
+  +16     SCRDIR  256 x 3   pagina (0 = no hay), direccion
+  +784    OBJOWN  780       dueno de cada objeto
+  +1564   OBJST   780       estado de cada objeto
+  +2344   ROOMDIR 64 x 16   por sala: pagina y direccion del codigo de entrada, id. de salida, ancho (u16),
+                            pagina, direccion y tamano (u16) del bloque de cajas y objetos
+  +3368   ODIR    780 x 3   por objeto: pagina y direccion de su bloque de codigo (pagina 0 = no esta)
+  +5708   COSTDIR 64 x 3   por traje: pagina y direccion de sus fotogramas de sprites (TOOLS/costume2.py)
+  +5900   relleno hasta 6144
+  +6144   las paginas, de 6144 bytes cada una
+"""
+import os
+import struct
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import vmmodel as M
+
+TABLES = 6144
+SYNTH_SCRIPT = 180
+SYNTH_ROOM = 60
+
+
+def build(world, first_page=16, include_test=False):
+    pk = M.Packer(first_page=first_page)
+    scripts = {i: c for i, c in world.scripts.items() if include_test or i < SYNTH_SCRIPT}
+    rooms = {n: r for n, r in world.rooms.items() if include_test or n < SYNTH_ROOM}
+    scrdir = bytearray(256 * 3)
+    for i, code in sorted(scripts.items()):
+        page, addr = pk.add(code)
+        scrdir[3 * i:3 * i + 3] = struct.pack('<BH', page, addr)
+    odir = bytearray(M.NUM_OBJECTS * 3)
+    for oid, (rn, block) in sorted(world.objects.items()):
+        page, addr = pk.add(block)
+        odir[3 * oid:3 * oid + 3] = struct.pack('<BH', page, addr)
+    roomdir = bytearray(64 * 16)
+    for rn, r in sorted(rooms.items()):
+        ent = r.entry_script() if r.encd_off else b''
+        ext = r.exit_script() if r.excd_off else b''
+        blob = M.room_blob(r)
+        e = bytearray(16)
+        struct.pack_into('<H', e, 6, r.width)
+        if ent:
+            struct.pack_into('<BH', e, 0, *pk.add(ent))
+        if ext:
+            struct.pack_into('<BH', e, 3, *pk.add(ext))
+        bp, ba = pk.add(blob)
+        struct.pack_into('<BHH', e, 8, bp, ba, len(blob))
+        roomdir[16 * rn:16 * rn + 16] = e
+    costdir = bytearray(64 * 3)                       # trajes: pagina y direccion de cada uno (0 = sin datos)
+    if not include_test:
+        import costume2
+        import lfl2gfx
+        import scumm2
+        ixd = scumm2.Index(world.dir) if hasattr(world, 'dir') else None
+        if ixd is not None:
+            emap = lfl2gfx.default_map({})
+            for cid in range(1, 25):
+                try:
+                    blob = costume2.costume_blob(costume2.Costume(scumm2.resource(world.dir, ixd, 'costume', cid)), emap)
+                except Exception:
+                    continue
+                if len(blob) > 6100:                      # no cabe en una pagina: ese traje se queda con el rectangulo
+                    continue
+                costdir[3 * cid:3 * cid + 3] = struct.pack('<BH', *pk.add(blob))
+    npages = len(pk.pages)
+    head = b'SDAT' + struct.pack('<BBBBH', 1, npages, first_page, 0, M.PAGE_USABLE) + bytes(6)
+    tables = head + bytes(scrdir) + bytes(world.owner) + bytes(world.state) + bytes(roomdir) + bytes(odir) + bytes(costdir)
+    assert len(tables) <= TABLES, len(tables)
+    out = bytearray(tables + bytes(TABLES - len(tables)))
+    for pg in sorted(pk.pages):
+        out += bytes(pk.pages[pg][:M.PAGE_USABLE])
+    return bytes(out), npages
+
+
+def main():
+    args = sys.argv[1:]
+    if len(args) < 2:
+        print(__doc__)
+        return 1
+    first = 16
+    test = '--all' in args
+    if '--first-page' in args:
+        first = int(args[args.index('--first-page') + 1])
+    d, out = args[0], args[1]
+    world = M.World(d)
+    data, npages = build(world, first, test)
+    with open(out, 'wb') as f:
+        f.write(data)
+    print('%s: %d paginas de %d bytes desde la %d, %d bytes' % (out, npages, M.PAGE_USABLE, first, len(data)))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
