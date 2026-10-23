@@ -643,47 +643,66 @@ uk_set:         ld (INP_AREA),a
                 ret
 
 ; ---------------------------------------------------------------------------------------------------- inventario
-; A = numero de objetos del protagonista (los que tienen su numero de actor como dueno)
+; A = numero de objetos del protagonista (los que tienen su numero de actor como dueno), en el orden de las ranuras de INVSL
 ui_inv_count:   ld a,(VARS)
                 ld c,a
-                ld b,0
-                ld hl,OBJOWN+1
-                ld de,NOBJ-1
-uic_l:          ld a,(hl)
+                ld d,0
+                ld hl,INVSL
+                ld b,NINV
+uic_l:          push hl
+                ld a,(hl)
+                inc hl
+                ld h,(hl)
+                ld l,a
+                call inv_own
+                pop hl
+                inc hl
+                inc hl
                 cp c
                 jr nz,uic_n
-                inc b
-uic_n:          inc hl
-                dec de
+                inc d
+uic_n:          djnz uic_l
                 ld a,d
-                or e
-                jr nz,uic_l
-                ld a,b
                 ret
 
-; A = n (desde 1) -> HL = el n-esimo objeto del protagonista por numero de objeto (0 si no hay)
-ui_inv_find:    ld b,a
+; A = n (desde 1) -> HL = el n-esimo objeto del protagonista por orden de ranura (0 si no hay)
+ui_inv_find:    ld d,a
                 ld a,(VARS)
                 ld c,a
-                ld hl,OBJOWN+1
-                ld de,1
-uif_l:          ld a,(hl)
+                ld hl,INVSL
+                ld b,NINV
+uif_l:          push hl
+                ld a,(hl)
+                inc hl
+                ld h,(hl)
+                ld l,a
+                push hl
+                call inv_own
+                pop hl
                 cp c
                 jr nz,uif_n
-                dec b
+                dec d
                 jr z,uif_f
-uif_n:          inc hl
-                inc de
-                ld a,d
-                cp 3
-                jr c,uif_l
-                jr nz,uif_none
-                ld a,e
-                cp $0C
-                jr c,uif_l
-uif_none:       ld hl,0
+uif_n:          pop hl
+                inc hl
+                inc hl
+                djnz uif_l
+                ld hl,0
                 ret
-uif_f:          ex de,hl
+uif_f:          pop de
+                ret
+
+; HL = objeto -> A = su dueno ($FF si el objeto es 0)
+inv_own:        ld a,h
+                or l
+                jr nz,io_1
+                ld a,$FF
+                ret
+io_1:           push de
+                ld de,OBJOWN
+                add hl,de
+                pop de
+                ld a,(hl)
                 ret
 
 ui_draw_inv:    ld a,INV_ROW0

@@ -785,10 +785,44 @@ h_o2_setOwnerOf:
                 ld (hl),a
                 or a
                 jr nz,so_ev
+                call inv_del
                 ld de,(ARGS)
                 call stop_object_script
 so_ev:          pop af
                 jp st_event
+
+; inventario (addObjectToInventory / clearOwnerOf de ScummVM v2): el objeto va a la primera ranura libre; setOwnerOf a 0 la libera
+inv_add:        ld hl,INVSL
+                ld b,NINV
+ia_l:           ld a,(hl)
+                inc hl
+                or (hl)
+                jr z,ia_f
+                inc hl
+                djnz ia_l
+                ret
+ia_f:           ld de,(ARGS)
+                ld (hl),d
+                dec hl
+                ld (hl),e
+                ret
+inv_del:        ld de,(ARGS)
+                ld hl,INVSL
+                ld b,NINV
+id_l:           ld a,(hl)
+                cp e
+                inc hl
+                jr nz,id_n
+                ld a,(hl)
+                cp d
+                jr nz,id_n
+                ld (hl),0
+                dec hl
+                ld (hl),0
+                ret
+id_n:           inc hl
+                djnz id_l
+                ret
 
 ; pickupObject: ARGS: objeto
 h_o2_pickupObject:
@@ -811,6 +845,7 @@ po_1:           call state_get
                 ret nz                  ; ya esta en un inventario
 po_do:          ld a,(VARS)             ; el protagonista
                 ld (hl),a
+                call inv_add
                 ld hl,(ARGS)
                 ld de,OBJST
                 add hl,de

@@ -1251,6 +1251,9 @@ class GameMixin:
         st = self.get_state(obj)
         self.owner[obj] = owner & 0xFF
         if owner == 0:
+            inv = self.__dict__.setdefault('inv', [0] * 48)
+            if obj in inv:
+                inv[inv.index(obj)] = 0             # clearOwnerOf libera la ranura (el orden del inventario es el de las ranuras)
             self.stop_object_script(obj)
         self.ev(EV_OBJSTATE, [obj, st])
 
@@ -1263,6 +1266,9 @@ class GameMixin:
         if self.where_is_object(obj) == 'inv':
             return
         self.owner[obj] = self.vars[VAR_EGO] & 0xFF
+        inv = self.__dict__.setdefault('inv', [0] * 48)
+        if 0 in inv:
+            inv[inv.index(0)] = obj                 # addObjectToInventory: la primera ranura libre
         self.put_state(obj, st | 0x0A)
         self.ev(EV_OBJSTATE, [obj, self.state[obj]])
 
