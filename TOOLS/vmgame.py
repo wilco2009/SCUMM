@@ -150,7 +150,8 @@ class GameMixin:
         'o2_doSentence': 'g_doSentence', 'o2_findObject': 'g_findObject', 'o2_actorFromPos': 'g_actorFromPos',
         'o2_drawObject': 'g_drawObject', 'o5_actorFollowCamera': 'g_actorFollowCamera',
         'o2_loadRoomWithEgo': 'g_loadRoomWithEgo',
-        'o5_getDist': 'g_getDist', 'o5_getObjectOwner': 'g_getObjectOwner', 'o2_setOwnerOf': 'g_setOwnerOf', 'o2_pickupObject': 'g_pickupObject',
+        'o5_getDist': 'g_getDist', 'o5_getRandomNr': 'g_getRandomNr', 'o2_cutscene': 'g_cutscene', 'o2_endCutscene': 'g_endCutscene', 'o2_beginOverride': 'g_beginOverride',
+        'o5_getObjectOwner': 'g_getObjectOwner', 'o2_setOwnerOf': 'g_setOwnerOf', 'o2_pickupObject': 'g_pickupObject',
     }
 
     def game_reset(self):
@@ -170,6 +171,7 @@ class GameMixin:
         self.matrix = b''
         self.roomobjs = {}
         self.objlist = []                             # los objetos de la sala en orden: (id, caminar x, y, dir, x, y, ancho, alto, padre, estado del padre)
+        self.rnd = 0xACE1                             # semilla del generador (getRandomNr)
         self.sent = []                                # cola de frases (_sentence[]): [verbo, objeto A, objeto B, preposicion]
         self.pending = []                             # entradas (clic, tecla) a procesar en el siguiente fotograma
 
@@ -1147,6 +1149,32 @@ class GameMixin:
         a = self.get_var_or_direct_word(0x80)
         b = self.get_var_or_direct_word(0x40)
         self.write_var(r, self.obj_act_dist(a, b))
+
+    def g_getRandomNr(self):
+        """getRandomNr(max): 0..max; generador congruencial de 16 bits (x = x * 5 + 1) y su byte alto escalado, igual que el Z80."""
+        r = self.fetch_byte()
+        mx = self.get_var_or_direct_byte(0x80)
+        self.rnd = (self.rnd * 5 + 1) & 0xFFFF
+        b = self.rnd >> 8
+        self.write_var(r, b if mx == 255 else (b * (mx + 1)) >> 8)
+
+    def g_cutscene(self):
+        op = self.opcode
+        self.sent = []
+        self.stop_script(SENTENCE_SCRIPT)
+        self.reset_sentence()
+        self.host_log(op, [])
+
+    def g_endCutscene(self):
+        op = self.opcode
+        self.vars[VAR_OVERRIDE] = 0
+        self.host_log(op, [])
+
+    def g_beginOverride(self):
+        op = self.opcode
+        b = self.fetch_byte()
+        w = self.fetch_word()
+        self.host_log(op, [b, w])
 
     def g_getObjectOwner(self):
         r = self.fetch_byte()

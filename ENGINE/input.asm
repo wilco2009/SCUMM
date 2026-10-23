@@ -936,3 +936,90 @@ gd_isact:       ld a,h
                 ret
 gd_no:          xor a
                 ret
+
+; ------------------------------------------------------------------------------------ getRandomNr y cutscenes
+RNDST           equ $EB90               ; palabra: generador (x = x * 5 + 1); semilla $ACE1 en vm_init
+CUTPTR          equ $EB92               ; palabra: donde sigue el script si se salta la cutscene (beginOverride); 0: no hay
+CUTSLOT         equ $EB94               ; ranura del script que ha hecho beginOverride
+
+h_o5_getRandomNr:                       ; ARGS: resultado, max -> 0..max
+                ld hl,(RNDST)
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,hl
+                add hl,de
+                inc hl
+                ld (RNDST),hl
+                ld c,h                  ; byte aleatorio
+                ld a,(ARGS+2)
+                inc a
+                jr z,rn_full            ; max = 255: el byte tal cual
+                ld e,a
+                ld d,0
+                ld hl,0
+                ld b,8
+rn_m:           add hl,hl
+                rlc c
+                jr nc,rn_n
+                add hl,de
+rn_n:           djnz rn_m
+                ld c,h                  ; (byte * (max + 1)) >> 8
+rn_full:        ld b,0
+                ld a,(ARGS)
+                jp write_var
+
+h_o2_cutscene:                          ; sin frases pendientes ni script de frases; lo demas (interfaz) lo hace el anfitrion
+                xor a
+                ld (SENTNUM),a
+                ld de,SENTENCE_SCRIPT
+                call stop_script
+                call reset_sentence
+                jp h_host
+
+h_o2_endCutscene:
+                ld hl,0
+                ld (VARS+10),hl         ; VAR_OVERRIDE = 0
+                ld (CUTPTR),hl
+                jp h_host
+
+h_o2_beginOverride:                     ; ARGS: b, w: el salto que sigue ya esta leido; si se salta la cutscene el script sigue en ese salto
+                ld a,(CUR)
+                ld (CUTSLOT),a
+                ld hl,(SPTR)
+                dec hl
+                dec hl
+                dec hl
+                ld (CUTPTR),hl
+                jp h_host
+
+; el jugador salta la cutscene: el script que hizo beginOverride sigue en su salto y VAR_OVERRIDE = 1
+vm_abort_cutscene:
+                ld hl,(CUTPTR)
+                ld a,h
+                or l
+                ret z
+                ld a,(CUTSLOT)
+                cp NSLOT
+                ret nc
+                call slot_addr
+                ld de,5
+                add hl,de
+                ld de,(CUTPTR)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                ld b,4                  ; sin retardo pendiente
+                xor a
+vac_d:          ld (hl),a
+                inc hl
+                djnz vac_d
+                ld a,(CUTSLOT)
+                call slot_addr
+                ld (hl),2               ; en marcha
+                ld hl,1
+                ld (VARS+10),hl
+                ld hl,0
+                ld (CUTPTR),hl
+                ret

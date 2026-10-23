@@ -434,7 +434,11 @@ keys:           ld a,$FE                ; SHIFT Z X C V
                 jr nz,kr_go
                 pop hl                  ; X: sale de main_loop
                 jp sc_quit
-kr_go:          call sc_scan
+kr_go:          ld a,$F7                ; tecla 4 = ESC de los PC: salta la cutscene si el script hizo beginOverride
+                in a,(254)
+                bit 3,a
+                call z,vm_abort_cutscene
+kr_nsk:         call sc_scan
                 ld c,a
                 ld a,$7F                ; M tambien hace clic (SPACE . M N B)
                 in a,(254)

@@ -769,3 +769,35 @@ uki_r:          ld a,(UI_DIRTY)
                 or 4
                 ld (UI_DIRTY),a
                 ret
+
+; cutscene() (A original = $40) y endCutscene() ($C0): el jugador no ve la interfaz ni el cursor durante la cutscene; al acabar vuelve todo
+; y la camara sigue al protagonista (o2_cutscene / o2_endCutscene de ScummVM)
+ui_cutscene:    ld a,c
+                cp $C0
+                jr z,ui_endcut
+                ld a,(UI_IFACE)
+                ld (UI_SIF),a
+                ld a,(UI_CURSOR)
+                ld (UI_SCUR),a
+                ld hl,(VARS+42)
+                ld (UI_SV21),hl
+                ld hl,200
+                ld (VARS+42),hl
+                xor a
+                ld (UI_IFACE),a
+                ld (UI_CURSOR),a
+                jr uc_dirty
+ui_endcut:      ld a,(UI_SIF)
+                ld (UI_IFACE),a
+                ld a,(UI_SCUR)
+                ld (UI_CURSOR),a
+                ld hl,(UI_SV21)
+                ld (VARS+42),hl
+                ld a,2
+                ld (cam_mode),a
+                ld a,$FF
+                ld (cam_fol),a
+uc_dirty:       ld a,(UI_DIRTY)
+                or 7
+                ld (UI_DIRTY),a
+                ret

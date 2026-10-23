@@ -75,7 +75,7 @@ disp_table:
         defw sp_dec_actorops, h_o2_actorOps   ; 13 o2_actorOps
         defw sp_B1_S, h_o5_print   ; 14 o5_print
         defw sp_R_B1_B2, h_o2_actorFromPos   ; 15 o2_actorFromPos
-        defw sp_R_B1, h_host_r   ; 16 o5_getRandomNr
+        defw sp_R_B1, h_o5_getRandomNr   ; 16 o5_getRandomNr
         defw sp_W1, h_o2_setStateTouchable   ; 17 o2_setStateTouchable
         defw sp_J, h_o5_jumpRelative   ; 18 o5_jumpRelative
         defw sp_dec_dosentence, h_o2_doSentence   ; 19 o2_doSentence
@@ -117,7 +117,7 @@ disp_table:
         defw sp_B1_B2, h_o2_setActorElevation   ; 3D o2_setActorElevation
         defw sp_B1_B2_B3, h_o2_walkActorTo   ; 3E o2_walkActorTo
         defw sp_W1_J, h_o2_ifStatePickupable   ; 3F o2_ifStatePickupable
-        defw sp_none, h_host   ; 40 o2_cutscene
+        defw sp_none, h_o2_cutscene   ; 40 o2_cutscene
         defw sp_B1_B2_B3, h_o2_putActor   ; 41 o2_putActor
         defw sp_B1, h_o2_startScript   ; 42 o2_startScript
         defw sp_R_B1, h_o2_getActorX   ; 43 o2_getActorX
@@ -141,7 +141,7 @@ disp_table:
         defw sp_R_B1_B2, h_o2_actorFromPos   ; 55 o2_actorFromPos
         defw sp_R_B1, h_o5_getActorMoving   ; 56 o5_getActorMoving
         defw sp_W1, h_o2_setStateUntouchable   ; 57 o2_setStateUntouchable
-        defw sp_b_w, h_host   ; 58 o2_beginOverride
+        defw sp_b_w, h_o2_beginOverride   ; 58 o2_beginOverride
         defw sp_dec_dosentence, h_o2_doSentence   ; 59 o2_doSentence
         defw sp_R_W1, h_o2_add   ; 5A o2_add
         defw sp_w_B1_B2, h_o2_setBitVar   ; 5B o2_setBitVar
@@ -203,7 +203,7 @@ disp_table:
         defw sp_dec_actorops, h_o2_actorOps   ; 93 o2_actorOps
         defw sp_B1_S, h_o5_print   ; 94 o5_print
         defw sp_R_B1_B2, h_o2_actorFromPos   ; 95 o2_actorFromPos
-        defw sp_R_B1, h_host_r   ; 96 o5_getRandomNr
+        defw sp_R_B1, h_o5_getRandomNr   ; 96 o5_getRandomNr
         defw sp_W1, h_o2_setStateTouchable   ; 97 o2_setStateTouchable
         defw sp_none, h_host   ; 98 o2_restart
         defw sp_dec_dosentence, h_o2_doSentence   ; 99 o2_doSentence
@@ -245,7 +245,7 @@ disp_table:
         defw sp_B1_B2, h_o2_setActorElevation   ; BD o2_setActorElevation
         defw sp_B1_B2_B3, h_o2_walkActorTo   ; BE o2_walkActorTo
         defw sp_W1_J, h_o2_ifStatePickupable   ; BF o2_ifStatePickupable
-        defw sp_none, h_host   ; C0 o2_endCutscene
+        defw sp_none, h_o2_endCutscene   ; C0 o2_endCutscene
         defw sp_B1_B2_B3, h_o2_putActor   ; C1 o2_putActor
         defw sp_B1, h_o2_startScript   ; C2 o2_startScript
         defw sp_R_B1, h_o2_getActorX   ; C3 o2_getActorX

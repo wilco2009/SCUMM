@@ -106,6 +106,8 @@ vi_act:
                 ld de,ASIZE
                 add ix,de
                 djnz vi_act
+                ld hl,$ACE1
+                ld (RNDST),hl
                 ld hl,ev_null
                 ld (EVVEC),hl
                 ld hl,host_null

@@ -163,6 +163,7 @@ BYTE z80_readport_wrapper(int port, int*) {
     if (row == 0x7F) { if (cur_keys & 16) v &= ~1; if (cur_keys & 4) v &= ~8; if (cur_keys & 8) v &= ~16; }
     if (row == 0xFB) { if (cur_keys & 32) v &= ~16; if (cur_keys & 64) v &= ~1; }
     if (row == 0xFD && (cur_keys & 128)) v &= ~1;
+    if (row == 0xF7 && (cur_keys & 256)) v &= ~8;                   // tecla 4: salta la cutscene
     return v;
   }
   return 0xFF;
@@ -193,7 +194,7 @@ int main(int argc, char** argv) {
       std::string it = sc.substr(p, q - p);
       size_t c = it.find(':');
       int keys = 0;
-      for (char ch : it.substr(0, c)) { if (ch == 'O') keys |= 1; if (ch == 'P') keys |= 2; if (ch == 'S') keys |= 16; if (ch == 'N') keys |= 4; if (ch == 'B') keys |= 8; if (ch == 'T') keys |= 32; if (ch == 'Q') keys |= 64; if (ch == 'A') keys |= 128; }
+      for (char ch : it.substr(0, c)) { if (ch == 'O') keys |= 1; if (ch == 'P') keys |= 2; if (ch == 'S') keys |= 16; if (ch == 'N') keys |= 4; if (ch == 'B') keys |= 8; if (ch == 'T') keys |= 32; if (ch == 'Q') keys |= 64; if (ch == 'A') keys |= 128; if (ch == '4') keys |= 256; }
       script.push_back({atoi(it.substr(c + 1).c_str()), keys});
       p = q + 1;
     }

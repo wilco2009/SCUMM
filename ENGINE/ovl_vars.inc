@@ -29,3 +29,6 @@ UI_LIM          equ $CD30
 INV_ROW0        equ 20                  ; filas 20-21: 4 objetos (2 columnas: 0 y 17) y las flechas (UP, DN) en la columna 15
 VERB_ROW0       equ 17
 SENT_ROW        equ 16
+UI_SIF           equ OVL_VARS+27         ; interfaz, cursor y VAR_CURSORSTATE guardados por cutscene()
+UI_SCUR          equ OVL_VARS+28
+UI_SV21          equ OVL_VARS+29
