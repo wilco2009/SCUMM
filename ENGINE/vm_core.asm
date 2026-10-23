@@ -108,6 +108,9 @@ vi_act:
                 djnz vi_act
                 ld hl,$ACE1
                 ld (RNDST),hl
+                xor a
+                ld (GD_RAW),a           ; fuera de la zona que limpia vm_init: en la placa no empieza a cero
+                ld (CO_N),a
                 ld hl,ev_null
                 ld (EVVEC),hl
                 ld hl,host_null
