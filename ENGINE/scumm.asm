@@ -83,7 +83,6 @@ gc_r            equ SV+85
 gc_c            equ SV+86
 gc_rowp         equ SV+90
 gc_cp           equ SV+92
-gf_mask         equ SV+94               ; palabra: mascara de profundidad del .GFX (version 3; una palabra por columna de celdas; 0: no hay)
 
 scumm_main:     di
                 ld (sv_sp),sp
@@ -1335,22 +1334,9 @@ gf_parse:       ld hl,(GFXBUF+6)
                 ld (gf_llp),hl
                 ld hl,0                 ; seccion de objetos (version 2 del .GFX): sus dos ultimos bytes dicen donde empieza
                 ld (gf_objsec),hl
-                ld (gf_mask),hl
                 ld a,(GFXBUF+4)
                 cp 2
                 ret c
-                cp 3
-                jr c,gp_nomask
-                ld hl,(gf_cols)         ; version 3: la mascara de profundidad esta justo antes de esos dos bytes
-                add hl,hl
-                ex de,hl
-                ld hl,(gf_size)
-                or a
-                sbc hl,de
-                ld de,GFXBUF-2
-                add hl,de
-                ld (gf_mask),hl
-gp_nomask:
                 ld hl,(gf_size)
                 ld de,GFXBUF-2
                 add hl,de

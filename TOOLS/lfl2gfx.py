@@ -141,6 +141,30 @@ def room_mask_cells(b, w, h, raw=None):
     return cols
 
 
+def mask_blob(m):
+    """Mascara de profundidad por pixel para el Z80 (va en DATA.BIN, ver pack_data.py): u8 tiras, u16 por tira con el desplazamiento
+    de sus tramos desde el principio del bloque (0: la tira esta vacia) y, por tira, tramos (longitud, valor) hacia abajo hasta sumar 128
+    filas o hasta la longitud 0. El bit 7 de cada valor es el pixel de la izquierda de la tira; 1 = tapa al personaje."""
+    h, strips = len(m), len(m[0])
+    if not any(any(r) for r in m):
+        return None
+    out = bytearray([strips]) + bytearray(2 * strips)
+    for sx in range(strips):
+        col = [m[y][sx] for y in range(h)]
+        if not any(col):
+            continue
+        struct.pack_into('<H', out, 1 + 2 * sx, len(out))
+        i = 0
+        while i < h:
+            j = i
+            while j < h and col[j] == col[i] and j - i < 127:
+                j += 1
+            out += bytes([j - i, col[i]])
+            i = j
+        out.append(0)
+    return bytes(out)
+
+
 def cell_pixels(img, cx, cy):
     return [img[cy * 8 + y][cx * 8 + x] for y in range(8) for x in range(8)]
 
@@ -1096,7 +1120,7 @@ def main():
         MASK_MIN = a.mask_min
         mraw = []
         mcols = room_mask_cells(b, w, h, mraw)
-        gfx, nslots, ninst = build_gfx(cur, a.view, a.code_base, layer, mcols)
+        gfx, nslots, ninst = build_gfx(cur, a.view, a.code_base, layer)
         ok = verify_gfx(gfx, cur)
         if layer:
             ok = ok and verify_objects(gfx, idx, tiles)

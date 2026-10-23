@@ -71,10 +71,24 @@ aod_dn:         ld a,2
 ; IX = actor: sus sprites segun los fotogramas de su traje (TOOLS/costume2.py)
 ac_draw:        xor a                   ; mascara de profundidad: solo si la sala la tiene y la caja del personaje tiene mascara
                 ld (ac_mk),a
-                ld hl,(gf_mask)
-                ld a,h
-                or l
+                ld a,(CURROOM)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld de,ROOMDIR+13
+                add hl,de
+                ld a,(hl)
+                or a
                 jr z,acd_nomk
+                ld (ac_mpg),a
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld (ac_mbl),de
                 ld a,(ix+16)
                 ld hl,NBOXES
                 cp (hl)
@@ -107,6 +121,7 @@ acd_nomk:       ld a,(ix+5)             ; traje
                 inc hl
                 ld d,(hl)
                 ld (ac_blob),de
+                ld (ac_cpage),a
                 call map_page
                 ld l,(ix+6)
                 ld h,(ix+7)
@@ -222,7 +237,13 @@ acd_dy:         add hl,de
                 add a,b
                 cp 64
                 ret nc
-                push iy
+                ld a,(ac_mk)
+                or a
+                jr z,acd_nd
+                push bc
+                call ac_mkdec           ; la mascara de la sala bajo el personaje (puede quitar ac_mk)
+                pop bc
+acd_nd:         push iy
                 pop hl
                 ld de,5
                 add hl,de
@@ -290,12 +311,7 @@ acd_s3:         ld d,0
                 jp nz,acd_skip
                 ld a,l
                 ld (ac_cy),a
-                ld a,(ac_mk)
-                or a
-                jr z,acd_nm
-                call ac_masked          ; la celda queda detras de un objeto de la sala: no se dibuja
-                jp c,acd_skip
-acd_nm:         ld a,(ac_n)
+                ld a,(ac_n)
                 cp 63                   ; el 63 es el cursor
                 jp nc,acd_skip
                 ld (2100),a
@@ -317,16 +333,18 @@ acd_nm:         ld a,(ac_n)
                 bit 0,a
                 jr z,acd_m1
                 push hl                 ; mascara completa
-                ld hl,2121
+                ld hl,ac_mt
                 ld b,8
 acd_m0:         ld (hl),$FF
                 inc hl
                 djnz acd_m0
                 pop hl
+                call acd_mput
                 jr acd_c0
-acd_m1:         ld de,2121
+acd_m1:         ld de,ac_mt
                 ld bc,8
                 ldir
+                call acd_mput
 acd_c0:         ld a,(ac_fl)
                 bit 1,a
                 jr z,acd_c1
@@ -345,53 +363,4 @@ acd_skip:       ld hl,(ac_nx)
                 dec b
                 jp acd_cell
 
-; carry si la celda del sprite (ac_cx, ac_cy; coordenadas de sprite = pantalla + 32) cae en una celda de la mascara de la sala (se mira su centro)
-ac_masked:      ld hl,(ac_cx)
-                ld de,28
-                or a
-                sbc hl,de
-                ld de,(ac_cam)
-                add hl,de
-                srl h
-                rr l
-                srl h
-                rr l
-                srl h
-                rr l
-                ld a,h
-                or a
-                ret nz                  ; NC
-                ld a,l
-                ld hl,gf_cols
-                cp (hl)
-                ret nc
-                ld l,a
-                ld h,0
-                add hl,hl
-                ld de,(gf_mask)
-                add hl,de
-                ld a,(ac_cy)
-                sub 28
-                jr nc,am_y
-                or a
-                ret
-am_y:           srl a
-                srl a
-                srl a
-                cp 16
-                ret nc
-                ld b,a
-                srl a
-                srl a
-                srl a
-                ld e,a
-                ld d,0
-                add hl,de
-                ld a,b
-                and 7
-                ld b,a
-                inc b
-                ld a,(hl)
-am_s:           rrca
-                djnz am_s
-                ret
+                include "mask_px.inc"

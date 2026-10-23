@@ -28,6 +28,16 @@ UI_TMP          equ $CD2F
 UI_LIM          equ $CD30
                 include "game_layout.inc"
 ac_mk           equ OVL_VARS+31         ; 1: el personaje que se dibuja va detras de la mascara de la sala (su caja tiene mascara)
+ac_s0           equ OVL_VARS+32         ; primera tira (8 pixeles) de la sala que cubre el personaje
+ac_y0           equ OVL_VARS+33         ; palabra: fila de la sala de su primera fila de pixeles
+ac_rh           equ OVL_VARS+35         ; filas de la ventana de mascara (alto del fotograma * 8)
+ac_ns           equ OVL_VARS+36         ; tiras decodificadas
+ac_cpage        equ OVL_VARS+37         ; pagina del traje que se dibuja
+ac_mt           equ OVL_VARS+38         ; 8 bytes: la mascara de la celda (y, mientras se decodifica, las variables del bucle)
+ac_mbl          equ OVL_VARS+46         ; palabra: direccion de la mascara de la sala en su pagina
+AV              equ ACTNAME+NACTORS*3   ; mas variables del overlay (hasta $CFEF)
+ac_mpg          equ AV                  ; pagina de la mascara de la sala
+ac_sh           equ AV+1                ; desplazamiento en pixeles de la celda dentro de su tira
 ac_id           equ OVL_VARS+30         ; numero del actor que se dibuja
 UI_SIF           equ OVL_VARS+27         ; interfaz, cursor y VAR_CURSORSTATE guardados por cutscene()
 UI_SCUR          equ OVL_VARS+28

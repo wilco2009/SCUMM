@@ -19,7 +19,8 @@ Formato (little endian; las cuatro tablas son tal cual se copian en memoria, ver
   +784    OBJOWN  780       dueno de cada objeto
   +1564   OBJST   780       estado de cada objeto
   +2344   ROOMDIR 64 x 16   por sala: pagina y direccion del codigo de entrada, id. de salida, ancho (u16),
-                            pagina, direccion y tamano (u16) del bloque de cajas y objetos
+                            pagina, direccion y tamano (u16) del bloque de cajas y objetos,
+                            pagina y direccion de la mascara de profundidad por pixel (0: la sala no tiene; lfl2gfx.mask_blob)
   +3368   ODIR    780 x 3   por objeto: pagina y direccion de su bloque de codigo (pagina 0 = no esta)
   +5708   COSTDIR 64 x 3   por traje: pagina y direccion de sus fotogramas de sprites (TOOLS/costume2.py)
   +5900   relleno hasta 6144
@@ -35,6 +36,18 @@ import vmmodel as M
 TABLES = 6144
 SYNTH_SCRIPT = 180
 SYNTH_ROOM = 60
+
+
+def room_mask(world, rn):
+    import lfl2gfx
+    try:
+        b = lfl2gfx.load_lfl(os.path.join(world.dir, '%02d.LFL' % rn))
+        w, h = struct.unpack_from('<HH', b, 4)
+        raw = []
+        lfl2gfx.room_mask_cells(b, w, h, raw)
+        return lfl2gfx.mask_blob(raw)
+    except Exception:
+        return None
 
 
 def build(world, first_page=16, include_test=False):
@@ -62,6 +75,9 @@ def build(world, first_page=16, include_test=False):
             struct.pack_into('<BH', e, 3, *pk.add(ext))
         bp, ba = pk.add(blob)
         struct.pack_into('<BHH', e, 8, bp, ba, len(blob))
+        mk = room_mask(world, rn) if not include_test else None
+        if mk:
+            struct.pack_into('<BH', e, 13, *pk.add(mk))      # mascara de profundidad por pixel (lfl2gfx.mask_blob)
         roomdir[16 * rn:16 * rn + 16] = e
     costdir = bytearray(64 * 3)                       # trajes: pagina y direccion de cada uno (0 = sin datos)
     if not include_test:
