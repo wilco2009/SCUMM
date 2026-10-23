@@ -14,6 +14,9 @@ actors_update:  ld a,(gf_have)
 au_run:         ld ix,ACTORS+ASIZE
                 ld b,NACTORS-1
 ac_l:           push bc
+                ld a,NACTORS
+                sub b
+                ld (ac_id),a
                 ld a,(CURROOM)
                 cp (ix+0)
                 jr nz,ac_next
@@ -90,7 +93,35 @@ ac_draw:        ld a,(ix+5)             ; traje
                 ld h,(ix+7)
                 call ac_olddir
                 ld c,a                  ; C = direccion
-                ld a,(ix+10)            ; fotograma: 0 caminar; el resto, quieto
+                ld a,(HAVEMSG)          ; hablando: la animacion 4 + direccion (la boca), si el traje la tiene
+                or a
+                jr z,acd_nt
+                ld a,(ac_id)
+                ld b,a
+                ld a,(VARS+82)          ; VAR_TALK_ACTOR
+                cp b
+                jr nz,acd_nt
+                ld a,c
+                add a,4
+                ld c,a
+                ld hl,(ac_blob)
+                cp (hl)
+                jr nc,acd_tno
+                inc hl
+                ld e,c
+                ld d,0
+                add hl,de
+                add hl,de
+                ld a,(hl)
+                inc hl
+                or (hl)
+                jr z,acd_tno
+                inc (ix+45)
+                jr acd_anim
+acd_tno:        ld a,c
+                sub 4
+                ld c,a
+acd_nt:         ld a,(ix+10)            ; fotograma: 0 caminar; el resto, quieto
                 or a
                 jr z,acd_walk
                 xor a                   ; quieto: la primera pose de caminar

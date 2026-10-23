@@ -223,10 +223,11 @@ def cells_of(parts, emap):
     return gx, gy, cw, ch, cells
 
 
-def costume_blob(cost, emap):
+def costume_blob(cost, emap, talk=True):
     """Datos de un traje para el Z80: u8 numero de animaciones; por animacion u16 offset de su lista (0: no existe); la lista: u8 pasos y, por paso,
     u16 offset del fotograma; fotograma: s8 dx, s8 dy, u8 cw, u8 ch, u8 n y n celdas no vacias: u8 cx | cy << 4, u8 banderas (bit 0: mascara completa, no se guarda; bit 1: color uniforme, un solo byte), pix[8], [mascara[8]], color (1 u 8 bytes)."""
-    na = min(cost.num_anim + 1, 4)        # solo caminar (0-3, dos poses); quieto y el resto de fotogramas = la primera pose de caminar
+    # 0-3 caminar (dos poses; quieto = la primera); 4-7 hablando (cabeza de inicio + quieto + fotograma TALK_START = anim 20 + dir), si el traje lo tiene
+    na = 8 if talk and cost.num_anim >= 20 else min(cost.num_anim + 1, 4)
     head = bytearray(1 + 2 * na)
     head[0] = na
     body = bytearray()
@@ -234,11 +235,21 @@ def costume_blob(cost, emap):
     base = len(head)
     lists = {}
     for anim in range(na):
-        limbs = cost.merged(anim)
+        if anim >= 4:
+            if 16 + anim > cost.num_anim:
+                continue
+            limbs = dict(cost.anim_limbs(8 + anim % 4))
+            limbs.update(cost.anim_limbs(anim))
+            limbs.update(cost.anim_limbs(16 + anim))
+            limbs = {k: v for k, v in limbs.items() if v}
+        else:
+            limbs = cost.merged(anim)
         seq = cost.steps(limbs)
         if not limbs:
             continue
-        if anim < 4 and len(seq) > 2:
+        if anim >= 4:
+            seq = seq[:1]                           # hablando: una sola pose (la boca abierta); cabe en una pagina
+        elif len(seq) > 2:
             seq = [seq[0], seq[len(seq) // 2]]      # dos poses de caminar
         mir = MIRROR_OLD_DIR[anim % 4] if anim % 4 < 2 else False
         offs = []

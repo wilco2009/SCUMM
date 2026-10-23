@@ -513,9 +513,41 @@ kr_scene:       ld a,(UI_CURSOR)
                 ld (INP_AREA),a
                 ld hl,0
                 ld (INP_VAL),hl
-kr_end:         ld a,c
+kr_end:         call kr_digits
+                ld a,c
                 ld (k_prev),a
                 ret
+
+; teclas 1-3 recien pulsadas -> entrada de zona 4 (tecla) con su ASCII: el script 4 cambia de personaje (VAR_KEYPRESS)
+kr_digits:      ld a,$F7
+                in a,(254)
+                cpl
+                and 7
+                ld b,a
+                ld a,(k_prev2)
+                cpl
+                and b
+                ld d,a
+                ld a,b
+                ld (k_prev2),a
+                ld a,d
+                or a
+                ret z
+                ld hl,49
+                srl a
+                jr c,kd_go
+                inc l
+                srl a
+                jr c,kd_go
+                inc l
+kd_go:          ld (INP_VAL),hl
+                ld a,1
+                ld (INP_FLAG),a
+                inc a
+                inc a
+                ld (INP_AREA),a
+                ret
+k_prev2:        defb 0
 cur_x:          defb 124
 cur_y:          defb 64
 

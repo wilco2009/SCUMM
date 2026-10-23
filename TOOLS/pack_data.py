@@ -73,7 +73,10 @@ def build(world, first_page=16, include_test=False):
             emap = lfl2gfx.default_map({})
             for cid in range(1, 25):
                 try:
-                    blob = costume2.costume_blob(costume2.Costume(scumm2.resource(world.dir, ixd, 'costume', cid)), emap)
+                    cost = costume2.Costume(scumm2.resource(world.dir, ixd, 'costume', cid))
+                    blob = costume2.costume_blob(cost, emap)
+                    if len(blob) > 6100:                      # con la boca no cabe en una pagina: sin ella
+                        blob = costume2.costume_blob(cost, emap, talk=False)
                 except Exception:
                     continue
                 if len(blob) > 6100:                      # no cabe en una pagina: ese traje se queda con el rectangulo
