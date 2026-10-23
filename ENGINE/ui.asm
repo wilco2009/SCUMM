@@ -74,17 +74,21 @@ ui_verbops:     ld a,(ARGS)
                 call ui_entry
                 ld a,(ARGS)
                 ld (ix+0),a
-                ld hl,(ARGS+2)          ; columna = (x * VERB_COLMUL + VERB_COLADD) >> VERB_COLSHIFT (game_layout.inc)
+                ld hl,(ARGS+2)          ; columna = (x * PF_COLMUL + PF_COLADD) >> PF_COLSHIFT (perfil del juego)
                 ld h,0
                 ld d,h
                 ld e,l
                 ld hl,0
-                ld b,VERB_COLMUL
+                ld a,(PF_COLMUL)
+                ld b,a
 uv_m:           add hl,de
                 djnz uv_m
-                ld de,VERB_COLADD
+                ld a,(PF_COLADD)
+                ld e,a
+                ld d,0
                 add hl,de
-                ld b,VERB_COLSHIFT
+                ld a,(PF_COLSHIFT)
+                ld b,a
 uv_s:           srl h
                 rr l
                 djnz uv_s
@@ -93,8 +97,9 @@ uv_s:           srl h
                 jr c,uv_c
                 ld a,31
 uv_c:           ld (ix+1),a
-                ld a,(ARGS+4)           ; fila = y - VERB_ROWSUB (las filas 19-21 del original son las 17-19 nuestras)
-                sub VERB_ROWSUB
+                ld a,(ARGS+4)           ; fila = y - PF_ROWSUB
+                ld hl,PF_ROWSUB
+                sub (hl)
                 ld (ix+2),a
                 ld (ix+3),1
                 ld hl,(STRP)
@@ -140,7 +145,9 @@ ui_label:       push bc                 ; conserva BC
                 pop bc
                 ret
 ui_label0:      ld a,(ix+0)
-                ld hl,ui_short
+                ld hl,(PF_SHORT)
+                ld de,PROF
+                add hl,de
 ul_l:           ld c,(hl)
                 inc hl
                 bit 7,c
@@ -273,11 +280,13 @@ ui_clear_row:   call ui_row
                 ret
 
 ; ---- los verbos
-ui_draw_verbs:  ld a,VERB_ROW0
+ui_draw_verbs:  ld a,(PF_VROW)
                 call ui_clear_row
-                ld a,VERB_ROW0+1
+                ld a,(PF_VROW)
+                inc a
                 call ui_clear_row
-                ld a,VERB_ROW0+2
+                ld a,(PF_VROW)
+                add a,2
                 call ui_clear_row
                 ld a,(UI_IFACE)
                 bit 7,a
@@ -299,9 +308,10 @@ ui_draw_verb:   ld a,(ix+3)
                 or a
                 ret z
                 ld a,(ix+2)
-                cp VERB_ROW0
+                ld hl,PF_VROW
+                sub (hl)
                 ret c
-                cp VERB_ROW0+3
+                cp 3
                 ret nc
                 ld c,32                 ; limite: la columna del verbo mas cercano a la derecha en la misma fila
                 ld iy,UI_VT
@@ -373,12 +383,12 @@ udw_p:          call put_chr
 
 ; ---- la frase: verbo, objeto, preposicion, objeto
 ui_draw_sentence:
-                ld a,SENT_ROW
+                ld a,(PF_SROW)
                 call ui_clear_row
                 ld a,(UI_IFACE)
                 bit 5,a
                 ret z
-                ld a,SENT_ROW
+                ld a,(PF_SROW)
                 call ui_row
                 ex de,hl
                 ld b,32                 ; B = sitio que queda
@@ -404,7 +414,9 @@ us_o1:          ld hl,(VARS+54)         ; objeto 1
                 jr z,us_o2
                 cp 5
                 jr nc,us_o2
-                ld hl,us_preps
+                ld hl,(PF_PREPS)
+                ld de,PROF
+                add hl,de
                 dec a
                 ld c,a
 us_p:           ld a,c
@@ -573,14 +585,16 @@ ui_click:       ld a,(UI_CURSOR)
                 srl a
                 srl a                   ; fila
                 ld c,a
-                cp SENT_ROW
+                ld hl,PF_SROW
+                cp (hl)
                 jr nz,uk_v
                 ld a,5                  ; zona de la frase
                 ld hl,0
                 jr uk_set
-uk_v:           cp VERB_ROW0
+uk_v:           ld hl,PF_VROW
+                sub (hl)
                 ret c
-                cp VERB_ROW0+3
+                cp 3
                 jp nc,uk_inv
                 ld a,(cur_x)
                 srl a
@@ -702,9 +716,10 @@ io_1:           push de
                 ld a,(hl)
                 ret
 
-ui_draw_inv:    ld a,INV_ROW0
+ui_draw_inv:    ld a,(PF_IROW)
                 call ui_clear_row
-                ld a,INV_ROW0+1
+                ld a,(PF_IROW)
+                inc a
                 call ui_clear_row
                 ld a,(UI_IFACE)
                 bit 6,a
@@ -723,7 +738,8 @@ udi_l:          ld a,(UI_INVO)
                 jr c,udi_n
                 ld a,(UI_TMP)
                 srl a
-                add a,INV_ROW0
+                ld hl,PF_IROW
+                add a,(hl)
                 call ui_row
                 ld a,(UI_TMP)
                 and 1
@@ -743,7 +759,7 @@ udi_n:          ld hl,UI_TMP
 udi_arrows:     ld a,(UI_INVO)
                 or a
                 jr z,udi_dn
-                ld a,INV_ROW0
+                ld a,(PF_IROW)
                 call ui_row
                 ld de,15
                 add hl,de
@@ -759,7 +775,8 @@ udi_dn:         ld a,(UI_INVO)
                 cp b
                 ret z
                 ret c
-                ld a,INV_ROW0+1
+                ld a,(PF_IROW)
+                inc a
                 call ui_row
                 ld de,15
                 add hl,de
@@ -770,7 +787,11 @@ udi_dn:         ld a,(UI_INVO)
                 jp put_chr
 
 ; clic en las filas 20-21: un objeto (columnas 0-14 y 17-31) o una flecha (15-16)
-uk_inv:         cp INV_ROW0+2
+uk_inv:         ld a,c
+                ld hl,PF_IROW
+                sub (hl)
+                ret c
+                cp 2
                 ret nc
                 ld a,(UI_IFACE)
                 bit 6,a
@@ -787,7 +808,8 @@ uk_inv:         cp INV_ROW0+2
                 jr uki_o
 uki_l:          ld e,0
 uki_o:          ld a,c
-                sub INV_ROW0
+                ld hl,PF_IROW
+                sub (hl)
                 add a,a
                 add a,e
                 ld hl,UI_INVO
@@ -800,7 +822,8 @@ uki_o:          ld a,c
                 ld a,3                  ; zona del inventario: el objeto
                 jp uk_set
 uki_a:          ld a,c
-                cp INV_ROW0
+                ld hl,PF_IROW
+                cp (hl)
                 jr nz,uki_d
                 ld a,(UI_INVO)
                 cp 2

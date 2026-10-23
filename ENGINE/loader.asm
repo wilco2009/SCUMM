@@ -3,7 +3,7 @@
 ; load_data: abre /SCUMM/DATA.BIN, copia SCRDIR, OBJOWN, OBJST, ROOMDIR y ODIR a su sitio y las paginas a la
 ; RAM extendida (cada una por la ventana de datos, con map_page; hace falta FULLPAGING). Carry si falla.
 
-LD_TABLES       equ 6144
+LD_TABLES       equ 6400
 COSTDIR         equ $FF40               ; 64 x 3: pagina y direccion de los fotogramas de cada traje (0 = sin datos)
 
 data_name:      defb "/SCUMM/DATA.BIN",0
@@ -25,7 +25,7 @@ load_data:      ld hl,data_name
                 call f_read_n
                 ld a,'G'
                 call ld_trace           ; G: leida la cabecera
-                ld hl,ld_hdr            ; "SDAT", version 1
+                ld hl,ld_hdr            ; "SDAT", version 2
                 ld a,(hl)
                 cp 'S'
                 jp nz,ld_bad
@@ -34,7 +34,7 @@ load_data:      ld hl,data_name
                 cp 'D'
                 jp nz,ld_bad
                 ld a,(ld_hdr+4)
-                cp 1
+                cp 2
                 jp nz,ld_bad
                 ld a,(ld_h)
                 ld hl,SCRDIR
@@ -61,8 +61,12 @@ load_data:      ld hl,data_name
                 ld bc,64*3
                 call f_read_n
                 ld a,(ld_h)
+                ld hl,PROF              ; el perfil del juego (TOOLS/gameprofile.py)
+                ld bc,256
+                call f_read_n
+                ld a,(ld_h)
                 ld hl,ODIRBUF+780*3     ; el relleno hasta el final de la zona de tablas
-                ld bc,LD_TABLES-16-768-780-780-1024-780*3-64*3
+                ld bc,LD_TABLES-16-768-780-780-1024-780*3-64*3-256
                 call f_read_n
                 ld a,'H'
                 call ld_trace           ; H: leidas las tablas

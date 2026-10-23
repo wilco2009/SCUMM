@@ -2,7 +2,7 @@
 rem Ensambla el programa SCUMM y lo copia, con DATA.BIN y los ROOMnn.GFX, a la SD del emulador.
 rem Antes hay que haber generado los datos (ver SCUMM\TOOLS\LFL2GFX.md y SCUMM\TOOLS\pack_data.py):
 rem   python SCUMM\TOOLS\lfl2gfx.py SCUMM\V2\ManiacMansionDOS all -o SCUMM\preview
-rem   python SCUMM\TOOLS\pack_data.py SCUMM\V2\ManiacMansionDOS SCUMM\preview\DATA.BIN
+rem   python SCUMM\TOOLS\pack_data.py SCUMM\V2\ManiacMansionDOS SCUMM\preview\DATA.BIN --game SCUMM\games\maniac.cfg
 cd /d "%~dp0"
 set BASE=\ClaudeCode\Eightyone2\EightyOne\SD81
 rem montaje en tres pasos: el overlay (overlay.asm) necesita las direcciones del programa (scumm.sym) y el programa incluye overlay.bin al final

@@ -453,10 +453,7 @@ keys:           ld a,$FE                ; SHIFT Z X C V
                 jr nz,kr_go
                 pop hl                  ; X: sale de main_loop
                 jp sc_quit
-kr_go:          ld a,$F7                ; tecla 4 = ESC de los PC: salta la cutscene si el script hizo beginOverride
-                in a,(254)
-                bit 3,a
-                call z,vm_abort_cutscene
+kr_go:
 kr_nsk:         call sc_scan
                 ld c,a
                 ld a,$7F                ; M tambien hace clic (SPACE . M N B)
@@ -537,35 +534,77 @@ kr_end:         call kr_digits
                 ld (k_prev),a
                 ret
 
-; teclas 1-3 recien pulsadas -> entrada de zona 4 (tecla) con el valor 1-3: el script 4 cambia de personaje (VAR_KEYPRESS)
-kr_digits:      ld a,$F7
+; teclas de digito (1-9 y 0) recien pulsadas -> entrada de zona 4 (tecla) con el valor del perfil del juego (PF_KEYS) en VAR_KEYPRESS; si es el
+; valor de VAR_CUTSCENEEXIT_KEY (variable 40) salta la cutscene (como el ESC de los PC)
+kr_digits:      push bc
+                ld a,$F7                ; 1 2 3 4 5: bits 0-4
                 in a,(254)
                 cpl
-                and 7
-                ld b,a
-                ld a,(k_prev2)
+                and $1F
+                ld l,a
+                ld a,$EF                ; 0 9 8 7 6: bits 0-4 (al reves)
+                in a,(254)
                 cpl
-                and b
-                ld d,a
-                ld a,b
-                ld (k_prev2),a
+                and $1F
+                ld b,5
+                ld c,0
+kd_r:           rrca
+                rl c
+                djnz kd_r
+                ld a,c
+                and 7
+                rrca
+                rrca
+                rrca
+                or l
+                ld l,a
+                srl c
+                srl c
+                srl c
+                ld h,c                  ; HL = teclas pulsadas, un bit por tecla (1 2 3 4 5 6 7 8 9 0)
+                ld de,(k_prev2)
+                ld (k_prev2),hl
                 ld a,d
-                or a
-                ret z
-                ld hl,1                 ; el script 4 espera VAR_KEYPRESS = 1, 2 o 3 (no el ASCII)
-                srl a
-                jr c,kd_go
-                inc l
-                srl a
-                jr c,kd_go
-                inc l
-kd_go:          ld (INP_VAL),hl
+                cpl
+                and h
+                ld h,a
+                ld a,e
+                cpl
+                and l
+                ld l,a                  ; HL = recien pulsadas
+                or h
+                jr z,kd_end
+                ld b,0
+kd_f:           bit 0,l
+                jr nz,kd_g
+                srl h
+                rr l
+                inc b
+                jr kd_f
+kd_g:           ld a,b
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,PF_KEYS
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)               ; DE = valor de la tecla
+                ld a,d
+                or e
+                jr z,kd_end
+                ld (INP_VAL),de
                 ld a,1
                 ld (INP_FLAG),a
                 ld a,4                  ; zona 4: tecla
                 ld (INP_AREA),a
+                ld hl,(VARS+80)
+                or a
+                sbc hl,de
+                call z,vm_abort_cutscene
+kd_end:         pop bc
                 ret
-k_prev2:        defb 0
+k_prev2:        defw 0
 cur_x:          defb 124
 cur_y:          defb 64
 
@@ -1229,17 +1268,27 @@ gf_load_room:   ld a,(EVARGS)
                 ret
 
 ; "/SCUMM/ROOMnn.GFX"
-gf_make_name:   ld hl,gf_tpl
+gf_make_name:   ld hl,(PF_TPL)
+                ld de,PROF
+                add hl,de
                 ld de,gf_name
-                ld bc,18
-                ldir
+gmn0:           ld a,(hl)               ; el nombre de los ficheros de sala del perfil, acabado en 0
+                ld (de),a
+                inc hl
+                inc de
+                or a
+                jr nz,gmn0
                 ld a,(gf_room)
                 ld b,'0'-1
 gmn1:           inc b
                 sub 10
                 jr nc,gmn1
                 add a,10+'0'
-                ld hl,gf_name+11
+                ld hl,PF_TPLPOS
+                ld e,(hl)
+                ld d,0
+                ld hl,gf_name
+                add hl,de
                 ld (hl),b
                 inc hl
                 ld (hl),a

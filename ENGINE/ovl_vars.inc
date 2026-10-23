@@ -26,7 +26,18 @@ UI_PEGO         equ $CD2D               ; protagonista cuyo inventario esta dibu
 UI_INVO         equ $CD2E               ; primer objeto del inventario que se ve (de 2 en 2)
 UI_TMP          equ $CD2F
 UI_LIM          equ $CD30
-                include "game_layout.inc"
+PF_IROW         equ PROF+1              ; perfil del juego (TOOLS/gameprofile.py): fila del inventario, de los verbos y de la frase
+PF_VROW         equ PROF+2
+PF_SROW         equ PROF+3
+PF_COLMUL       equ PROF+4              ; columna de un verbo = (x * PF_COLMUL + PF_COLADD) >> PF_COLSHIFT; fila = y - PF_ROWSUB
+PF_COLADD       equ PROF+5
+PF_COLSHIFT     equ PROF+6
+PF_ROWSUB       equ PROF+7
+PF_TPLPOS       equ PROF+8              ; donde van las dos cifras de la sala en el nombre del fichero
+PF_SHORT        equ PROF+9              ; desplazamientos (desde PROF) de las etiquetas de verbos, las preposiciones y el nombre de los ficheros
+PF_PREPS        equ PROF+11
+PF_TPL          equ PROF+13
+PF_KEYS         equ PROF+16             ; 10 palabras: valor de VAR_KEYPRESS de las teclas 1 2 3 4 5 6 7 8 9 0
 ac_mk           equ OVL_VARS+31         ; 1: el personaje que se dibuja va detras de la mascara de la sala (su caja tiene mascara)
 ac_s0           equ OVL_VARS+32         ; primera tira (8 pixeles) de la sala que cubre el personaje
 ac_y0           equ OVL_VARS+33         ; palabra: fila de la sala de su primera fila de pixeles

@@ -2,14 +2,15 @@
 """Empaqueta los datos NO graficos de Maniac Mansion (scripts, codigo de objetos, cajas y objetos de cada sala,
 dueno y estado de los objetos) en DATA.BIN, que el programa del ZX81 carga de la SD al arrancar.
 
-Uso: pack_data.py DIRECTORIO_LFL SALIDA.BIN [--first-page N] [--all]
+Uso: pack_data.py DIRECTORIO_LFL SALIDA.BIN --game perfil.cfg [--first-page N] [--all]
+  --game        perfil del juego (SCUMM/games/*.cfg, ver gameprofile.py): lo unico propio del juego que lee el motor
   --first-page  primera pagina de la RAM extendida que ocupan los datos (16 por omision)
   --all         incluye los scripts y salas sinteticos de las pruebas (ids >= 180 y salas >= 60), con el mismo
                 reparto en paginas que world.bin (pruebas del cargador: --first-page 8)
 
 Formato (little endian; las cuatro tablas son tal cual se copian en memoria, ver SCUMM/ENGINE/loader.asm):
   +0      "SDAT"
-  +4      u8   version (1)
+  +4      u8   version (2)
   +5      u8   numero de paginas
   +6      u8   primera pagina
   +7      u8   0
@@ -23,8 +24,9 @@ Formato (little endian; las cuatro tablas son tal cual se copian en memoria, ver
                             pagina y direccion de la mascara de profundidad por pixel (0: la sala no tiene; lfl2gfx.mask_blob)
   +3368   ODIR    780 x 3   por objeto: pagina y direccion de su bloque de codigo (pagina 0 = no esta)
   +5708   COSTDIR 64 x 3   por traje: pagina y direccion de sus fotogramas de sprites (TOOLS/costume2.py)
-  +5900   relleno hasta 6144
-  +6144   las paginas, de 6144 bytes cada una
+  +5900   PROFILE 256   perfil del juego (gameprofile.py)
+  +6156   relleno hasta 6400
+  +6400   las paginas, de 6144 bytes cada una
 """
 import os
 import struct
@@ -32,8 +34,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vmmodel as M
+import gameprofile
 
-TABLES = 6144
+TABLES = 6400
 SYNTH_SCRIPT = 180
 SYNTH_ROOM = 60
 
@@ -50,7 +53,7 @@ def room_mask(world, rn):
         return None
 
 
-def build(world, first_page=16, include_test=False):
+def build(world, game, first_page=16, include_test=False):
     pk = M.Packer(first_page=first_page)
     scripts = {i: c for i, c in world.scripts.items() if include_test or i < SYNTH_SCRIPT}
     rooms = {n: r for n, r in world.rooms.items() if include_test or n < SYNTH_ROOM}
@@ -101,8 +104,8 @@ def build(world, first_page=16, include_test=False):
                     continue
                 costdir[3 * cid:3 * cid + 3] = struct.pack('<BH', *pk.add(blob))
     npages = len(pk.pages)
-    head = b'SDAT' + struct.pack('<BBBBH', 1, npages, first_page, 0, M.PAGE_USABLE) + bytes(6)
-    tables = head + bytes(scrdir) + bytes(world.owner) + bytes(world.state) + bytes(roomdir) + bytes(odir) + bytes(costdir)
+    head = b'SDAT' + struct.pack('<BBBBH', 2, npages, first_page, 0, M.PAGE_USABLE) + bytes(6)
+    tables = head + bytes(scrdir) + bytes(world.owner) + bytes(world.state) + bytes(roomdir) + bytes(odir) + bytes(costdir) + gameprofile.build(game)
     assert len(tables) <= TABLES, len(tables)
     out = bytearray(tables + bytes(TABLES - len(tables)))
     for pg in sorted(pk.pages):
@@ -119,9 +122,13 @@ def main():
     test = '--all' in args
     if '--first-page' in args:
         first = int(args[args.index('--first-page') + 1])
+    if '--game' not in args:
+        print('falta --game perfil.cfg')
+        return 1
+    game = args[args.index('--game') + 1]
     d, out = args[0], args[1]
     world = M.World(d)
-    data, npages = build(world, first, test)
+    data, npages = build(world, game, first, test)
     with open(out, 'wb') as f:
         f.write(data)
     print('%s: %d paginas de %d bytes desde la %d, %d bytes' % (out, npages, M.PAGE_USABLE, first, len(data)))

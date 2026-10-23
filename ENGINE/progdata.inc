@@ -10,4 +10,12 @@ font_src:       defb 0
 font_cus:       defb $00,$18,$18,$18,$18,$00,$18,$00        ; !
                 defb $00,$08,$08,$10,$00,$00,$00,$00        ; '
 ega2chroma:     defb 0,1,4,5,2,3,6,7,8,9,12,13,10,11,14,15
-                include "game_data.inc"
+; tablas de caminar de v2 (Actor_v2 de ScummVM): comunes a los juegos v2
+REMAP1:         defb $04,$01,$02,$00,$01,$02,$03,$00,$06,$01,$03,$00,$01,$02,$03,$00
+                defb $07,$00,$03,$00,$01,$02,$03,$00,$05,$00,$02,$00,$01,$02,$03,$00
+REMAP2:         defb $00,$01,$03,$02,$03,$00,$02,$00,$00,$01,$03,$02,$01,$03,$01,$02
+                defb $00,$01,$03,$02,$01,$00,$02,$02,$00,$01,$03,$02,$03,$03,$01,$01
+REMAP3:         defb $00,$00,$02,$00,$01,$03,$02,$00,$01,$01,$02,$00,$01,$03,$02,$00
+                defb $02,$01,$02,$00,$01,$03,$02,$00,$03,$00,$03,$00,$01,$03,$02,$00
+; el perfil del juego (SCUMM/games/*.cfg): lo carga el cargador de DATA.BIN; el motor no tiene nada propio de un juego
+PROF:           defs 256
