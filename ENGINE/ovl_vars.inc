@@ -37,7 +37,6 @@ ac_mt           equ OVL_VARS+38         ; 8 bytes: la mascara de la celda (y, mi
 ac_mbl          equ OVL_VARS+46         ; palabra: direccion de la mascara de la sala en su pagina
 AV              equ ACTNAME+NACTORS*3   ; mas variables del overlay (hasta $CFEF)
 ac_mpg          equ AV                  ; pagina de la mascara de la sala
-ac_tk           equ AV+2                ; contador de la boca del personaje que habla
 ac_sh           equ AV+1                ; desplazamiento en pixeles de la celda dentro de su tira
 ac_id           equ OVL_VARS+30         ; numero del actor que se dibuja
 UI_SIF           equ OVL_VARS+27         ; interfaz, cursor y VAR_CURSORSTATE guardados por cutscene()

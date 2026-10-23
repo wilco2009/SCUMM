@@ -150,12 +150,7 @@ acd_nomk:       ld a,(ix+5)             ; traje
                 inc hl
                 or (hl)
                 jr z,acd_tno
-                ld hl,ac_tk             ; la boca se abre y se cierra: 8 fotogramas con la animacion de hablar y 8 en reposo
-                inc (hl)
-                ld a,(hl)
-                and 8
-                jr nz,acd_tno
-                inc (ix+45)
+                inc (ix+45)             ; la animacion de hablar tiene dos poses (boca abierta y cerrada): cambian cada 8 fotogramas
                 jr acd_anim
 acd_tno:        ld a,c
                 sub 4

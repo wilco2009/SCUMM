@@ -91,7 +91,9 @@ def build(world, first_page=16, include_test=False):
                 try:
                     cost = costume2.Costume(scumm2.resource(world.dir, ixd, 'costume', cid))
                     blob = costume2.costume_blob(cost, emap)
-                    if len(blob) > 6100:                      # con la boca no cabe en una pagina: sin ella
+                    if len(blob) > 6100:                      # con las dos poses de la boca no cabe en una pagina: solo la abierta
+                        blob = costume2.costume_blob(cost, emap, two=False)
+                    if len(blob) > 6100:                      # ni asi: sin boca
                         blob = costume2.costume_blob(cost, emap, talk=False)
                 except Exception:
                     continue

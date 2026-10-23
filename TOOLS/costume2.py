@@ -223,10 +223,10 @@ def cells_of(parts, emap):
     return gx, gy, cw, ch, cells
 
 
-def costume_blob(cost, emap, talk=True):
+def costume_blob(cost, emap, talk=True, two=True):
     """Datos de un traje para el Z80: u8 numero de animaciones; por animacion u16 offset de su lista (0: no existe); la lista: u8 pasos y, por paso,
     u16 offset del fotograma; fotograma: s8 dx, s8 dy, u8 cw, u8 ch, u8 n y n celdas no vacias: u8 cx | cy << 4, u8 banderas (bit 0: mascara completa, no se guarda; bit 1: color uniforme, un solo byte), pix[8], [mascara[8]], color (1 u 8 bytes)."""
-    # 0-3 caminar (dos poses; quieto = la primera); 4-7 hablando (cabeza de inicio + quieto + fotograma TALK_START = anim 20 + dir), si el traje lo tiene
+    # 0-3 caminar (dos poses; quieto = la primera); 4-7 hablando (cabeza de inicio + quieto + TALK_START = anim 20 + dir; segunda pose con TALK_STOP), si el traje lo tiene
     na = 8 if talk and cost.num_anim >= 20 else min(cost.num_anim + 1, 4)
     head = bytearray(1 + 2 * na)
     head[0] = na
@@ -238,22 +238,28 @@ def costume_blob(cost, emap, talk=True):
         if anim >= 4:
             if 16 + anim > cost.num_anim:
                 continue
-            limbs = dict(cost.anim_limbs(8 + anim % 4))
-            limbs.update(cost.anim_limbs(anim))
-            limbs.update(cost.anim_limbs(16 + anim))
-            limbs = {k: v for k, v in limbs.items() if v}
+            base_l = dict(cost.anim_limbs(8 + anim % 4))      # cabeza de inicio + quieto
+            base_l.update(cost.anim_limbs(anim))
+            poses = []
+            for extra in ((16 + anim, 12 + anim) if two else (16 + anim,)):   # TALK_START (boca abierta) y TALK_STOP (cerrada): dos poses que se alternan; si no caben, solo la abierta
+                limbs = dict(base_l)
+                limbs.update(cost.anim_limbs(extra))
+                limbs = {k: v for k, v in limbs.items() if v}
+                if limbs:
+                    seq = cost.steps(limbs)
+                    if seq:
+                        poses.append((limbs, seq[0]))
         else:
             limbs = cost.merged(anim)
-        seq = cost.steps(limbs)
-        if not limbs:
+            seq = cost.steps(limbs) if limbs else []
+            if len(seq) > 2:
+                seq = [seq[0], seq[len(seq) // 2]]             # dos poses de caminar
+            poses = [(limbs, pos) for pos in seq]
+        if not poses:
             continue
-        if anim >= 4:
-            seq = seq[:1]                           # hablando: una sola pose (la boca abierta); cabe en una pagina
-        elif len(seq) > 2:
-            seq = [seq[0], seq[len(seq) // 2]]      # dos poses de caminar
         mir = MIRROR_OLD_DIR[anim % 4] if anim % 4 < 2 else False
         offs = []
-        for pos in seq:
+        for limbs, pos in poses:
             parts = cost.render(limbs, pos, mirror=mir)
             fr = cells_of(parts, emap)
             if fr is None:
