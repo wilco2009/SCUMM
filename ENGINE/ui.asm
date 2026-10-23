@@ -471,6 +471,18 @@ ui_objname:     ld de,NOBJ
                 sbc hl,de
                 pop hl
                 jr nc,on_none
+                push hl
+                call nm_lookup          ; nombre cambiado por setObjectName
+                jr nc,on_orig
+                pop hl
+                push ix
+                pop hl
+                inc hl
+                inc hl
+                ld de,UI_NAME
+                ld b,31
+                jr on_c
+on_orig:        pop hl
                 ld e,l
                 ld d,h
                 add hl,hl
@@ -800,4 +812,56 @@ ui_endcut:      ld a,(UI_SIF)
 uc_dirty:       ld a,(UI_DIRTY)
                 or 7
                 ld (UI_DIRTY),a
+                ret
+
+; ---- setObjectName (A original = $54): ARGS = objeto y STRP = el nombre
+; HL = objeto -> IX = su entrada y carry si tiene nombre cambiado
+nm_lookup:      ld a,h
+                or l
+                ret z
+nm_find:        ld ix,NAMEOV
+                ld de,NM_SIZE
+                ld b,NNAMES
+nf_l:           ld a,(ix+0)
+                cp l
+                jr nz,nf_n
+                ld a,(ix+1)
+                cp h
+                jr nz,nf_n
+                scf
+                ret
+nf_n:           add ix,de
+                djnz nf_l
+                or a
+                ret
+ui_setname:     ld hl,(ARGS)
+                ld a,h
+                or l
+                ret z
+                push hl
+                call nm_find
+                jr c,sn_have
+                ld hl,0
+                call nm_find            ; una entrada libre
+                jr c,sn_have
+                pop hl
+                ret
+sn_have:        pop hl
+                ld (ix+0),l
+                ld (ix+1),h
+                push ix
+                pop de
+                inc de
+                inc de
+                ld hl,(STRP)
+                ld b,NM_SIZE-3
+sn_c:           ld a,(hl)
+                or a
+                jr z,sn_e
+                ld (de),a
+                inc hl
+                inc de
+                djnz sn_c
+sn_e:           xor a
+                ld (de),a
                 ret

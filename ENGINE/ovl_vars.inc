@@ -31,3 +31,6 @@ ac_id           equ OVL_VARS+30         ; numero del actor que se dibuja
 UI_SIF           equ OVL_VARS+27         ; interfaz, cursor y VAR_CURSORSTATE guardados por cutscene()
 UI_SCUR          equ OVL_VARS+28
 UI_SV21          equ OVL_VARS+29
+NAMEOV          equ $CE60               ; nombres de objeto cambiados por setObjectName: NNAMES entradas de NM_SIZE bytes (objeto, texto + 0)
+NNAMES          equ 8
+NM_SIZE         equ 26

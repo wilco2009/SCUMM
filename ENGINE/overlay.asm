@@ -14,7 +14,12 @@
                 jp host_ops
                 jp ov_init
 
-ov_init:        ld hl,160               ; camara: seguir al protagonista, centrada
+ov_init:        ld hl,NAMEOV            ; sin nombres cambiados
+                ld de,NAMEOV+1
+                ld bc,NNAMES*NM_SIZE-1
+                ld (hl),0
+                ldir
+                ld hl,160               ; camara: seguir al protagonista, centrada
                 ld (cam_cx),hl
                 ld a,2
                 ld (cam_mode),a

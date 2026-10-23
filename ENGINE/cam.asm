@@ -15,6 +15,8 @@ host_ops:       ld c,a
                 jp z,ui_verbops
                 cp $40
                 jp z,ui_cutscene
+                cp $54
+                jp z,ui_setname
                 cp $52
                 jr z,ho_fol
                 cp $24
