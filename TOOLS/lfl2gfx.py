@@ -88,7 +88,10 @@ def decode_room(b):
     return w, h, img
 
 
-def room_mask_cells(b, w, h):
+MASK_MIN = 16           # una celda tapa al personaje si tiene mas de MASK_MIN pixeles de mascara (de 64); --mask-min
+
+
+def room_mask_cells(b, w, h, raw=None):
     """Mascara de profundidad de la sala (v2): tras los datos de color, bytes de 8 pixeles por tira y fila (RLE: bit 7 = repetir un
     byte). Devuelve una palabra por columna de celdas (bit r = la celda de la fila r tapa al personaje: mas de la mitad de sus pixeles)."""
     src = struct.unpack_from('<H', b, 0x0A)[0]
@@ -130,9 +133,11 @@ def room_mask_cells(b, w, h):
     for cx in range(strips):
         word = 0
         for cy in range(h // 8):
-            if sum(bin(m[cy * 8 + k][cx]).count('1') for k in range(8)) > 32:
+            if sum(bin(m[cy * 8 + k][cx]).count('1') for k in range(8)) > MASK_MIN:
                 word |= 1 << cy
         cols.append(word)
+    if raw is not None:
+        raw.extend(m)
     return cols
 
 
@@ -1024,6 +1029,7 @@ def main():
     ap.add_argument('--sal', type=float, default=0.0, help='proteccion de los tiles de mucho contraste')
     ap.add_argument('--pool', type=int, default=POOL_MAX, help='tiles de la reserva de objetos (0 = sin objetos)')
     ap.add_argument('--dump-objects', default='', metavar='DIR', help='escribe en DIR un PNG por objeto de cada sala (colores de Chroma, 1:1) para retocarlo y devolverlo con objpng=ID,fichero.png')
+    ap.add_argument('--mask-min', type=int, default=16, help='pixeles de mascara (de 64) a partir de los que una celda tapa al personaje')
     ap.add_argument('--no-objects', action='store_true', help='no incluir las imagenes de los objetos')
     ap.add_argument('--cfg', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gfx_rooms.cfg'),
                     help='ajustes por sala (protect, tiles, rarity); ver el propio fichero')
@@ -1086,7 +1092,11 @@ def main():
             grids = object_grids(room, emap)             # con los pesos de color de esta sala
             tiles, idx = limit_pool(grids, pool)
             layer = (tiles, idx)
-        gfx, nslots, ninst = build_gfx(cur, a.view, a.code_base, layer, room_mask_cells(b, w, h))
+        global MASK_MIN
+        MASK_MIN = a.mask_min
+        mraw = []
+        mcols = room_mask_cells(b, w, h, mraw)
+        gfx, nslots, ninst = build_gfx(cur, a.view, a.code_base, layer, mcols)
         ok = verify_gfx(gfx, cur)
         if layer:
             ok = ok and verify_objects(gfx, idx, tiles)
@@ -1105,6 +1115,13 @@ def main():
                         orig[y][x] = (255, 0, 255)
         mapped = [[CHROMA[p] for p in row] for row in img]
         write_png(os.path.join(a.outdir, 'sala%02d.png' % r), orig + sep + mapped + sep + render)
+        if any(mcols):                         # mascaraNN.png: la sala en grises; arriba en rojo los pixeles de la mascara original, abajo las celdas que tapan al personaje
+            def gris(v):
+                g = sum(EGA[v]) // 6 + 40
+                return (g, g, g)
+            pix = [[(255, 0, 0) if (mraw[y][x >> 3] >> (7 - (x & 7))) & 1 else gris(img0[y][x]) for x in range(w)] for y in range(h)]
+            cel = [[(255, 0, 0) if (mcols[x >> 3] >> (y >> 3)) & 1 else gris(img0[y][x]) for x in range(w)] for y in range(h)]
+            write_png(os.path.join(a.outdir, 'mascara%02d.png' % r), pix + sep + cel)
         lines.append('| %02d | %d | %d | %d | %d | %.1f%% | %d | %s |'
                      % (r, w, ntiles, maxwin, nslots, err0 * 100, len(gfx), 'OK' if ok else 'FALLA'))
         print(lines[-1], flush=True)
