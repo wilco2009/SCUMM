@@ -10,14 +10,15 @@ Formato del bloque (little endian):
   +9   u16 desplazamiento (desde el principio del bloque) de las etiquetas de verbos: (id, texto, 0)... y $FF
   +11  u16 desplazamiento de las preposiciones: cuatro textos acabados en 0
   +13  u16 desplazamiento del nombre de los ficheros de sala
-  +16  10 x u16: valor de VAR_KEYPRESS para las teclas 1 2 3 4 5 6 7 8 9 0 (0: sin uso)
-  +36  los textos
+  +15  u16 desplazamiento del nombre de los ficheros de sonido (VGM), +17 posicion de las tres cifras del sonido
+  +20  10 x u16: valor de VAR_KEYPRESS para las teclas 1 2 3 4 5 6 7 8 9 0 (0: sin uso)
+  +44  los textos
 """
 import struct
 import sys
 
 SIZE = 256
-FIRST_TEXT = 36
+FIRST_TEXT = 44
 KEYS = '1234567890'
 
 
@@ -69,10 +70,16 @@ def build(path):
     t = tpl.encode('ascii')
     out[pos:pos + len(t)] = t
     pos += len(t) + 1
+    snd = text(fi.get('sonido', '')).encode('ascii')
+    if snd:
+        out[15:17] = struct.pack('<H', pos)
+        out[17] = snd.index(b'000')
+        out[pos:pos + len(snd)] = snd
+        pos += len(snd) + 1
     assert pos <= SIZE, 'el perfil no cabe en %d bytes (%d)' % (SIZE, pos)
     for i, k in enumerate(KEYS):
         if k in ky:
-            struct.pack_into('<H', out, 16 + 2 * i, int(ky[k]))
+            struct.pack_into('<H', out, 20 + 2 * i, int(ky[k]))
     return bytes(out)
 
 

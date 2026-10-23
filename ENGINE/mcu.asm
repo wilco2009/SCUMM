@@ -10,6 +10,9 @@ CMD_FOPEN       equ 53
 CMD_FREAD       equ 55
 CMD_FCLOSE      equ 57
 CMD_FSTAT       equ 59
+CMD_PLAYVGM     equ 34                  ; sonido: reproductor VGM del MCU (fichero, parar, bucle)
+CMD_STOPVGM     equ 35
+CMD_LOOPVGM     equ 38
 CHUNK           equ 512
 
 mcu_send:       push bc

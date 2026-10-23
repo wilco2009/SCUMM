@@ -68,7 +68,21 @@ static FILE* mcu_files[8];
 static std::string mcu_name;
 static int mcu_cmd = -1, mcu_cnt = 0, mcu_nlen = 0, mcu_h = 0, mcu_n = 0;
 static void mcu_byte(uint8_t b) {
-  if (mcu_cmd < 0) { mcu_cmd = b; mcu_cnt = 0; mcu_name.clear(); mcu_nlen = 0; if (b == 29 || b == 0x41 || b == 0x1C) mcu_cmd = -1; return; }
+  if (mcu_cmd < 0) {
+    mcu_cmd = b; mcu_cnt = 0; mcu_name.clear(); mcu_nlen = 0;
+    if (b == 29 || b == 0x41 || b == 0x1C) mcu_cmd = -1;
+    if (b == 35) { printf("SND f=%d STOP%c", g_fr, 10); mcu_cmd = -1; }             // STOP_VGM: sin parametros ni respuesta
+    return;
+  }
+  if (mcu_cmd == 38) { printf("SND f=%d LOOP %d%c", g_fr, b, 10); mcu_cmd = -1; return; }     // LOOP_VGM: un byte, sin respuesta
+  if (mcu_cmd == 34) {                                                                          // PLAY_VGM: longitud, nombre; responde el estado
+    if (mcu_cnt == 0) { mcu_nlen = b; mcu_cnt = 1; }
+    else {
+      mcu_name += (char)b;
+      if ((int)mcu_name.size() == mcu_nlen) { printf("SND f=%d PLAY %s%c", g_fr, mcu_name.c_str(), 10); mcu_out.push_back(0); mcu_cmd = -1; }
+    }
+    return;
+  }
   if (mcu_cmd == 53) {
     if (mcu_cnt == 0) { mcu_nlen = b; mcu_cnt = 1; }
     else {

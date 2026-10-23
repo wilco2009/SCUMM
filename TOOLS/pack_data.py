@@ -2,7 +2,8 @@
 """Empaqueta los datos NO graficos de Maniac Mansion (scripts, codigo de objetos, cajas y objetos de cada sala,
 dueno y estado de los objetos) en DATA.BIN, que el programa del ZX81 carga de la SD al arrancar.
 
-Uso: pack_data.py DIRECTORIO_LFL SALIDA.BIN --game perfil.cfg [--first-page N] [--all]
+Uso: pack_data.py DIRECTORIO_LFL SALIDA.BIN --game perfil.cfg [--sounds DIR] [--first-page N] [--all]
+  --sounds      carpeta de sound2vgm.py (SOUNDS.TXT con prioridad, duracion y bucle de cada sonido)
   --game        perfil del juego (SCUMM/games/*.cfg, ver gameprofile.py): lo unico propio del juego que lee el motor
   --first-page  primera pagina de la RAM extendida que ocupan los datos (16 por omision)
   --all         incluye los scripts y salas sinteticos de las pruebas (ids >= 180 y salas >= 60), con el mismo
@@ -15,7 +16,7 @@ Formato (little endian; las cuatro tablas son tal cual se copian en memoria, ver
   +6      u8   primera pagina
   +7      u8   0
   +8      u16  bytes de cada pagina (6144: lo que cabe en la ventana de datos $2000-$37FF)
-  +10     6 bytes sin uso
+  +10     pagina y direccion de la tabla de sonidos (0: no hay; ver sound2vgm.py), 3 bytes sin uso
   +16     SCRDIR  256 x 3   pagina (0 = no hay), direccion
   +784    OBJOWN  780       dueno de cada objeto
   +1564   OBJST   780       estado de cada objeto
@@ -53,7 +54,21 @@ def room_mask(world, rn):
         return None
 
 
-def build(world, game, first_page=16, include_test=False):
+def sound_table(path):
+    """256 x 4 bytes: prioridad, banderas (bit 0 reiniciable, bit 1 bucle, bit 7 existe) y duracion en fotogramas a 50 Hz (65535: sin fin)."""
+    t = bytearray(256 * 4)
+    with open(path) as f:
+        for ln in f:
+            v = ln.split()
+            if len(v) < 5:
+                continue
+            sid, prio, rest, ticks, loop = (int(x) for x in v[:5])
+            dur = 65535 if loop >= 0 else min(65534, -(-ticks * 50 // 236))
+            t[4 * sid:4 * sid + 4] = struct.pack('<BBH', prio, 0x80 | (1 if rest else 0) | (2 if loop >= 0 else 0), dur)
+    return bytes(t)
+
+
+def build(world, game, first_page=16, include_test=False, sounds=None):
     pk = M.Packer(first_page=first_page)
     scripts = {i: c for i, c in world.scripts.items() if include_test or i < SYNTH_SCRIPT}
     rooms = {n: r for n, r in world.rooms.items() if include_test or n < SYNTH_ROOM}
@@ -103,8 +118,9 @@ def build(world, game, first_page=16, include_test=False):
                 if len(blob) > 6100:                      # no cabe en una pagina: ese traje se queda con el rectangulo
                     continue
                 costdir[3 * cid:3 * cid + 3] = struct.pack('<BH', *pk.add(blob))
+    snd_ref = struct.pack('<BH', *pk.add(sound_table(sounds))) if sounds else bytes(3)
     npages = len(pk.pages)
-    head = b'SDAT' + struct.pack('<BBBBH', 2, npages, first_page, 0, M.PAGE_USABLE) + bytes(6)
+    head = b'SDAT' + struct.pack('<BBBBH', 2, npages, first_page, 0, M.PAGE_USABLE) + snd_ref + bytes(3)
     tables = head + bytes(scrdir) + bytes(world.owner) + bytes(world.state) + bytes(roomdir) + bytes(odir) + bytes(costdir) + gameprofile.build(game)
     assert len(tables) <= TABLES, len(tables)
     out = bytearray(tables + bytes(TABLES - len(tables)))
@@ -128,7 +144,8 @@ def main():
     game = args[args.index('--game') + 1]
     d, out = args[0], args[1]
     world = M.World(d)
-    data, npages = build(world, game, first, test)
+    sounds = args[args.index('--sounds') + 1] + '/SOUNDS.TXT' if '--sounds' in args else None
+    data, npages = build(world, game, first, test, sounds)
     with open(out, 'wb') as f:
         f.write(data)
     print('%s: %d paginas de %d bytes desde la %d, %d bytes' % (out, npages, M.PAGE_USABLE, first, len(data)))

@@ -37,7 +37,9 @@ PF_TPLPOS       equ PROF+8              ; donde van las dos cifras de la sala en
 PF_SHORT        equ PROF+9              ; desplazamientos (desde PROF) de las etiquetas de verbos, las preposiciones y el nombre de los ficheros
 PF_PREPS        equ PROF+11
 PF_TPL          equ PROF+13
-PF_KEYS         equ PROF+16             ; 10 palabras: valor de VAR_KEYPRESS de las teclas 1 2 3 4 5 6 7 8 9 0
+PF_SNDTPL       equ PROF+15             ; desplazamiento del nombre de los ficheros de sonido y posicion de sus tres cifras
+PF_SNDPOS       equ PROF+17
+PF_KEYS         equ PROF+20             ; 10 palabras: valor de VAR_KEYPRESS de las teclas 1 2 3 4 5 6 7 8 9 0
 ac_mk           equ OVL_VARS+31         ; 1: el personaje que se dibuja va detras de la mascara de la sala (su caja tiene mascara)
 ac_s0           equ OVL_VARS+32         ; primera tira (8 pixeles) de la sala que cubre el personaje
 ac_y0           equ OVL_VARS+33         ; palabra: fila de la sala de su primera fila de pixeles
@@ -48,7 +50,17 @@ ac_mt           equ OVL_VARS+38         ; 8 bytes: la mascara de la celda (y, mi
 ac_mbl          equ OVL_VARS+46         ; palabra: direccion de la mascara de la sala en su pagina
 AV              equ ACTNAME+NACTORS*3   ; mas variables del overlay (hasta $CFEF)
 ac_mpg          equ AV                  ; pagina de la mascara de la sala
-ac_sh           equ AV+1                ; desplazamiento en pixeles de la celda dentro de su tira
+ac_sh           equ AV+1
+sdx_cur          equ AV+2                ; sonido: el que suena (0: ninguno), su prioridad, si es reiniciable, el que esta en cola y su prioridad
+sdx_cprio        equ AV+3
+sdx_crest        equ AV+4
+sdx_next         equ AV+5
+sdx_nprio        equ AV+6
+sdx_nn           equ AV+7                ; el que se esta arrancando: numero, prioridad, banderas y duracion
+sdx_np           equ AV+8
+sdx_nf           equ AV+9
+sdx_nd           equ AV+10
+sdx_left         equ AV+12               ; fotogramas que le quedan al que suena (65535: sin fin)                ; desplazamiento en pixeles de la celda dentro de su tira
 ac_id           equ OVL_VARS+30         ; numero del actor que se dibuja
 UI_SIF           equ OVL_VARS+27         ; interfaz, cursor y VAR_CURSORSTATE guardados por cutscene()
 UI_SCUR          equ OVL_VARS+28

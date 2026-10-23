@@ -13,8 +13,11 @@
                 jp actors_update
                 jp host_ops
                 jp ov_init
+                jp snd_event
+                jp snd_tick
 
-ov_init:        ld hl,NAMEOV            ; sin nombres cambiados
+ov_init:        call sdx_ini
+                ld hl,NAMEOV            ; sin nombres cambiados
                 ld de,NAMEOV+1
                 ld bc,NNAMES*NM_SIZE+NACTORS*3-1
                 ld (hl),0
@@ -36,6 +39,7 @@ ov_init:        ld hl,NAMEOV            ; sin nombres cambiados
                 include "ui.asm"
                 include "cam.asm"
                 include "actors.asm"
+                include "snd.asm"
                 IF $ > $2000
                 defb EL_OVERLAY_NO_CABE_EN_8_KB
                 ENDIF

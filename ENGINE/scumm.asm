@@ -211,6 +211,7 @@ ml_go:          call wait_vs
                 call text_update
                 call OVL_UI_UPDATE
                 call OVL_ACTORS_UPDATE
+                call OVL_SND_TICK
                 call keys
                 ld a,(rs_flag)          ; restart(): se vuelve a empezar como si se hubiera arrancado
                 or a
@@ -271,7 +272,9 @@ sm_err:         call sc_hide_sprites
                 call put_num
 sme_k:          call sc_wait_key
 
-sc_quit:        call sc_hide_sprites
+sc_quit:        ld a,CMD_STOPVGM        ; el sonido que suene se para
+                call mcu_send
+                call sc_hide_sprites
                 xor a
                 ld (ov_done),a          ; la proxima vez se vuelve a copiar el overlay
                 ld b,0                  ; el bloque 0 vuelve a la ROM (la usa SLOW_FAST)
@@ -1031,6 +1034,14 @@ ev_handler:     push af
                 jr z,evh_text
                 cp EV_ROOM_LOAD
                 jr z,evh_room
+                cp EV_SOUND_START
+                jr z,evh_snd
+                cp EV_SOUND_STOP
+                jr z,evh_snd
+                cp EV_SOUND_STOPALL
+                jr z,evh_snd
+                cp EV_SOUND_QUERY
+                jr z,evh_snd
                 cp EV_OBJSTATE
                 jr nz,evh_end
                 ld a,1                  ; cambia el estado de un objeto: la sala se vuelve a componer (una vez por fotograma, gd_update)
@@ -1038,6 +1049,8 @@ ev_handler:     push af
                 ld a,(UI_DIRTY)         ; y puede haber cambiado el inventario
                 or 4
                 ld (UI_DIRTY),a
+                jr evh_end
+evh_snd:        call OVL_SND_EVENT
                 jr evh_end
 evh_room:       call gf_load_room
                 jr evh_end
