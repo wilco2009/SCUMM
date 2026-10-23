@@ -74,20 +74,17 @@ ui_verbops:     ld a,(ARGS)
                 call ui_entry
                 ld a,(ARGS)
                 ld (ix+0),a
-                ld hl,(ARGS+2)          ; columna = (x * 13 + 4) / 16
+                ld hl,(ARGS+2)          ; columna = (x * VERB_COLMUL + VERB_COLADD) >> VERB_COLSHIFT (game_layout.inc)
                 ld h,0
                 ld d,h
                 ld e,l
-                add hl,hl
-                add hl,hl
-                ld b,h
-                ld c,l
-                add hl,hl
-                add hl,bc
+                ld hl,0
+                ld b,VERB_COLMUL
+uv_m:           add hl,de
+                djnz uv_m
+                ld de,VERB_COLADD
                 add hl,de
-                ld de,4
-                add hl,de
-                ld b,4
+                ld b,VERB_COLSHIFT
 uv_s:           srl h
                 rr l
                 djnz uv_s
@@ -96,8 +93,8 @@ uv_s:           srl h
                 jr c,uv_c
                 ld a,31
 uv_c:           ld (ix+1),a
-                ld a,(ARGS+4)           ; fila = y - 2 (las filas 19-21 del original son las 17-19 nuestras)
-                sub 2
+                ld a,(ARGS+4)           ; fila = y - VERB_ROWSUB (las filas 19-21 del original son las 17-19 nuestras)
+                sub VERB_ROWSUB
                 ld (ix+2),a
                 ld (ix+3),1
                 ld hl,(STRP)
