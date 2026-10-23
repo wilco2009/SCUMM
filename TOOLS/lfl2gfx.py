@@ -88,6 +88,54 @@ def decode_room(b):
     return w, h, img
 
 
+def room_mask_cells(b, w, h):
+    """Mascara de profundidad de la sala (v2): tras los datos de color, bytes de 8 pixeles por tira y fila (RLE: bit 7 = repetir un
+    byte). Devuelve una palabra por columna de celdas (bit r = la celda de la fila r tapa al personaje: mas de la mitad de sus pixeles)."""
+    src = struct.unpack_from('<H', b, 0x0A)[0]
+    run = 1
+    for _ in range(w * h):
+        run -= 1
+        if run == 0:
+            d = b[src]
+            src += 1
+            run = d & 0x7F if d & 0x80 else d >> 4
+            if run == 0:
+                run = b[src]
+                src += 1
+    strips = w // 8
+    m = [[0] * strips for _ in range(h)]
+    sx = y = cnt = 0
+    total = strips * h
+    while cnt < total:
+        r = b[src]
+        src += 1
+        flag = r & 0x80
+        r &= 0x7F
+        if flag:
+            v = b[src]
+            src += 1
+        for _ in range(r):
+            if not flag:
+                v = b[src]
+                src += 1
+            m[y][sx] = v
+            y += 1
+            cnt += 1
+            if y == h:
+                y = 0
+                sx += 1
+            if cnt >= total:
+                break
+    cols = []
+    for cx in range(strips):
+        word = 0
+        for cy in range(h // 8):
+            if sum(bin(m[cy * 8 + k][cx]).count('1') for k in range(8)) > 32:
+                word |= 1 << cy
+        cols.append(word)
+    return cols
+
+
 def cell_pixels(img, cx, cy):
     return [img[cy * 8 + y][cx * 8 + x] for y in range(8) for x in range(8)]
 
@@ -738,7 +786,7 @@ def limit_pool(grids, pool):
     return kept, out
 
 
-def build_gfx(cur, view, code_base=0, layer=None):
+def build_gfx(cur, view, code_base=0, layer=None, mask=None):
     """Devuelve (bytes del .GFX, nslots, ninst). Formato en claude/planning/scumm_plan.md."""
     rows = len(cur[0])
     cols = len(cur)
@@ -766,8 +814,9 @@ def build_gfx(cur, view, code_base=0, layer=None):
         lstart[i.end + 1] += 1
     for s in range(npos):
         lstart[s + 1] += lstart[s]
+    has_mask = bool(layer and mask and any(mask))
     out = bytearray(b'SGFX')
-    out += struct.pack('<BBHBBHHH', 2 if layer else 1, nslots, cols, rows, view, npos, n, code_base)
+    out += struct.pack('<BBHBBHHH', (3 if has_mask else 2) if layer else 1, nslots, cols, rows, view, npos, n, code_base)
     out += cellmap
     out += b''.join(struct.pack('<H', v) for v in rstart)
     for i in insts:
@@ -778,7 +827,10 @@ def build_gfx(cur, view, code_base=0, layer=None):
     out += b''.join(struct.pack('<H', v) for v in lstart)
     out += b''.join(struct.pack('<H', k) for k in order)
     if layer:
-        out += object_section(len(out), layer)
+        sec = object_section(len(out), layer)
+        if has_mask:                           # version 3: tras la seccion de objetos, una palabra por columna de celdas y, al final, el puntero
+            sec = sec[:-2] + b''.join(struct.pack('<H', v) for v in mask) + sec[-2:]
+        out += sec
     return bytes(out), nslots, n
 
 
@@ -1034,7 +1086,7 @@ def main():
             grids = object_grids(room, emap)             # con los pesos de color de esta sala
             tiles, idx = limit_pool(grids, pool)
             layer = (tiles, idx)
-        gfx, nslots, ninst = build_gfx(cur, a.view, a.code_base, layer)
+        gfx, nslots, ninst = build_gfx(cur, a.view, a.code_base, layer, room_mask_cells(b, w, h))
         ok = verify_gfx(gfx, cur)
         if layer:
             ok = ok and verify_objects(gfx, idx, tiles)

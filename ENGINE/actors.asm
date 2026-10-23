@@ -69,7 +69,26 @@ aod_dn:         ld a,2
                 ret
 
 ; IX = actor: sus sprites segun los fotogramas de su traje (TOOLS/costume2.py)
-ac_draw:        ld a,(ix+5)             ; traje
+ac_draw:        xor a                   ; mascara de profundidad: solo si la sala la tiene y la caja del personaje tiene mascara
+                ld (ac_mk),a
+                ld hl,(gf_mask)
+                ld a,h
+                or l
+                jr z,acd_nomk
+                ld a,(ix+16)
+                ld hl,NBOXES
+                cp (hl)
+                jr nc,acd_nomk
+                call box_rec
+                jr c,acd_nomk
+                ld de,6
+                add hl,de
+                ld a,(hl)
+                or a
+                jr z,acd_nomk
+                ld a,1
+                ld (ac_mk),a
+acd_nomk:       ld a,(ix+5)             ; traje
                 or a
                 ret z
                 cp 64
@@ -271,7 +290,12 @@ acd_s3:         ld d,0
                 jp nz,acd_skip
                 ld a,l
                 ld (ac_cy),a
-                ld a,(ac_n)
+                ld a,(ac_mk)
+                or a
+                jr z,acd_nm
+                call ac_masked          ; la celda queda detras de un objeto de la sala: no se dibuja
+                jp c,acd_skip
+acd_nm:         ld a,(ac_n)
                 cp 63                   ; el 63 es el cursor
                 jp nc,acd_skip
                 ld (2100),a
@@ -320,3 +344,54 @@ acd_skip:       ld hl,(ac_nx)
                 pop bc
                 dec b
                 jp acd_cell
+
+; carry si la celda del sprite (ac_cx, ac_cy; coordenadas de sprite = pantalla + 32) cae en una celda de la mascara de la sala (se mira su centro)
+ac_masked:      ld hl,(ac_cx)
+                ld de,28
+                or a
+                sbc hl,de
+                ld de,(ac_cam)
+                add hl,de
+                srl h
+                rr l
+                srl h
+                rr l
+                srl h
+                rr l
+                ld a,h
+                or a
+                ret nz                  ; NC
+                ld a,l
+                ld hl,gf_cols
+                cp (hl)
+                ret nc
+                ld l,a
+                ld h,0
+                add hl,hl
+                ld de,(gf_mask)
+                add hl,de
+                ld a,(ac_cy)
+                sub 28
+                jr nc,am_y
+                or a
+                ret
+am_y:           srl a
+                srl a
+                srl a
+                cp 16
+                ret nc
+                ld b,a
+                srl a
+                srl a
+                srl a
+                ld e,a
+                ld d,0
+                add hl,de
+                ld a,b
+                and 7
+                ld b,a
+                inc b
+                ld a,(hl)
+am_s:           rrca
+                djnz am_s
+                ret

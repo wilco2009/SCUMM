@@ -27,6 +27,7 @@ UI_INVO         equ $CD2E               ; primer objeto del inventario que se ve
 UI_TMP          equ $CD2F
 UI_LIM          equ $CD30
                 include "game_layout.inc"
+ac_mk           equ OVL_VARS+31         ; 1: el personaje que se dibuja va detras de la mascara de la sala (su caja tiene mascara)
 ac_id           equ OVL_VARS+30         ; numero del actor que se dibuja
 UI_SIF           equ OVL_VARS+27         ; interfaz, cursor y VAR_CURSORSTATE guardados por cutscene()
 UI_SCUR          equ OVL_VARS+28
