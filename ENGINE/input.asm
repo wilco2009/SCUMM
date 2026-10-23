@@ -977,7 +977,48 @@ rn_full:        ld b,0
                 ld a,(ARGS)
                 jp write_var
 
+; freezeScripts de v2: bit 7 del estado en las ranuras vivas menos la actual; unfreezeScripts lo quita en todas
+freeze_scripts:
+                ld ix,SLOTS
+                ld b,NSLOT
+                ld c,0
+fz_l:           ld a,(ix+0)
+                or a
+                jr z,fz_n
+                ld a,(CUR)
+                cp c
+                jr z,fz_n
+                set 7,(ix+0)
+fz_n:           ld de,16
+                add ix,de
+                inc c
+                djnz fz_l
+                ret
+
+unfreeze_scripts:
+                ld ix,SLOTS
+                ld b,NSLOT
+                ld de,16
+ufz_l:          res 7,(ix+0)
+                add ix,de
+                djnz ufz_l
+                ret
+
+h_o2_cursorCommand:                     ; ARGS = palabra; byte alto: bit 0 SET_FREEZE, bit 3 FREEZE_ON; lo demas (interfaz) lo hace el anfitrion
+                ld a,(ARGS+1)
+                rrca
+                jp nc,h_host
+                rrca
+                rrca
+                rrca
+                jr nc,hcc_u
+                call freeze_scripts
+                jp h_host
+hcc_u:          call unfreeze_scripts
+                jp h_host
+
 h_o2_cutscene:                          ; sin frases pendientes ni script de frases; lo demas (interfaz) lo hace el anfitrion
+                call freeze_scripts
                 xor a
                 ld (SENTNUM),a
                 ld de,SENTENCE_SCRIPT
@@ -986,6 +1027,7 @@ h_o2_cutscene:                          ; sin frases pendientes ni script de fra
                 jp h_host
 
 h_o2_endCutscene:
+                call unfreeze_scripts
                 ld hl,0
                 ld (VARS+10),hl         ; VAR_OVERRIDE = 0
                 ld (CUTPTR),hl

@@ -34,3 +34,5 @@ UI_SV21          equ OVL_VARS+29
 NAMEOV          equ $CE60               ; nombres de objeto cambiados por setObjectName: NNAMES entradas de NM_SIZE bytes (objeto, texto + 0)
 NNAMES          equ 8
 NM_SIZE         equ 26
+ACTNAME         equ NAMEOV+NNAMES*NM_SIZE ; nombre de cada actor (actorOps 3): pagina del script (0: sin nombre) y direccion de la cadena en el
+                                          ; script, que sigue en su pagina; NACTORS x 3

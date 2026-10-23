@@ -470,7 +470,7 @@ ui_objname:     ld de,NOBJ
                 or a
                 sbc hl,de
                 pop hl
-                jr nc,on_none
+                jp nc,on_none
                 push hl
                 call nm_lookup          ; nombre cambiado por setObjectName
                 jr nc,on_orig
@@ -483,7 +483,32 @@ ui_objname:     ld de,NOBJ
                 ld b,31
                 jr on_c
 on_orig:        pop hl
-                ld e,l
+                ld a,h
+                or a
+                jr nz,on_obj
+                ld a,l
+                cp NACTORS
+                jr nc,on_obj
+                ld e,l                  ; un actor: su nombre esta en el script que lo puso (pagina y direccion)
+                ld d,0
+                ld hl,ACTNAME
+                add hl,de
+                add hl,de
+                add hl,de
+                ld a,(hl)
+                or a
+                jr z,on_none
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                push de
+                call map_page
+                pop hl
+                ld de,UI_NAME
+                ld b,31
+                jr on_c
+on_obj:         ld e,l
                 ld d,h
                 add hl,hl
                 add hl,de

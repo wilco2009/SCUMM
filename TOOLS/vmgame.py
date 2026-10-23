@@ -150,7 +150,7 @@ class GameMixin:
         'o2_doSentence': 'g_doSentence', 'o2_findObject': 'g_findObject', 'o2_actorFromPos': 'g_actorFromPos',
         'o2_drawObject': 'g_drawObject', 'o5_actorFollowCamera': 'g_actorFollowCamera',
         'o2_loadRoomWithEgo': 'g_loadRoomWithEgo',
-        'o5_getDist': 'g_getDist', 'o5_getClosestObjActor': 'g_getClosestObjActor', 'o3_setBoxFlags': 'g_setBoxFlags', 'o2_lights': 'g_lights', 'o2_getObjPreposition': 'g_getObjPreposition', 'o5_getRandomNr': 'g_getRandomNr', 'o2_cutscene': 'g_cutscene', 'o2_endCutscene': 'g_endCutscene', 'o2_beginOverride': 'g_beginOverride',
+        'o5_getDist': 'g_getDist', 'o5_getClosestObjActor': 'g_getClosestObjActor', 'o3_setBoxFlags': 'g_setBoxFlags', 'o2_lights': 'g_lights', 'o2_getObjPreposition': 'g_getObjPreposition', 'o5_getRandomNr': 'g_getRandomNr', 'o2_cutscene': 'g_cutscene', 'o2_cursorCommand': 'g_cursorCommand', 'o2_endCutscene': 'g_endCutscene', 'o2_beginOverride': 'g_beginOverride',
         'o5_getObjectOwner': 'g_getObjectOwner', 'o2_setOwnerOf': 'g_setOwnerOf', 'o2_pickupObject': 'g_pickupObject',
     }
 
@@ -1195,8 +1195,29 @@ class GameMixin:
         b = self.rnd >> 8
         self.write_var(r, b if mx == 255 else (b * (mx + 1)) >> 8)
 
+    def freeze_scripts(self):
+        """freezeScripts de v2: bit 7 en todas las ranuras vivas menos la actual (no se ejecutan ni cuentan su retardo)."""
+        for i, ss in enumerate(self.slots):
+            if ss.status != SS_DEAD and i != self.cur:
+                ss.status |= 0x80
+
+    def unfreeze_scripts(self):
+        for ss in self.slots:
+            ss.status &= 0x7F
+
+    def g_cursorCommand(self):
+        op = self.opcode
+        v = self.get_var_or_direct_word(0x80)
+        if (v >> 8) & 1:                # USERSTATE_SET_FREEZE
+            if (v >> 8) & 8:            # USERSTATE_FREEZE_ON
+                self.freeze_scripts()
+            else:
+                self.unfreeze_scripts()
+        self.host_log(op, [v])
+
     def g_cutscene(self):
         op = self.opcode
+        self.freeze_scripts()
         self.sent = []
         self.stop_script(SENTENCE_SCRIPT)
         self.reset_sentence()
@@ -1205,6 +1226,7 @@ class GameMixin:
     def g_endCutscene(self):
         op = self.opcode
         self.vars[VAR_OVERRIDE] = 0
+        self.unfreeze_scripts()
         self.host_log(op, [])
 
     def g_beginOverride(self):

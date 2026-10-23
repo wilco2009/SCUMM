@@ -101,7 +101,7 @@ disp_table:
         defw sp_B1_B2, h_o2_putActorInRoom   ; 2D o2_putActorInRoom
         defw sp_b_b_b, h_o2_delay   ; 2E o2_delay
         defw sp_W1_J, h_o2_ifStateLocked   ; 2F o2_ifStateLocked
-        defw sp_B1_b, h_host   ; 30 o3_setBoxFlags
+        defw sp_B1_b, h_o3_setBoxFlags   ; 30 o3_setBoxFlags
         defw sp_R_w_B1, h_o2_getBitVar   ; 31 o2_getBitVar
         defw sp_B1, h_host   ; 32 o2_setCameraAt
         defw sp_B1_B2_b, h_host   ; 33 o2_roomOps
@@ -149,7 +149,7 @@ disp_table:
         defw sp_W1_B2_J, h_host   ; 5D o2_ifClassOfIs
         defw sp_B1_B2_B3, h_o2_walkActorTo   ; 5E o2_walkActorTo
         defw sp_W1_J, h_o2_ifStateUntouchable   ; 5F o2_ifStateUntouchable
-        defw sp_W1, h_host   ; 60 o2_cursorCommand
+        defw sp_W1, h_o2_cursorCommand   ; 60 o2_cursorCommand
         defw sp_B1_B2_B3, h_o2_putActor   ; 61 o2_putActor
         defw sp_B1, h_o2_stopScript   ; 62 o2_stopScript
         defw sp_R_B1, h_o5_getActorFacing   ; 63 o5_getActorFacing
@@ -161,11 +161,11 @@ disp_table:
         defw sp_W1_B2, h_o2_setOwnerOf   ; 69 o2_setOwnerOf
         defw sp_R_W1, h_o2_subIndirect   ; 6A o2_subIndirect
         defw sp_none, h_host   ; 6B o2_dummy
-        defw sp_R_W1, h_host_r   ; 6C o2_getObjPreposition
+        defw sp_R_W1, h_o2_getObjPreposition   ; 6C o2_getObjPreposition
         defw sp_B1_B2, h_o2_putActorInRoom   ; 6D o2_putActorInRoom
         defw sp_none, h_host   ; 6E o2_dummy
         defw sp_W1_J, h_o2_ifStateUnlocked   ; 6F o2_ifStateUnlocked
-        defw sp_B1_b_b, h_host   ; 70 o2_lights
+        defw sp_B1_b_b, h_o2_lights   ; 70 o2_lights
         defw sp_R_B1, h_o5_getActorCostume   ; 71 o5_getActorCostume
         defw sp_B1, h_o5_loadRoom   ; 72 o5_loadRoom
         defw sp_B1_B2_b, h_host   ; 73 o2_roomOps
@@ -229,7 +229,7 @@ disp_table:
         defw sp_B1_B2, h_o2_putActorInRoom   ; AD o2_putActorInRoom
         defw sp_none, h_o2_waitForMessage   ; AE o2_waitForMessage
         defw sp_W1_J, h_o2_ifStateLocked   ; AF o2_ifStateLocked
-        defw sp_B1_b, h_host   ; B0 o3_setBoxFlags
+        defw sp_B1_b, h_o3_setBoxFlags   ; B0 o3_setBoxFlags
         defw sp_R_w_B1, h_o2_getBitVar   ; B1 o2_getBitVar
         defw sp_B1, h_host   ; B2 o2_setCameraAt
         defw sp_B1_B2_b, h_host   ; B3 o2_roomOps
@@ -277,7 +277,7 @@ disp_table:
         defw sp_W1_B2_J, h_host   ; DD o2_ifClassOfIs
         defw sp_B1_B2_B3, h_o2_walkActorTo   ; DE o2_walkActorTo
         defw sp_W1_J, h_o2_ifStateUntouchable   ; DF o2_ifStateUntouchable
-        defw sp_W1, h_host   ; E0 o2_cursorCommand
+        defw sp_W1, h_o2_cursorCommand   ; E0 o2_cursorCommand
         defw sp_B1_B2_B3, h_o2_putActor   ; E1 o2_putActor
         defw sp_B1, h_o2_stopScript   ; E2 o2_stopScript
         defw sp_R_B1, h_o5_getActorFacing   ; E3 o5_getActorFacing
@@ -289,11 +289,11 @@ disp_table:
         defw sp_W1_B2, h_o2_setOwnerOf   ; E9 o2_setOwnerOf
         defw sp_R_W1, h_o2_subIndirect   ; EA o2_subIndirect
         defw sp_none, h_host   ; EB o2_dummy
-        defw sp_R_W1, h_host_r   ; EC o2_getObjPreposition
+        defw sp_R_W1, h_o2_getObjPreposition   ; EC o2_getObjPreposition
         defw sp_B1_B2, h_o2_putActorInRoom   ; ED o2_putActorInRoom
         defw sp_none, h_host   ; EE o2_dummy
         defw sp_W1_J, h_o2_ifStateUnlocked   ; EF o2_ifStateUnlocked
-        defw sp_B1_b_b, h_host   ; F0 o2_lights
+        defw sp_B1_b_b, h_o2_lights   ; F0 o2_lights
         defw sp_R_B1, h_o5_getActorCostume   ; F1 o5_getActorCostume
         defw sp_B1, h_o5_loadRoom   ; F2 o5_loadRoom
         defw sp_B1_B2_b, h_host   ; F3 o2_roomOps

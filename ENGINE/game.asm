@@ -397,9 +397,30 @@ ao_1:
                 cp 2
                 ret z                   ; paleta: sin soporte todavia
                 cp 3
-                ret z                   ; nombre: solo se usa en los codigos de texto 6
+                jr z,ao_name            ; nombre: el interfaz lo muestra en la frase (y los codigos de texto 6)
                 ld a,E_RANGE
                 ld (ERR),a
+                ret
+ao_name:                                ; la cadena (STRP) se queda donde esta: se guarda su pagina y su direccion
+                ld a,(CUR)
+                call slot_addr
+                ld bc,4
+                add hl,bc
+                ld a,(hl)               ; pagina del script
+                ld l,e
+                ld h,0
+                ld b,h
+                ld c,l
+                add hl,hl
+                add hl,bc
+                ld bc,ACTNAME
+                add hl,bc
+                ld (hl),a
+                inc hl
+                ld bc,(STRP)
+                ld (hl),c
+                inc hl
+                ld (hl),b
                 ret
 ao_sound:
                 ld a,(ARGS+2)
