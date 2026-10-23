@@ -537,7 +537,7 @@ kr_end:         call kr_digits
                 ld (k_prev),a
                 ret
 
-; teclas 1-3 recien pulsadas -> entrada de zona 4 (tecla) con su ASCII: el script 4 cambia de personaje (VAR_KEYPRESS)
+; teclas 1-3 recien pulsadas -> entrada de zona 4 (tecla) con el valor 1-3: el script 4 cambia de personaje (VAR_KEYPRESS)
 kr_digits:      ld a,$F7
                 in a,(254)
                 cpl
@@ -552,7 +552,7 @@ kr_digits:      ld a,$F7
                 ld a,d
                 or a
                 ret z
-                ld hl,49
+                ld hl,1                 ; el script 4 espera VAR_KEYPRESS = 1, 2 o 3 (no el ASCII)
                 srl a
                 jr c,kd_go
                 inc l
