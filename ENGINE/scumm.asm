@@ -562,8 +562,7 @@ kr_digits:      ld a,$F7
 kd_go:          ld (INP_VAL),hl
                 ld a,1
                 ld (INP_FLAG),a
-                inc a
-                inc a
+                ld a,4                  ; zona 4: tecla
                 ld (INP_AREA),a
                 ret
 k_prev2:        defb 0
