@@ -565,6 +565,7 @@ PROTECT_POOL = 12       # reserva de objetos de las salas con protect o keep (el
 # Cambios de color de objetos concretos (para que no se pierdan por falta de contraste en la placa, p. ej. el Chroma 8 se ve negro). Nunca se hace nada
 # por norma general: solo lo que se indique en gfx_rooms.cfg con 'objcolor=ID,de,a' (codigos de Chroma 0-15; se puede repetir para varios colores).
 OBJ_COLOR = {}              # id de objeto -> {Chroma de: Chroma a}
+OBJ_HIDE = set()            # objetos cuya imagen no se dibuja (cfg: 'objhide=ID'): p. ej. la imagen retocada de otro objeto ya los incluye
 OBJ_PNG = {}                # id de objeto -> codigos de Chroma de una imagen retocada a mano (cfg: 'objpng=ID,fichero.png')
 
 
@@ -671,6 +672,9 @@ def object_grids(room, emap):
             try:
                 im = decode_obim(room.file, o.obim, o.width, o.height)
             except IndexError:
+                out.append(None)
+                continue
+            if o.id in OBJ_HIDE:
                 out.append(None)
                 continue
             if o.id in OBJ_PNG:
@@ -940,6 +944,8 @@ def read_cfg(path):
             elif k == 'objpng':
                 oid, path = v.split(',', 1)
                 o.setdefault('objpng', {})[int(oid)] = path if os.path.isabs(path) else os.path.join(os.path.dirname(os.path.abspath(path_cfg)), path)
+            elif k == 'objhide':
+                o.setdefault('objhide', set()).add(int(v))
             elif k == 'objcolor':
                 oid, de, a = (int(t) for t in v.split(','))
                 o.setdefault('objcolor', {}).setdefault(oid, {})[de] = a
@@ -971,7 +977,7 @@ def main():
                     help='ajustes por sala (protect, tiles, rarity); ver el propio fichero')
     ap.add_argument('-o', '--outdir', default='preview')
     a = ap.parse_args()
-    global METRIC, POWER, SAL, RARITY, CENTROID, PROTECT, KEEP, OBJ_COLOR, OBJ_PNG
+    global METRIC, POWER, SAL, RARITY, CENTROID, PROTECT, KEEP, OBJ_COLOR, OBJ_PNG, OBJ_HIDE
     METRIC, POWER, SAL, RARITY, CENTROID = a.metric, a.power, a.sal, a.rarity, a.centroid
     PROTECT = [tuple(int(v) for v in r.split(',')) for r in a.protect.split(';') if r.strip()]
     cfg = read_cfg(a.cfg)
@@ -1001,6 +1007,7 @@ def main():
         KEEP = opt.get('keep', [])
         OBJ_COLOR = opt.get('objcolor', {})
         OBJ_PNG = opt.get('objpng', {})
+        OBJ_HIDE = opt.get('objhide', set())
         budget = opt.get('tiles', a.tiles)
         try:
             room = scumm2.Room(a.dir, r)

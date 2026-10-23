@@ -197,6 +197,8 @@ cf1:            cp NACTORS
                 jr z,cf2
                 xor a                   ; primera vez en la sala: salta
                 ld (cam_new),a
+                ld a,3                  ; los personajes esperan a que la camara este en su sitio
+                ld (ac_hold),a
                 ld (cam_cx),hl
                 call cm_clamp
                 jp cm_snap

@@ -1137,6 +1137,9 @@ gf_load_room:   ld a,(EVARGS)
                 ld (cam_fol),a
                 ld a,1
                 ld (cam_new),a
+                ld a,4                  ; los personajes no vuelven a aparecer hasta saber donde van (y la camara ya esta en su sitio)
+                ld (ac_hold),a
+                call sc_hide_sprites
                 ld hl,0
                 ld (gf_objsec),hl
                 xor a

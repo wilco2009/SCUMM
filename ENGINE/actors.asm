@@ -5,7 +5,13 @@ actors_update:  ld a,(gf_have)
                 ld (ac_cam),hl
                 xor a
                 ld (ac_n),a
-                ld ix,ACTORS+ASIZE
+                ld a,(ac_hold)          ; sala nueva: los sprites siguen apagados hasta saber donde van
+                or a
+                jr z,au_run
+                dec a
+                ld (ac_hold),a
+                jr au_hide
+au_run:         ld ix,ACTORS+ASIZE
                 ld b,NACTORS-1
 ac_l:           push bc
                 ld a,(CURROOM)
@@ -18,7 +24,7 @@ ac_next:        ld de,ASIZE
                 add ix,de
                 pop bc
                 djnz ac_l
-                ld a,(ac_n)             ; los sprites que sobran del fotograma anterior se apagan
+au_hide:        ld a,(ac_n)             ; los sprites que sobran del fotograma anterior se apagan
                 ld b,a
                 ld a,(ac_used)
                 ld c,a

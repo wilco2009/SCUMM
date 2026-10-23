@@ -16,6 +16,7 @@ ac_cy           equ OVL_VARS+20
 ac_cp           equ OVL_VARS+21
 ac_nx           equ OVL_VARS+23
 ac_fl           equ OVL_VARS+25
+ac_hold         equ OVL_VARS+26         ; fotogramas que los personajes siguen ocultos tras cambiar de sala
 UI_DIRTY        equ $CD00               ; bit 0 verbos, bit 1 frase, bit 2 inventario
 UI_IFACE        equ $CD01               ; bits 5-7 del estado de usuario: frase, inventario, verbos
 UI_CURSOR       equ $CD02               ; 1: el cursor esta activo

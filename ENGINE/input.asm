@@ -632,8 +632,9 @@ pi_go:          ld a,$FF
                 jp run_script
 
 ; ---------------------------------------------------------------------------------------------- objetos que se dibujan
-; drawRoomObject de v2: el objeto A (indice en la lista de la sala, desde 0) se dibuja si sigue en la sala y tiene el bit 8 (o, siendo hijo de otro,
-; un estado distinto de 0: la llave solo depende de que el felpudo, su padre, tenga el bit 8) y los padres tienen el estado pedido. Salida: carry si se dibuja
+; drawRoomObject de v2 (igual que ScummVM): el objeto A (indice en la lista de la sala, desde 0) se dibuja si su estado tiene el bit 8 y los padres tienen el
+; estado pedido, sin mirar el dueno: un objeto recogido sigue dibujado (la llave: al recogerla se pone su bit 8 y su cuadro negro tapa el hueco bajo el felpudo).
+; Salida: carry si se dibuja
 obj_drawn:      ld (FO_I),a
                 ld a,(NOBJS)
                 ld (FO_N),a
@@ -642,24 +643,8 @@ obj_drawn:      ld (FO_I),a
                 ld l,(ix+0)
                 ld h,(ix+1)
                 call fo_state
-                ld c,a
-                ld l,(ix+0)             ; solo se dibuja lo que sigue en la sala (dueno 15)
-                ld h,(ix+1)
-                ld de,OBJOWN
-                add hl,de
-                ld a,(hl)
-                cp 15
-                jr z,od_own
-                or a
-                ret                     ; NC
-od_own:         bit 3,c
-                jr nz,od_go
-                ld a,(ix+9)             ; sin el bit 8 solo se dibuja un objeto con padre (la llave bajo el felpudo) y estado distinto de 0
-                or a
-                ret z
-                ld a,c
-                or a
-                ret z
+                and 8
+                ret z                   ; sin el bit 8 propio no se dibuja (NC)
 od_go:
                 ld a,(FO_I)
                 inc a
