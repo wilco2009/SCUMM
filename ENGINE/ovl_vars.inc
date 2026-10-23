@@ -26,9 +26,8 @@ UI_PEGO         equ $CD2D               ; protagonista cuyo inventario esta dibu
 UI_INVO         equ $CD2E               ; primer objeto del inventario que se ve (de 2 en 2)
 UI_TMP          equ $CD2F
 UI_LIM          equ $CD30
-INV_ROW0        equ 20                  ; filas 20-21: 4 objetos (2 columnas: 0 y 17) y las flechas (UP, DN) en la columna 15
-VERB_ROW0       equ 17
-SENT_ROW        equ 16
+                include "game_layout.inc"
+ac_id           equ OVL_VARS+30         ; numero del actor que se dibuja
 UI_SIF           equ OVL_VARS+27         ; interfaz, cursor y VAR_CURSORSTATE guardados por cutscene()
 UI_SCUR          equ OVL_VARS+28
 UI_SV21          equ OVL_VARS+29
