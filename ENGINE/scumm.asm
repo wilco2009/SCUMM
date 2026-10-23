@@ -212,7 +212,18 @@ ml_go:          call wait_vs
                 call OVL_UI_UPDATE
                 call OVL_ACTORS_UPDATE
                 call keys
-                jr main_loop
+                ld a,(rs_flag)          ; restart(): se vuelve a empezar como si se hubiera arrancado
+                or a
+                jr z,main_loop
+                xor a
+                ld (rs_flag),a
+                call sc_hide_sprites
+                ld b,0                  ; el bloque 0 vuelve a la ROM (SET_FAST)
+                xor a
+                call sc_map
+                ld sp,(sv_sp)
+                jp scumm_main
+rs_flag:        defb 0
 sm_err:         call sc_hide_sprites
                 ld a,(ERR)
                 ld l,a
@@ -261,6 +272,8 @@ sm_err:         call sc_hide_sprites
 sme_k:          call sc_wait_key
 
 sc_quit:        call sc_hide_sprites
+                xor a
+                ld (ov_done),a          ; la proxima vez se vuelve a copiar el overlay
                 ld b,0                  ; el bloque 0 vuelve a la ROM (la usa SLOW_FAST)
                 xor a
                 call sc_map
@@ -366,7 +379,10 @@ swk1:           call sc_scan
                 ret
 
 ; el overlay (OVERLAY_IMAGE, hasta 8 KB) se copia a su pagina fisica a traves del bloque 1 y se mapea en el bloque 0 (solo lectura)
-ov_install:     ld b,OVL_PAGE
+ov_install:     ld a,(ov_done)          ; tras un restart el overlay ya esta en su pagina (la imagen de aqui la pisa el .GFX de la sala)
+                or a
+                jr nz,oi_map
+                ld b,OVL_PAGE
                 ld a,1
                 call sc_map
                 ld hl,OVERLAY_IMAGE
@@ -376,9 +392,12 @@ ov_install:     ld b,OVL_PAGE
                 ld b,1                  ; el bloque 1 vuelve a su pagina
                 ld a,1
                 call sc_map
-                ld b,OVL_PAGE
+                ld a,1
+                ld (ov_done),a
+oi_map:         ld b,OVL_PAGE
                 xor a
                 jp sc_map
+ov_done:        defb 0
 
 ; bloque A, pagina B (paginacion completa)
 sc_map:         ld c,MAP_PORT

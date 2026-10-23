@@ -155,7 +155,7 @@ disp_table:
         defw sp_R_B1, h_o5_getActorFacing   ; 63 o5_getActorFacing
         defw sp_W1_B2_b_b, h_o2_loadRoomWithEgo   ; 64 o2_loadRoomWithEgo
         defw sp_W1_B2_B3, h_o2_drawObject   ; 65 o2_drawObject
-        defw sp_R_W1, h_host_r   ; 66 o5_getClosestObjActor
+        defw sp_R_W1, h_o5_getClosestObjActor   ; 66 o5_getClosestObjActor
         defw sp_W1, h_o2_setStateUnlocked   ; 67 o2_setStateUnlocked
         defw sp_R_B1, h_o5_isScriptRunning   ; 68 o5_isScriptRunning
         defw sp_W1_B2, h_o2_setOwnerOf   ; 69 o2_setOwnerOf
@@ -283,7 +283,7 @@ disp_table:
         defw sp_R_B1, h_o5_getActorFacing   ; E3 o5_getActorFacing
         defw sp_W1_B2_b_b, h_o2_loadRoomWithEgo   ; E4 o2_loadRoomWithEgo
         defw sp_W1_B2_B3, h_o2_drawObject   ; E5 o2_drawObject
-        defw sp_R_W1, h_host_r   ; E6 o5_getClosestObjActor
+        defw sp_R_W1, h_o5_getClosestObjActor   ; E6 o5_getClosestObjActor
         defw sp_W1, h_o2_setStateUnlocked   ; E7 o2_setStateUnlocked
         defw sp_R_B1, h_o5_isScriptRunning   ; E8 o5_isScriptRunning
         defw sp_W1_B2, h_o2_setOwnerOf   ; E9 o2_setOwnerOf

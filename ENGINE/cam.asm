@@ -17,6 +17,8 @@ host_ops:       ld c,a
                 jp z,ui_cutscene
                 cp $54
                 jp z,ui_setname
+                cp $18
+                jr z,ho_restart
                 cp $52
                 jr z,ho_fol
                 cp $24
@@ -24,6 +26,9 @@ host_ops:       ld c,a
                 ld a,c
                 cp $AC                  ; drawSentence
                 jp z,ui_sentence
+                ret
+ho_restart:     ld a,1
+                ld (rs_flag),a
                 ret
 ho_ego:         ld a,2                  ; loadRoomWithEgo: la camara salta al protagonista y lo sigue
                 ld (cam_mode),a

@@ -828,6 +828,11 @@ GD_X2           equ $FF08
 GD_Y2           equ $FF0A
 GD_FA           equ $FF0C               ; 1: a es un actor
 GD_FB           equ $FF0D
+GD_RAW          equ $FF0E
+CO_ARG          equ $FF10               ; getClosestObjActor: objeto o actor, distancia minima, el actor y el contador
+CO_D            equ $FF12
+CO_I            equ $FF14
+CO_N            equ $FF15
 
 h_o5_getDist:
                 ld hl,(ARGS+2)
@@ -911,7 +916,10 @@ gd_cmp:         ld hl,(GD_X1)
                 ex de,hl
 gd_mx:          ld b,h
                 ld c,l
-gd_out:         ld a,(ARGS)
+gd_out:         ld a,(GD_RAW)           ; 1: solo devuelve la distancia en BC (getClosestObjActor)
+                or a
+                ret nz
+                ld a,(ARGS)
                 jp write_var
 gd_ff:          ld bc,$00FF
                 jp gd_out
@@ -1023,3 +1031,109 @@ vac_d:          ld (hl),a
                 ld hl,0
                 ld (CUTPTR),hl
                 ret
+
+; getClosestObjActor (R, W1): el actor (de 0 a NACTORS - 1) mas cercano al objeto o actor W1; a igual distancia gana el de numero mas alto; $FF si ninguno
+h_o5_getClosestObjActor:
+                ld hl,(ARGS+2)
+                ld (CO_ARG),hl
+                ld hl,$00FF
+                ld (CO_D),hl
+                ld a,$FF
+                ld (CO_I),a
+                ld a,NACTORS
+                ld (CO_N),a
+co_l:           ld a,(CO_N)
+                dec a
+                ld (CO_N),a
+                ld l,a
+                ld h,0
+                ld (ARGS+4),hl
+                ld hl,(CO_ARG)
+                ld (ARGS+2),hl
+                ld a,1
+                ld (GD_RAW),a
+                call h_o5_getDist
+                xor a
+                ld (GD_RAW),a
+                ld a,(ERR)
+                or a
+                ret nz
+                ld hl,(CO_D)
+                or a
+                sbc hl,bc
+                jr c,co_n
+                jr z,co_n
+                ld (CO_D),bc
+                ld a,(CO_N)
+                ld (CO_I),a
+co_n:           ld a,(CO_N)
+                or a
+                jr nz,co_l
+                ld a,(CO_I)
+                ld c,a
+                ld b,0
+                ld a,(ARGS)
+                jp write_var
+
+; setBoxFlags (B1, b): las banderas de una caja de la sala actual
+h_o3_setBoxFlags:
+                ld a,(ARGS)
+                call box_rec
+                ret c
+                ld de,7
+                add hl,de
+                ld a,(ARGS+2)
+                ld (hl),a
+                ret
+
+; lights (B1, b, b): c = 0 -> VAR_CURRENT_LIGHTS (variable 12); el resto lo hace el anfitrion
+h_o2_lights:
+                ld a,(ARGS+4)
+                or a
+                jr nz,li_h
+                ld hl,(ARGS)
+                ld h,0
+                ld (VARS+24),hl
+li_h:           jp h_host
+
+; getObjPreposition (R, W1): la preposicion del objeto (bits 5-7 del byte 12 de su bloque); 0 si no esta en la sala ni en un inventario
+h_o2_getObjPreposition:
+                ld de,(ARGS+2)
+                ld l,e
+                ld h,d
+                call where_is_object
+                or a
+                jr z,gp_0
+                ld de,(ARGS+2)
+                ld l,e
+                ld h,d
+                add hl,hl
+                add hl,de
+                ld de,ODIRBUF
+                add hl,de
+                ld a,(hl)
+                or a
+                jr z,gp_0
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                push de
+                call map_page
+                pop hl
+                ld de,12
+                add hl,de
+                ld a,(hl)
+                rlca
+                rlca
+                rlca
+                and 7
+                ld c,a
+                ld b,0
+                push bc
+                call restore_win
+                pop bc
+                jr gp_w
+gp_0:           ld bc,0
+gp_w:           ld a,(ARGS)
+                jp write_var

@@ -150,7 +150,7 @@ class GameMixin:
         'o2_doSentence': 'g_doSentence', 'o2_findObject': 'g_findObject', 'o2_actorFromPos': 'g_actorFromPos',
         'o2_drawObject': 'g_drawObject', 'o5_actorFollowCamera': 'g_actorFollowCamera',
         'o2_loadRoomWithEgo': 'g_loadRoomWithEgo',
-        'o5_getDist': 'g_getDist', 'o5_getRandomNr': 'g_getRandomNr', 'o2_cutscene': 'g_cutscene', 'o2_endCutscene': 'g_endCutscene', 'o2_beginOverride': 'g_beginOverride',
+        'o5_getDist': 'g_getDist', 'o5_getClosestObjActor': 'g_getClosestObjActor', 'o3_setBoxFlags': 'g_setBoxFlags', 'o2_lights': 'g_lights', 'o2_getObjPreposition': 'g_getObjPreposition', 'o5_getRandomNr': 'g_getRandomNr', 'o2_cutscene': 'g_cutscene', 'o2_endCutscene': 'g_endCutscene', 'o2_beginOverride': 'g_beginOverride',
         'o5_getObjectOwner': 'g_getObjectOwner', 'o2_setOwnerOf': 'g_setOwnerOf', 'o2_pickupObject': 'g_pickupObject',
     }
 
@@ -1149,6 +1149,43 @@ class GameMixin:
         a = self.get_var_or_direct_word(0x80)
         b = self.get_var_or_direct_word(0x40)
         self.write_var(r, self.obj_act_dist(a, b))
+
+    def g_getClosestObjActor(self):
+        """getClosestObjActor(objeto o actor): el actor de 0 a NUM_ACTORS - 1 mas cercano (gana el de numero mas alto en un empate); $FF si ninguno."""
+        r = self.fetch_byte()
+        a = self.get_var_or_direct_word(0x80)
+        best, dist = 0xFF, 0xFF
+        for i in range(NUM_ACTORS - 1, -1, -1):
+            d = self.obj_act_dist(a, i)
+            if d < dist:
+                best, dist = i, d
+        self.write_var(r, best)
+
+    def g_setBoxFlags(self):
+        box = self.get_var_or_direct_byte(0x80)
+        flags = self.fetch_byte()
+        k = self.box_index(box)
+        if k is not None:
+            b = list(self.boxes[k])
+            b[7] = flags
+            self.boxes[k] = tuple(b)
+
+    def g_lights(self):
+        """lights(a, b, c): c = 0 pone VAR_CURRENT_LIGHTS (variable 12) a `a`; c = 1 es la linterna (la pantalla lo resuelve en el anfitrion)."""
+        op = self.opcode
+        a = self.get_var_or_direct_byte(0x80)
+        b = self.fetch_byte()
+        c = self.fetch_byte()
+        if c == 0:
+            self.vars[12] = a
+        self.host_log(op, [a, b, c])
+
+    def g_getObjPreposition(self):
+        """getObjPreposition(objeto): los bits 5-7 del byte 12 del bloque del objeto (en la sala o en un inventario); 0 si no esta."""
+        r = self.fetch_byte()
+        obj = self.get_var_or_direct_word(0x80)
+        block = self.object_block(obj) if self.where_is_object(obj) is not None else None
+        self.write_var(r, (block[12] >> 5) if block else 0)
 
     def g_getRandomNr(self):
         """getRandomNr(max): 0..max; generador congruencial de 16 bits (x = x * 5 + 1) y su byte alto escalado, igual que el Z80."""
