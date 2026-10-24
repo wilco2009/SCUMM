@@ -1142,7 +1142,8 @@ vac_d:          ld (hl),a
                 ld (CUTPTR),hl
                 ret
 
-; getClosestObjActor (R, W1): el actor (de 0 a NACTORS - 1) mas cercano al objeto o actor W1; a igual distancia gana el de numero mas alto; $FF si ninguno
+; getClosestObjActor (R, W1): el actor de VAR_ACTOR_RANGE_MIN a VAR_ACTOR_RANGE_MAX (como ScummVM: do { ... } while (--obj >= MIN)) mas cercano al objeto o actor W1; a igual
+; distancia gana el de numero mas alto; $FF si ninguno
 h_o5_getClosestObjActor:
                 ld hl,(ARGS+2)
                 ld (CO_ARG),hl
@@ -1150,7 +1151,8 @@ h_o5_getClosestObjActor:
                 ld (CO_D),hl
                 ld a,$FF
                 ld (CO_I),a
-                ld a,NACTORS
+                ld a,(VAR_ACTOR_RANGE_MAX)
+                inc a
                 ld (CO_N),a
 co_l:           ld a,(CO_N)
                 dec a
@@ -1177,9 +1179,12 @@ co_l:           ld a,(CO_N)
                 ld a,(CO_N)
                 ld (CO_I),a
 co_n:           ld a,(CO_N)
-                or a
-                jr nz,co_l
-                ld a,(CO_I)
+                ld hl,VAR_ACTOR_RANGE_MIN
+                cp (hl)
+                jr z,co_e
+                jr c,co_e
+                jr co_l
+co_e:           ld a,(CO_I)
                 ld c,a
                 ld b,0
                 ld a,(ARGS)

@@ -1151,14 +1151,18 @@ class GameMixin:
         self.write_var(r, self.obj_act_dist(a, b))
 
     def g_getClosestObjActor(self):
-        """getClosestObjActor(objeto o actor): el actor de 0 a NUM_ACTORS - 1 mas cercano (gana el de numero mas alto en un empate); $FF si ninguno."""
+        """getClosestObjActor(objeto o actor): el actor de VAR_ACTOR_RANGE_MIN a MAX mas cercano (gana el de numero mas alto en un empate); $FF si ninguno."""
         r = self.fetch_byte()
         a = self.get_var_or_direct_word(0x80)
         best, dist = 0xFF, 0xFF
-        for i in range(NUM_ACTORS - 1, -1, -1):
+        mn, i = self.vars[19] & 255, self.vars[20] & 255      # VAR_ACTOR_RANGE_MIN / MAX: do { ... } while (--obj >= MIN)
+        while True:
             d = self.obj_act_dist(a, i)
             if d < dist:
                 best, dist = i, d
+            i = (i - 1) & 255
+            if not i >= mn:
+                break
         self.write_var(r, best)
 
     def g_setBoxFlags(self):

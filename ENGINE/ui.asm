@@ -823,12 +823,13 @@ udi_l:          ld a,(UI_INVO)
                 ld a,(UI_TMP)
                 and 1
                 ld de,0
+                ld b,18                 ; nombres: columna izquierda 0-17, flechas en la 19, columna derecha 21-39
                 jr z,udi_c
                 ld de,21
+                ld b,19
 udi_c:          add hl,de
                 ex de,hl
                 ld hl,UI_NAME
-                ld b,19
                 call us_text
 udi_n:          ld hl,UI_TMP
                 inc (hl)
@@ -842,11 +843,7 @@ udi_arrows:     ld a,(UI_INVO)
                 call ui_row
                 ld de,19
                 add hl,de
-                ex de,hl
-                ld a,'U'
-                call put_chr
-                ld a,'P'
-                call put_chr
+                ld (hl),ARROW_UP
 udi_dn:         ld a,(UI_INVO)
                 add a,4
                 ld b,a
@@ -859,11 +856,8 @@ udi_dn:         ld a,(UI_INVO)
                 call ui_row
                 ld de,19
                 add hl,de
-                ex de,hl
-                ld a,'D'
-                call put_chr
-                ld a,'N'
-                jp put_chr
+                ld (hl),ARROW_DN
+                ret
 
 ; clic en las filas 20-21: un objeto (columnas 0-14 y 17-31) o una flecha (15-16)
 uk_inv:         ld a,c
@@ -881,7 +875,7 @@ uk_inv:         ld a,c
                 srl a
                 ld hl,UI_OFF
                 add a,(hl)
-                cp 19
+                cp 18
                 jr c,uki_l
                 cp 21
                 jr c,uki_a

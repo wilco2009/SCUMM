@@ -2,7 +2,7 @@
 """Conversor offline de las salas de SCUMM v2 (.LFL de DOS) a graficos del SD81 Booster (ROOMnn.GFX).
 
 Cada fila de 8 pixeles lleva 2 colores (Chroma modo 0) y cada tile 8x8 es un codigo de caracter; se limita
-el numero de tiles distintos por ventana de camara (210 por defecto) fundiendo los que menos error causan,
+el numero de tiles distintos por ventana de camara (208 por defecto) fundiendo los que menos error causan,
 con ajustes por sala en gfx_rooms.cfg (protect, keep, tiles, rarity). Escribe los .GFX y un PNG de tres bandas
 por sala (original EGA | original en colores Chroma | resultado) con estadisticas.
 
@@ -709,7 +709,7 @@ def png_to_chroma(path, w, h):
     assert len(im) == h and len(im[0]) == w, '%s mide %dx%d y el objeto %dx%d' % (path, len(im[0]), len(im), w, h)
     return [[min(range(16), key=lambda c: (sum((x - y) ** 2 for x, y in zip(px, CHROMA[c])), c)) for px in row] for row in im]
 POOL_MAX = 64           # tiles de la reserva de objetos (los codigos de arriba de los slots): imagenes de objetos de la sala
-SLOT_TOP = 210          # los codigos 210-255 son de la fuente
+SLOT_TOP = 208          # los codigos 208-209 son las flechas del inventario y 210-255 la fuente
 
 
 def decode_obim(b, src, w, h):
@@ -1041,7 +1041,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('dir', help='carpeta con los NN.LFL')
     ap.add_argument('rooms', nargs='+', help="numeros de sala o 'all'")
-    ap.add_argument('--tiles', type=int, default=210, help='maximo de tiles distintos por ventana de camara')
+    ap.add_argument('--tiles', type=int, default=208, help='maximo de tiles distintos por ventana de camara')
     ap.add_argument('--view', type=int, default=33, help='columnas de la ventana de camara (33 = 32 visibles + la que asoma con el scroll fino; 40 = original)')
     ap.add_argument('--map', default='', help='ajustes EGA->Chroma, p. ej. "6=14,8=0" (EGA 6 = marron)')
     ap.add_argument('--code-base', type=int, default=0, help='primer codigo de caracter de los slots')

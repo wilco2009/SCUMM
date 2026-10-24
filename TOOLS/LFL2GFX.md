@@ -101,7 +101,7 @@ Se aplican a todas las salas (el `.cfg` manda sobre ellas donde coincide):
 
 | Opción | Por defecto | Qué hace |
 |---|---|---|
-| `--tiles N` | 210 | Tiles distintos por ventana. Los códigos 210-255 se reservan para la fuente de la interfaz (46 glifos) |
+| `--tiles N` | 208 | Tiles distintos por ventana. Los códigos 208-209 son las flechas (de color) del inventario y 210-255 la fuente de la interfaz (46 glifos) |
 | `--view N` | 33 | Columnas de la ventana de cámara: 32 visibles + la que asoma con el scroll fino. No cambiarlo sin cambiar el visor |
 | `--metric color\|count` | color | `color`: el error al fundir tiles se mide por distancia de color; `count`: por píxeles distintos (el método original) |
 | `--power P` | 0,5 | Coste de fundir un tile = apariciones^P × distancia. 1 sacrifica antes los tiles raros; 0 los trata igual |

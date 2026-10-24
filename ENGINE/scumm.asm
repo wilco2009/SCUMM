@@ -36,6 +36,8 @@ FONT_I          equ $38
 GLYPH0          equ 210                 ; codigos 210-255: la fuente (46 glifos); el 210 es el espacio y el tile en blanco
 NGLYPH          equ 46
 BLANK           equ GLYPH0
+ARROW_UP        equ 208                 ; flechas del inventario (UP y DN): codigos 208 y 209, que el fondo de las salas ya no usa
+ARROW_DN        equ 209
 SV              equ $CC00               ; variables del programa
 BACKBUF         equ $DA00               ; bufer trasero de las 16 filas de la sala (528 bytes)
 STACK           equ $CFF0               ; la pila ocupa $CF00-$CFEF
@@ -953,7 +955,18 @@ if_b:           ld a,(hl)
                 ld de,COLORS+GLYPH0*8+1
                 ld bc,NGLYPH*8-1
                 ldir
+                ld hl,arrow_pix         ; las flechas del inventario: codigos 208 (arriba) y 209 (abajo), en amarillo brillante
+                ld de,TILES+ARROW_UP*8
+                ld bc,16
+                ldir
+                ld hl,COLORS+ARROW_UP*8
+                ld (hl),$0E
+                ld de,COLORS+ARROW_UP*8+1
+                ld bc,16-1
+                ldir
                 ret
+arrow_pix:      defb $E7,$C3,$81,$00,$E7,$E7,$E7,$E7       ; la forma al reves (como los glifos: 1 = fondo)
+                defb $E7,$E7,$E7,$E7,$00,$81,$C3,$E7
 
 ; espacio, 0-9, A-Z, / : . , ? - " y dos propios (! ')
 
