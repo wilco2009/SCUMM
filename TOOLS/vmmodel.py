@@ -684,13 +684,12 @@ WINDOW = 0x2000          # ventana de datos: el bloque 1 ($2000-$37FF; $3800-$3F
 PAGE_USABLE = 0x1800     # lo que cabe en la ventana: 6 KB de cada pagina
 
 
-OVL_PAGE = 50            # pagina fisica del overlay (ENGINE/ovl_entries.inc): no se usa para datos
-LAST_PAGE = 62           # la 63 es del depurador
+LAST_PAGE = 255          # las paginas son virtuales: el cargador las trae por demanda de DATA.BIN (ENGINE/dp_cache.inc)
 
 
 class Packer:
     """Reparte los bloques de codigo en paginas de 8 KB (6 KB utiles) sin cruzar el limite de una pagina: el primer hueco donde cabe
-    (first-fit). Las paginas van seguidas desde first_page saltandose la del overlay (el cargador hace lo mismo)."""
+    (first-fit). Las paginas son virtuales y van seguidas desde first_page."""
 
     def __init__(self, first_page=8):
         self.pages = {}
@@ -699,8 +698,6 @@ class Packer:
         self.next = first_page
 
     def _new_page(self):
-        if self.next == OVL_PAGE:
-            self.next += 1
         if self.next > LAST_PAGE:
             raise ValueError('no caben los datos: se acaban las paginas (hasta la %d)' % LAST_PAGE)
         n = self.next

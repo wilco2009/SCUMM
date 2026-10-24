@@ -272,7 +272,8 @@ sm_err:         call sc_hide_sprites
                 call put_num
 sme_k:          call sc_wait_key
 
-sc_quit:        ld a,CMD_STOPVGM        ; el sonido que suene se para
+sc_quit:        call dp_close           ; el DATA.BIN se cierra
+                ld a,CMD_STOPVGM        ; el sonido que suene se para
                 call mcu_send
                 call sc_hide_sprites
                 xor a

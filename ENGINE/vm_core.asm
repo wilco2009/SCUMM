@@ -220,8 +220,9 @@ slot_addr:                              ; A = ranura -> HL (conserva DE)
                 pop de
                 ret
 
-map_page:                               ; A = pagina -> ventana de datos (bloque WINBLK)
-                ld b,a
+map_page:       jp map_page_x           ; A = pagina de datos -> ventana de datos (bloque WINBLK). En el programa completo es la cache por demanda de
+                                        ; loader.asm; en el nucleo de pruebas (vm.asm) es map_phys: la pagina fisica tal cual
+map_phys:       ld b,a
                 ld c,$E7
                 ld a,WINBLK
                 out (c),a

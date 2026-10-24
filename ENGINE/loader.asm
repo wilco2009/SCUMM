@@ -9,10 +9,9 @@ COSTDIR         equ $FF40               ; 64 x 3: pagina y direccion de los foto
 data_name:      defb "/SCUMM/DATA.BIN",0
 ld_hdr:         defs 16
 ld_h:           defb 0
-ld_pg:          defb 0
-ld_left:        defb 0
 
-load_data:      ld hl,data_name
+load_data:      call dp_close
+                ld hl,data_name
                 call f_open
                 cp $FF
                 jp z,ld_nofile
@@ -70,32 +69,21 @@ load_data:      ld hl,data_name
                 call f_read_n
                 ld a,'H'
                 call ld_trace           ; H: leidas las tablas
-                ld a,(ld_hdr+5)
-                ld (ld_left),a
+                ld hl,dp_clr            ; la cache de paginas empieza vacia: las paginas de datos se leen de la SD cuando hacen falta (dp_cache.inc)
+                ld de,dp_clr+1
+                ld bc,DP_CLRLEN-1
+                ld (hl),0
+                ldir
                 ld a,(ld_hdr+6)
-                ld (ld_pg),a
-ld_page:        ld a,(ld_left)
-                or a
-                jr z,ld_done
-                ld a,(ld_pg)
-                call map_page
+                ld (dp_first),a
                 ld a,(ld_h)
-                ld hl,WINDOW
-                ld bc,$1800
-                call f_read_n
-                ld hl,ld_pg
-                inc (hl)
-                ld a,(hl)
-                cp OVL_PAGE             ; la pagina del overlay no es de datos: se salta (el Packer de TOOLS/vmmodel.py hace lo mismo)
-                jr nz,ld_nxt
-                inc (hl)
-ld_nxt:         ld hl,ld_left
-                dec (hl)
-                jr ld_page
-ld_done:        ld a,(ld_h)
-                call f_close
+                ld (dp_h),a             ; el fichero se queda abierto
+                ld a,1
+                ld (dp_on),a
+                ld a,(ld_hdr+5)
+                ld (dp_n),a
                 ld a,'I'
-                call ld_trace           ; I: leidas las paginas
+                call ld_trace           ; I: las paginas se leeran por demanda
                 or a
                 ret
 ld_bad:         ld a,'X'
@@ -108,3 +96,5 @@ ld_nofile:      ld a,'N'
                 call ld_trace           ; N: no se ha podido abrir
                 scf
                 ret
+
+                include "dp_cache.inc"

@@ -117,6 +117,9 @@ static void mcu_byte(uint8_t b) {
       mcu_out.push_back(0);
       mcu_cmd = -1;
     }
+  } else if (mcu_cmd == 54) {                                                                   // F_SEEK: manejador y 4 bytes de desplazamiento; responde el estado
+    if (mcu_cnt == 0) { mcu_h = b & 7; mcu_n = 0; mcu_cnt = 1; }
+    else { mcu_n |= b << (8 * (mcu_cnt - 1)); if (++mcu_cnt == 5) { FILE* f = mcu_files[mcu_h]; if (f) fseek(f, (unsigned)mcu_n, SEEK_SET); mcu_out.push_back(f ? 0 : 255); mcu_cmd = -1; } }
   } else if (mcu_cmd == 57) {
     int h = b & 7;
     if (mcu_files[h]) { fclose(mcu_files[h]); mcu_files[h] = nullptr; }
