@@ -657,7 +657,8 @@ uk_set:         ld (INP_AREA),a
 
 ; ---------------------------------------------------------------------------------------------------- inventario
 ; A = numero de objetos del protagonista (los que tienen su numero de actor como dueno), en el orden de las ranuras de INVSL
-ui_inv_count:   ld a,(VARS)
+ui_inv_count:   push bc                 ; conserva BC (los llamadores comparan despues con B)
+                ld a,(VARS)
                 ld c,a
                 ld d,0
                 ld hl,INVSL
@@ -675,6 +676,7 @@ uic_l:          push hl
                 jr nz,uic_n
                 inc d
 uic_n:          djnz uic_l
+                pop bc
                 ld a,d
                 ret
 
