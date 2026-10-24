@@ -140,8 +140,10 @@ uv_mode:        ld a,(ARGS+2)           ; verbo
                 ret
 
 ; IX = verbo -> HL = lo que se escribe en la zona de verbos (la etiqueta corta o el texto)
-ui_label:       push bc                 ; conserva BC
+ui_label:       push bc                 ; conserva BC y DE (ui_click guarda en E el desplazamiento dentro del texto)
+                push de
                 call ui_label0
+                pop de
                 pop bc
                 ret
 ui_label0:      ld a,(ix+0)
