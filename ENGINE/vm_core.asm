@@ -1461,7 +1461,19 @@ state_get:                              ; ARGS[0] = objeto -> HL = &estado, A = 
                 cp 193
                 jr nz,sg_ok
 sg_hack:
-                set 3,(hl)
+                bit 3,(hl)
+                jr nz,sg_ok
+                set 3,(hl)              ; la puerta pasa a abierta al leerla: se avisa para que se vuelva a dibujar
+                push hl
+                ld a,(hl)
+                ld l,a
+                ld h,0
+                ld (EVARGS+2),hl
+                ld hl,(ARGS)
+                ld (EVARGS),hl
+                ld a,EV_OBJSTATE
+                call ev_emit
+                pop hl
 sg_ok:
                 ld a,(hl)
                 or a

@@ -1292,6 +1292,10 @@ text_update:    ld a,(tx_on)
 ; ---------------------------------------------------------------------
 gf_load_room:   ld a,(EVARGS)
                 ld (gf_room),a
+                ld hl,OBJST+182         ; la puerta de seguridad cuenta como abierta desde que se carga la sala (el parche de getState, vm_core.asm,
+                set 3,(hl)              ; solo la abre cuando el script la lee, y entonces la sala ya esta pintada)
+                ld hl,OBJST+193
+                set 3,(hl)
                 ld hl,160               ; camara: seguir al protagonista, desde el centro
                 ld (cam_cx),hl
                 ld a,2
