@@ -11,6 +11,10 @@
 UI_VT           equ $CD40               ; 15 verbos de 16 bytes: id (0 = libre), columna, fila, modo, texto (11 + 0)
 VT_SIZE         equ 16
 NVERBS          equ 15
+UI_COLS         equ 40                  ; la zona de abajo es de 40 columnas (como el original): se pinta en un bufer virtual (UIVB, de la fila UI_R0 a la 23) y la
+UI_R0           equ 16                  ; pantalla muestra 32 de ellas desde UI_OFF (0 u 8); el cursor en un borde cambia de ventana (ui_scroll)
+UIVB            equ $DE00
+UI_OFF          equ $CD31
 
 ; ---- A = ranura -> IX
 ui_entry:       ld l,a
@@ -32,6 +36,11 @@ ui_init:        ld hl,UI_DIRTY
                 ldir
                 ld a,1
                 ld (UI_CURSOR),a
+                ld hl,UIVB
+                ld de,UIVB+1
+                ld bc,0+(24-UI_R0)*UI_COLS-1
+                ld (hl),BLANK
+                ldir
                 ret
 
 ; ------------------------------------------------------------------------------------------ cursorCommand
@@ -93,9 +102,9 @@ uv_s:           srl h
                 rr l
                 djnz uv_s
                 ld a,l
-                cp 32
+                cp UI_COLS
                 jr c,uv_c
-                ld a,31
+                ld a,UI_COLS-1
 uv_c:           ld (ix+1),a
                 ld a,(ARGS+4)           ; fila = y - PF_ROWSUB
                 ld hl,PF_ROWSUB
@@ -232,7 +241,8 @@ uu_d:           ld a,(VARS)             ; otro protagonista: otro inventario
                 ld a,(UI_DIRTY)
                 or 4
                 ld (UI_DIRTY),a
-uu_e:           ld a,(UI_DIRTY)
+uu_e:           call ui_scroll
+                ld a,(UI_DIRTY)
                 or a
                 ret z
                 ld b,a
@@ -247,28 +257,89 @@ uu_e:           ld a,(UI_DIRTY)
                 call nz,ui_draw_sentence
                 pop bc
                 bit 2,b
-                ret z
+                jr z,uu_blit
                 ld a,(tx_on)            ; mientras hay un mensaje el inventario espera (el texto ocupa las filas 20-23)
                 or a
                 jr nz,uu_w
-                jp ui_draw_inv
+                call ui_draw_inv
+                jr uu_blit
 uu_w:           ld a,(UI_DIRTY)
                 or 4
                 ld (UI_DIRTY),a
+uu_blit:        jp ui_blit
+
+; el cursor en la parte de abajo y en un borde: la ventana de 32 columnas pasa al otro lado del bufer de 40 (el cursor se queda sobre lo mismo)
+ui_scroll:      ld a,(UI_CURSOR)
+                or a
+                ret z
+                ld a,(cur_y)
+                cp UI_R0*8
+                ret c
+                ld a,(UI_OFF)
+                or a
+                ld a,(cur_x)
+                jr nz,us_back
+                cp 224
+                ret c
+                ld a,8
+                ld (UI_OFF),a
+                ld a,(cur_x)
+                sub 64
+                jr us_set
+us_back:        cp 32
+                ret nc
+                xor a
+                ld (UI_OFF),a
+                ld a,(cur_x)
+                add a,64
+us_set:         ld (cur_x),a
+                call cursor_draw
+                ld a,(UI_DIRTY)
+                or 7
+                ld (UI_DIRTY),a
+                ret
+
+; las filas del bufer virtual a la pantalla (32 columnas desde UI_OFF); con un mensaje en pantalla las filas 20 en adelante son suyas
+ui_blit:        ld a,(tx_on)
+                or a
+                ld b,24-UI_R0
+                jr z,ub_n
+                ld b,TXT_ROW-UI_R0
+ub_n:           ld hl,UIVB
+                ld de,DFILE+1+UI_R0*33
+ub_l:           push bc
+                push hl
+                push de
+                ld a,(UI_OFF)
+                ld c,a
+                ld b,0
+                add hl,bc
+                ld bc,32
+                ldir
+                pop de
+                ld hl,33
+                add hl,de
+                ex de,hl
+                pop hl
+                ld bc,UI_COLS
+                add hl,bc
+                pop bc
+                djnz ub_l
                 ret
 
 ; HL = direccion de pantalla de la fila A, columna 0
-ui_row:         ld l,a
+ui_row:         sub UI_R0
+                ld l,a
                 ld h,0
                 ld e,l
                 ld d,h
                 add hl,hl
                 add hl,hl
+                add hl,de               ; * 5
                 add hl,hl
                 add hl,hl
-                add hl,hl
-                add hl,de
-                ld de,DFILE+1
+                add hl,hl               ; * 40
+                ld de,UIVB
                 add hl,de
                 ret
 
@@ -276,7 +347,7 @@ ui_clear_row:   call ui_row
                 ld d,h
                 ld e,l
                 inc de
-                ld bc,31
+                ld bc,UI_COLS-1
                 ld (hl),BLANK
                 ldir
                 ret
@@ -315,7 +386,7 @@ ui_draw_verb:   ld a,(ix+3)
                 ret c
                 cp 3
                 ret nc
-                ld c,32                 ; limite: la columna del verbo mas cercano a la derecha en la misma fila
+                ld c,UI_COLS            ; limite: la columna del verbo mas cercano a la derecha en la misma fila
                 ld iy,UI_VT
                 ld b,NVERBS
 udw_l:          ld a,(iy+0)
@@ -393,7 +464,7 @@ ui_draw_sentence:
                 ld a,(PF_SROW)
                 call ui_row
                 ex de,hl
-                ld b,32                 ; B = sitio que queda
+                ld b,UI_COLS            ; B = sitio que queda
                 ld a,(VAR_SENTENCE_VERB)          ; verbo
                 call ui_find
                 jr nc,us_o1
@@ -604,7 +675,9 @@ uk_v:           ld hl,PF_VROW
                 srl a
                 srl a
                 srl a
-                ld b,a                  ; columna
+                ld hl,UI_OFF
+                add a,(hl)
+                ld b,a                  ; columna (del bufer virtual)
                 ld ix,UI_VT
                 ld d,NVERBS
 uk_l:           ld a,(ix+0)
@@ -751,11 +824,11 @@ udi_l:          ld a,(UI_INVO)
                 and 1
                 ld de,0
                 jr z,udi_c
-                ld de,17
+                ld de,21
 udi_c:          add hl,de
                 ex de,hl
                 ld hl,UI_NAME
-                ld b,15
+                ld b,19
                 call us_text
 udi_n:          ld hl,UI_TMP
                 inc (hl)
@@ -767,7 +840,7 @@ udi_arrows:     ld a,(UI_INVO)
                 jr z,udi_dn
                 ld a,(PF_IROW)
                 call ui_row
-                ld de,15
+                ld de,19
                 add hl,de
                 ex de,hl
                 ld a,'U'
@@ -784,7 +857,7 @@ udi_dn:         ld a,(UI_INVO)
                 ld a,(PF_IROW)
                 inc a
                 call ui_row
-                ld de,15
+                ld de,19
                 add hl,de
                 ex de,hl
                 ld a,'D'
@@ -806,9 +879,11 @@ uk_inv:         ld a,c
                 srl a
                 srl a
                 srl a
-                cp 15
+                ld hl,UI_OFF
+                add a,(hl)
+                cp 19
                 jr c,uki_l
-                cp 17
+                cp 21
                 jr c,uki_a
                 ld e,1
                 jr uki_o

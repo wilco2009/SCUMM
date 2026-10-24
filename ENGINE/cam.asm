@@ -253,6 +253,9 @@ cm_fin:         call cm_clamp
 ; el cursor en el borde derecho (cur_x >= 240) o izquierdo (cur_x <= 8) mueve el centro de la camara
 cm_edge:
                 IF DEMO = 0
+                ld a,(cur_y)            ; en la parte de abajo el borde cambia la ventana de la interfaz (ui_scroll), no la camara
+                cp 128
+                ret nc
                 ld a,(cur_x)
                 cp 240
                 jr c,ce1
