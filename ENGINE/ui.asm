@@ -417,8 +417,10 @@ us_o1:          ld hl,(VAR_SENTENCE_OBJECT1)         ; objeto 1
                 cp 5
                 jr nc,us_o2
                 ld hl,(PF_PREPS)
+                push de                 ; DE es el sitio de la pantalla donde sigue la frase
                 ld de,PROF
                 add hl,de
+                pop de
                 dec a
                 ld c,a
 us_p:           ld a,c
