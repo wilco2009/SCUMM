@@ -105,7 +105,10 @@ def build(world, game, first_page=16, include_test=False, sounds=None):
         ixd = scumm2.Index(world.dir) if hasattr(world, 'dir') else None
         if ixd is not None:
             emap = lfl2gfx.default_map({})
-            for cid in range(1, 25):
+            tr = gameprofile.parse(game).get('trajes', {})            # [trajes] escala = n/d (por omision 3/4)
+            if 'escala' in tr:
+                costume2.SCALE = tuple(int(x) for x in tr['escala'].split('/'))
+            for cid in range(1, 64):                          # los trajes que existan en el juego (hasta los 64 del COSTDIR)
                 try:
                     cost = costume2.Costume(scumm2.resource(world.dir, ixd, 'costume', cid))
                     blob = costume2.costume_blob(cost, emap)
