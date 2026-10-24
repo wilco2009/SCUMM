@@ -60,6 +60,8 @@ sdx_nn           equ AV+7                ; el que se esta arrancando: numero, pr
 sdx_np           equ AV+8
 sdx_nf           equ AV+9
 sdx_nd           equ AV+10
+sdx_tstep        equ AV+14               ; VAR_MUSIC_TIMER: 1/8 de fotograma entre dos incrementos (0: el sonido no lo usa) y lo que falta
+sdx_tctr         equ AV+16
 sdx_left         equ AV+12               ; fotogramas que le quedan al que suena (65535: sin fin)                ; desplazamiento en pixeles de la celda dentro de su tira
 ac_id           equ OVL_VARS+30         ; numero del actor que se dibuja
 UI_SIF           equ OVL_VARS+27         ; interfaz, cursor y VAR_CURSORSTATE guardados por cutscene()

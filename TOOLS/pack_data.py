@@ -55,8 +55,8 @@ def room_mask(world, rn):
 
 
 def sound_table(path):
-    """256 x 4 bytes: prioridad, banderas (bit 0 reiniciable, bit 1 bucle, bit 7 existe) y duracion en fotogramas a 50 Hz (65535: sin fin)."""
-    t = bytearray(256 * 4)
+    """256 x 4 bytes (y otros 256 x 4 detras para VAR_MUSIC_TIMER): prioridad, banderas (bit 0 reiniciable, bit 1 bucle, bit 7 existe) y duracion en fotogramas a 50 Hz (65535: sin fin)."""
+    t = bytearray(256 * 8)
     with open(path) as f:
         for ln in f:
             v = ln.split()
@@ -65,6 +65,8 @@ def sound_table(path):
             sid, prio, rest, ticks, loop = (int(x) for x in v[:5])
             dur = 65535 if loop >= 0 else min(65534, -(-ticks * 50 // 236))
             t[4 * sid:4 * sid + 4] = struct.pack('<BBH', prio, 0x80 | (1 if rest else 0) | (2 if loop >= 0 else 0), dur)
+            if len(v) >= 7 and int(v[6]):       # VAR_MUSIC_TIMER: valor inicial, 0 y el intervalo en 1/8 de fotograma a 50 Hz
+                t[1024 + 4 * sid:1028 + 4 * sid] = struct.pack('<BBH', int(v[5]), 0, max(1, round(int(v[6]) * 50 * 8 / 236)))
     return bytes(t)
 
 

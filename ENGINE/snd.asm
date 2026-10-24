@@ -136,6 +136,7 @@ sdx_st_q:           ld a,c
 snd_tick:       ld a,(sdx_cur)
                 or a
                 ret z
+                call sdx_mtimer
                 ld hl,(sdx_left)
                 ld a,h
                 and l
@@ -200,7 +201,8 @@ sdx_si_no2:         scf
                 ret
 
 ; reproduce el sonido sdx_nn (prioridad sdx_np, banderas sdx_nf, duracion sdx_nd): pasa a ser el actual
-sdx_chain:       ld a,(sdx_nn)
+sdx_chain:       call sdx_tinfo
+                ld a,(sdx_nn)
                 ld (sdx_cur),a
                 ld a,(sdx_np)
                 ld (sdx_cprio),a
@@ -305,7 +307,82 @@ sdx_remap:       ld a,(CUR)
                 ld a,(hl)
                 jp map_page
 
+; VAR_MUSIC_TIMER: la tabla de sonidos tiene detras otra de 4 bytes por sonido (valor inicial, 0, intervalo en 1/8 de fotograma);
+; al arrancar el sonido sdx_nn se pone el valor inicial y despues sube 1 cada intervalo
+sdx_tinfo:       push de
+                push hl
+                ld a,(ld_hdr+10)
+                or a
+                jr z,sdx_ti_no
+                call map_page
+                ld a,(sdx_nn)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                ld de,(ld_hdr+11)
+                add hl,de
+                ld de,1024
+                add hl,de
+                ld a,(hl)
+                inc hl
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld (sdx_tstep),de
+                ld (sdx_tctr),de
+                ld l,a
+                ld h,0
+                jr sdx_ti_set
+sdx_ti_no:          ld hl,0
+                ld (sdx_tstep),hl
+sdx_ti_set:         ld (VAR_MUSIC_TIMER),hl
+                pop hl
+                pop de
+                ret
+
+; cada fotograma
+sdx_mtimer:      push bc
+                push de
+                push hl
+                ld hl,(sdx_tstep)
+                ld a,h
+                or l
+                jr z,sdx_mt_x
+                ld b,h
+                ld c,l                  ; BC = intervalo
+                ld a,(DELTA)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ex de,hl                ; DE = fotogramas * 8
+                ld hl,(sdx_tctr)
+                or a
+                sbc hl,de
+sdx_mt_l:           bit 7,h
+                jr nz,sdx_mt_t
+                ld a,h
+                or l
+                jr nz,sdx_mt_s
+sdx_mt_t:           add hl,bc
+                push hl
+                ld hl,(VAR_MUSIC_TIMER)
+                inc hl
+                ld (VAR_MUSIC_TIMER),hl
+                pop hl
+                jr sdx_mt_l
+sdx_mt_s:           ld (sdx_tctr),hl
+sdx_mt_x:           pop hl
+                pop de
+                pop bc
+                ret
+
 sdx_ini:         xor a
+                ld (sdx_tstep),a
+                ld (sdx_tstep+1),a
                 ld (sdx_cur),a
                 ld (sdx_next),a
                 ret

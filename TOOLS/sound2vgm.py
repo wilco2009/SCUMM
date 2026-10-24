@@ -278,8 +278,12 @@ def render(data, hulls, freqmod):
     sim = Sim(data, hulls, freqmod)
     last, out, t = {}, [], 0
     seen = {}
+    global TIMER
+    TIMER = []                                       # (tick, valor) de VAR_MUSIC_TIMER: lo que el sonido escribe en el canal 0
     while sim.cur and t < MAX_TICKS:
         sim.tick()
+        if not TIMER or TIMER[-1][1] != sim.ch[0][F['music_timer']]:
+            TIMER.append((t, sim.ch[0][F['music_timer']]))
         sig = (sim.cur, sim.retaddr, tuple(tuple(c) for c in sim.ch[:4]))
         if sig in seen:
             return out, t, seen[sig]
@@ -291,6 +295,19 @@ def render(data, hulls, freqmod):
             last.update(ch)
         t += 1
     return out, t, None
+
+
+def timer_params(tm, sid):
+    """VAR_MUSIC_TIMER como (valor inicial, ticks entre dos incrementos): solo vale si sube de 1 en 1 a intervalos iguales (0, 0: no se usa)."""
+    if len(tm) < 2 and (not tm or tm[0][1] == 0):
+        return 0, 0
+    if len(tm) < 2:
+        return tm[0][1], 0
+    step = tm[1][0] - tm[0][0]
+    if all(b[1] == a[1] + 1 and b[0] - a[0] == step for a, b in zip(tm, tm[1:])):
+        return tm[0][1], step
+    print('sonido %3d: VAR_MUSIC_TIMER no es regular (no se usara)' % sid)
+    return 0, 0
 
 
 def vgm(events, total_ticks):
@@ -359,7 +376,8 @@ def main():
             continue
         with open(os.path.join(out, 'SOUND%03d.VGM' % sid), 'wb') as f:
             f.write(vgm(ev, ticks))
-        lines.append('%d %d %d %d %d' % (sid, prio, restart, ticks, -1 if loop_at is None else loop_at))
+        tstart, tstep = timer_params(TIMER, sid)
+        lines.append('%d %d %d %d %d %d %d' % (sid, prio, restart, ticks, -1 if loop_at is None else loop_at, tstart, tstep))
         print('sonido %3d: prioridad %3d reiniciable %d  %5d ticks (%.1f s)%s  %d cambios' % (sid, prio, restart, ticks, ticks / TICK_HZ,
               ('  bucle desde el tick %d' % loop_at) if loop_at is not None else '', len(ev)))
     with open(os.path.join(out, 'SOUNDS.TXT'), 'w') as f:
