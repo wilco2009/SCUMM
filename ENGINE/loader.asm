@@ -85,7 +85,11 @@ ld_page:        ld a,(ld_left)
                 call f_read_n
                 ld hl,ld_pg
                 inc (hl)
-                ld hl,ld_left
+                ld a,(hl)
+                cp OVL_PAGE             ; la pagina del overlay no es de datos: se salta (el Packer de TOOLS/vmmodel.py hace lo mismo)
+                jr nz,ld_nxt
+                inc (hl)
+ld_nxt:         ld hl,ld_left
                 dec (hl)
                 jr ld_page
 ld_done:        ld a,(ld_h)

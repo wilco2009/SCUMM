@@ -55,10 +55,17 @@ class World:
         for rn in range(len(ix.res['room'])):
             if not os.path.exists(os.path.join(directory, '%02d.LFL' % rn)):
                 continue
-            r = scumm2.Room(directory, rn)
+            try:
+                r = scumm2.Room(directory, rn)
+            except Exception:
+                if rn == 0:                    # 00.LFL es el indice en algunos juegos (Zak): no es una sala
+                    continue
+                raise
             self.rooms[rn] = r
             for o in r.objects:
                 if o.id in self.objects:
+                    if self.objects[o.id][0] == rn:     # el mismo numero dos veces en una sala (Zak, sala 19): vale el primero, como en ScummVM
+                        continue
                     raise ValueError('objeto %d repetido (salas %d y %d)' % (o.id, self.objects[o.id][0], rn))
                 self.objects[o.id] = (rn, o.block)
         for rn, r in vmsynth.synth_rooms(self.owner).items():
@@ -677,25 +684,44 @@ WINDOW = 0x2000          # ventana de datos: el bloque 1 ($2000-$37FF; $3800-$3F
 PAGE_USABLE = 0x1800     # lo que cabe en la ventana: 6 KB de cada pagina
 
 
+OVL_PAGE = 50            # pagina fisica del overlay (ENGINE/ovl_entries.inc): no se usa para datos
+LAST_PAGE = 62           # la 63 es del depurador
+
+
 class Packer:
-    """Reparte los bloques de codigo en paginas de 8 KB sin cruzar el limite de una pagina."""
+    """Reparte los bloques de codigo en paginas de 8 KB (6 KB utiles) sin cruzar el limite de una pagina: el primer hueco donde cabe
+    (first-fit). Las paginas van seguidas desde first_page saltandose la del overlay (el cargador hace lo mismo)."""
 
     def __init__(self, first_page=8):
         self.pages = {}
-        self.cur = first_page
-        self.fill = 0
+        self.fill = {}
+        self.order = []
+        self.next = first_page
+
+    def _new_page(self):
+        if self.next == OVL_PAGE:
+            self.next += 1
+        if self.next > LAST_PAGE:
+            raise ValueError('no caben los datos: se acaban las paginas (hasta la %d)' % LAST_PAGE)
+        n = self.next
+        self.next += 1
+        self.order.append(n)
+        self.fill[n] = 0
+        self.pages[n] = bytearray(PAGE)
+        return n
 
     def add(self, data):
         if len(data) > PAGE_USABLE:
             raise ValueError('bloque de %d bytes' % len(data))
-        if self.fill + len(data) > PAGE_USABLE:
-            self.cur += 1
-            self.fill = 0
-        page = self.pages.setdefault(self.cur, bytearray(PAGE))
-        page[self.fill:self.fill + len(data)] = data
-        addr = WINDOW + self.fill
-        self.fill += len(data)
-        return self.cur, addr
+        for n in self.order:
+            if self.fill[n] + len(data) <= PAGE_USABLE:
+                break
+        else:
+            n = self._new_page()
+        f = self.fill[n]
+        self.pages[n][f:f + len(data)] = data
+        self.fill[n] = f + len(data)
+        return n, WINDOW + f
 
 
 BLOB_MAX = 1024
