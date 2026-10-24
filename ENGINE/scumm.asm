@@ -68,7 +68,7 @@ tx_cont         equ SV+29               ; el ultimo trozo acabo con "mantener": 
 ac_used         equ SV+30               ; grupos de sprites usados en el fotograma anterior
 ac_owner        equ SV+31               ; 8 grupos: actor + 1 (0 = libre), y su color
 ac_color        equ SV+39               ; 8 colores
-gf_name         equ SV+48               ; "/SCUMM/ROOMnn.GFX" + 0
+gf_name         equ SV+48               ; "DATA/ROOMnn.GFX" + 0
 gf_objsec       equ SV+70               ; palabra: seccion de objetos del .GFX (0: no hay)
 gf_objtab       equ SV+72               ; palabra: tabla de desplazamientos de las celdas de cada objeto
 gf_size         equ SV+74               ; palabra: tamano del .GFX
@@ -586,7 +586,11 @@ kd_f:           bit 0,l
                 inc b
                 jr kd_f
 kd_g:           ld a,b
-                add a,a
+                cp 8
+                jr nz,kd_p
+                ld de,(VAR_CUTSCENEEXIT_KEY)    ; la tecla 9 es siempre el ESC, en todos los juegos
+                jr kd_v
+kd_p:           add a,a
                 ld e,a
                 ld d,0
                 ld hl,PF_KEYS
@@ -594,6 +598,7 @@ kd_g:           ld a,b
                 ld e,(hl)
                 inc hl
                 ld d,(hl)               ; DE = valor de la tecla
+kd_v:
                 ld a,d
                 or e
                 jr z,kd_end
@@ -1281,7 +1286,7 @@ gf_load_room:   ld a,(EVARGS)
                 ld (gf_have),a
                 ret
 
-; "/SCUMM/ROOMnn.GFX"
+; "DATA/ROOMnn.GFX"
 gf_make_name:   ld hl,(PF_TPL)
                 ld de,PROF
                 add hl,de

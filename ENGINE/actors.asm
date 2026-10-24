@@ -275,6 +275,16 @@ acd_dx:         add hl,de
                 ld l,(ix+3)             ; y * 2 + dy
                 ld h,(ix+4)
                 add hl,hl
+                ld a,(ix+17)            ; elevacion (con signo): el personaje se dibuja elevacion lineas mas arriba
+                ld e,a
+                rla
+                sbc a,a
+                ld d,a
+                ex de,hl
+                add hl,hl
+                ex de,hl
+                or a
+                sbc hl,de
                 ld e,(iy+1)
                 ld d,0
                 bit 7,e

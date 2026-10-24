@@ -1,12 +1,12 @@
 ; loader.asm - carga de DATA.BIN (SCUMM/TOOLS/pack_data.py) en las tablas del nucleo y en las paginas de datos
 ;
-; load_data: abre /SCUMM/DATA.BIN, copia SCRDIR, OBJOWN, OBJST, ROOMDIR y ODIR a su sitio y las paginas a la
+; load_data: abre DATA/DATA.BIN, copia SCRDIR, OBJOWN, OBJST, ROOMDIR y ODIR a su sitio y las paginas a la
 ; RAM extendida (cada una por la ventana de datos, con map_page; hace falta FULLPAGING). Carry si falla.
 
 LD_TABLES       equ 6400
 COSTDIR         equ $FF40               ; 64 x 3: pagina y direccion de los fotogramas de cada traje (0 = sin datos)
 
-data_name:      defb "/SCUMM/DATA.BIN",0
+data_name:      defb "DATA/DATA.BIN",0          ; relativo a la carpeta actual: la del juego (SCUMM/MANIAC, SCUMM/ZAK...)
 ld_hdr:         defs 16
 ld_h:           defb 0
 
