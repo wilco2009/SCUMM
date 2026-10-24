@@ -9,6 +9,8 @@ set BASE=\ClaudeCode\Eightyone2\EightyOne\SD81
 rem con el argumento 'zak' copia los datos de Zak McKracken (SCUMM\preview_zak, ver games\zak.cfg) en vez de los de Maniac Mansion
 set P=..\preview
 if /i "%1"=="zak" set P=..\preview_zak
+if /i "%1"=="zack" set P=..\preview_zak
+if /i "%P%"=="..\preview_zak" (echo Datos de Zak McKracken) else (echo Datos de Maniac Mansion)
 rem montaje en tres pasos: el overlay (overlay.asm) necesita las direcciones del programa (scumm.sym) y el programa incluye overlay.bin al final
 if not exist overlay.bin type nul > overlay.bin
 pasmo scumm.asm scumm.bin scumm.sym || goto error
