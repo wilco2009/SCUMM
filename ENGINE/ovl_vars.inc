@@ -62,6 +62,8 @@ sdx_nf           equ AV+9
 sdx_nd           equ AV+10
 sdx_tstep        equ AV+14               ; VAR_MUSIC_TIMER: 1/8 de fotograma entre dos incrementos (0: el sonido no lo usa) y lo que falta
 sdx_tctr         equ AV+16
+ac_cnt           equ AV+18               ; personajes a dibujar este fotograma y su lista (clave = y, numero), ordenada por y: el de mas abajo se dibuja el ultimo
+AL               equ AV+20               ; hasta 2 x NACTORS bytes
 sdx_left         equ AV+12               ; fotogramas que le quedan al que suena (65535: sin fin)                ; desplazamiento en pixeles de la celda dentro de su tira
 ac_id           equ OVL_VARS+30         ; numero del actor que se dibuja
 UI_SIF           equ OVL_VARS+27         ; interfaz, cursor y VAR_CURSORSTATE guardados por cutscene()

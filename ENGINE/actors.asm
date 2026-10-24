@@ -11,22 +11,72 @@ actors_update:  ld a,(gf_have)
                 dec a
                 ld (ac_hold),a
                 jr au_hide
-au_run:         ld ix,ACTORS+ASIZE
-                ld b,NACTORS-1
-ac_l:           push bc
-                ld a,NACTORS
-                sub b
-                ld (ac_id),a
+au_run:         xor a                   ; los personajes se dibujan de arriba a abajo (como processActors de ScummVM): el sprite de mas indice va delante
+                ld (ac_cnt),a
+                ld b,1
+ao_l:           ld a,b
+                call actor_addr
                 ld a,(CURROOM)
                 cp (ix+0)
-                jr nz,ac_next
+                jr nz,ao_next
                 ld a,(ix+9)             ; visible
                 or a
-                call nz,ac_draw
-ac_next:        ld de,ASIZE
-                add ix,de
+                jr z,ao_next
+                ld d,(ix+3)             ; D = y (los personajes caben en 0-255)
+                ld a,(ac_cnt)
+                ld c,a                  ; C = lugares ocupados
+ao_ins:         ld a,c
+                or a
+                jr z,ao_put
+                dec a
+                add a,a
+                add a,AL mod 256
+                ld l,a
+                ld h,AL / 256
+                ld a,(hl)               ; la clave del anterior
+                cp d
+                jr c,ao_put
+                jr z,ao_put
+                ld a,(hl)               ; si es mayor se desplaza un lugar
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld (hl),a
+                inc hl
+                ld (hl),e
+                dec c
+                jr ao_ins
+ao_put:         ld a,c
+                add a,a
+                add a,AL mod 256
+                ld l,a
+                ld h,AL / 256
+                ld (hl),d
+                inc hl
+                ld (hl),b
+                ld hl,ac_cnt
+                inc (hl)
+ao_next:        inc b
+                ld a,b
+                cp NACTORS
+                jr c,ao_l
+                ld a,(ac_cnt)
+                or a
+                jr z,au_hide
+                ld b,a
+                ld hl,AL
+ad_l:           push bc
+                push hl
+                inc hl
+                ld a,(hl)
+                ld (ac_id),a
+                call actor_addr
+                call ac_draw
+                pop hl
+                inc hl
+                inc hl
                 pop bc
-                djnz ac_l
+                djnz ad_l
 au_hide:        ld a,(ac_n)             ; los sprites que sobran del fotograma anterior se apagan
                 ld b,a
                 ld a,(ac_used)
