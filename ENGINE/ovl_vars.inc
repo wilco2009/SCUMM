@@ -63,6 +63,16 @@ sdx_nd           equ AV+10
 sdx_tstep        equ AV+14               ; VAR_MUSIC_TIMER: 1/8 de fotograma entre dos incrementos (0: el sonido no lo usa) y lo que falta
 sdx_tctr         equ AV+16
 ac_cnt           equ AV+18               ; personajes a dibujar este fotograma y su lista (clave = y, numero), ordenada por y: el de mas abajo se dibuja el ultimo
+fl_xs            equ AV+70               ; linterna: celdas de ancho y de alto (lights a, b, 1); 0: sin linterna
+fl_ys            equ AV+71
+dk_ok            equ AV+72               ; ventana de la linterna: hay, primera columna y fila, y las de la ultima vez que se pinto
+dk_c0            equ AV+73
+dk_r0            equ AV+74
+dk_pc            equ AV+75
+dk_pr            equ AV+76
+dk_row           equ AV+77
+dk_src           equ AV+78
+dk_dst           equ AV+80
 AL               equ AV+20               ; hasta 2 x NACTORS bytes
 sdx_left         equ AV+12               ; fotogramas que le quedan al que suena (65535: sin fin)                ; desplazamiento en pixeles de la celda dentro de su tira
 ac_id           equ OVL_VARS+30         ; numero del actor que se dibuja

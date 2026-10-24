@@ -17,6 +17,8 @@ host_ops:       ld c,a
                 jp z,ui_cutscene
                 cp $54
                 jp z,ui_setname
+                cp $70
+                jp z,ho_lights
                 cp $18
                 jr z,ho_restart
                 cp $52
@@ -26,6 +28,16 @@ host_ops:       ld c,a
                 ld a,c
                 cp $AC                  ; drawSentence
                 jp z,ui_sentence
+                ret
+ho_lights:      ld a,(ARGS+4)           ; lights(a, b, c): c = 1 -> linterna de a x b celdas; en los dos casos se vuelve a pintar la sala
+                cp 1
+                jr nz,hl_r
+                ld a,(ARGS)
+                ld (fl_xs),a
+                ld a,(ARGS+2)
+                ld (fl_ys),a
+hl_r:           ld a,1
+                ld (gd_pending),a
                 ret
 ho_restart:     ld a,1
                 ld (rs_flag),a

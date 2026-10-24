@@ -166,6 +166,8 @@ scumm_main:     di
                 call cursor_draw
                 ENDIF
                 call vm_init
+                ld hl,11               ; VAR_CURRENT_LIGHTS: luz de la sala, actores con colores y paleta base (como resetScummVars)
+                ld (VAR_CURRENT_LIGHTS),hl
                 ld hl,ev_handler
                 ld (EVVEC),hl
                 ld hl,OVL_HOST_OPS
@@ -240,6 +242,8 @@ ml_n:           ld b,a                  ; B = fotogramas que debe durar
                 or a
                 jr nz,sm_err
                 call OVL_CAM_UPDATE
+                ld a,1
+                call OVL_DARK
                 call gd_update
                 call text_update
                 call OVL_UI_UPDATE
@@ -1473,11 +1477,17 @@ gf_flip:        ld a,(gd_sync)
                 jr z,gfl1
                 call wait_vs
                 ld (vs_extra),a         ; el VSYNC ya ha pasado: el bucle principal no espera otro
-gfl1:           ld hl,BACKBUF+1
+gfl1:           ld a,(VAR_CURRENT_LIGHTS)
+                and 2
+                jr nz,gfl2
+                xor a
+                call OVL_DARK       ; sin luz: la sala negra y, con linterna, una ventana alrededor del cursor (dark.asm)
+                jr gfl3
+gfl2:           ld hl,BACKBUF+1
                 ld de,DFILE+1
                 ld bc,16*33
                 ldir
-                xor a
+gfl3:           xor a
                 ld (gd_pending),a
                 ret
 gd_sync:        defb 1                  ; 0: sin esperar al VSYNC (el salto de camara de golpe)
