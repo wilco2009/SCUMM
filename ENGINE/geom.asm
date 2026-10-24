@@ -449,10 +449,10 @@ cx_d1:
 is_player:                              ; IX = actor -> carry si es el jugador (VAR(42) <= num <= VAR(43))
                 ld l,(ix+15)
                 ld h,0
-                ld de,(VARS+84)
+                ld de,(VAR_PLAYER_MIN)
                 call sless              ; num < VAR(42)?
                 jr c,ip_no
-                ld hl,(VARS+86)
+                ld hl,(VAR_PLAYER_MAX)
                 ld e,(ix+15)
                 ld d,0
                 call sless              ; VAR(43) < num?

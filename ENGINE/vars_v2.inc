@@ -1,0 +1,33 @@
+; Numeros de variable de SCUMM v2 (offsets en bytes dentro de VARS; la variable n esta en VARS+2n). Comunes a los juegos v2.
+
+VAR_CAMERA_X               equ VARS+4
+VAR_HAVE_MSG               equ VARS+6
+VAR_ROOM                   equ VARS+8
+VAR_OVERRIDE               equ VARS+10
+VAR_CHARCOUNT              equ VARS+14
+VAR_ACTIVE_VERB            equ VARS+16
+VAR_ACTIVE_OBJECT1         equ VARS+18
+VAR_ACTIVE_OBJECT2         equ VARS+20
+VAR_CURRENT_LIGHTS         equ VARS+24
+VAR_MUSIC_TIMER            equ VARS+34
+VAR_VERB_ALLOWED           equ VARS+36
+VAR_CURSORSTATE            equ VARS+42
+VAR_CAMERA_MIN_X           equ VARS+46
+VAR_CAMERA_MAX_X           equ VARS+48
+VAR_SENTENCE_VERB          equ VARS+52
+VAR_SENTENCE_OBJECT1       equ VARS+54
+VAR_SENTENCE_OBJECT2       equ VARS+56
+VAR_SENTENCE_PREPOSITION   equ VARS+58
+VAR_VIRT_MOUSE_X           equ VARS+60
+VAR_VIRT_MOUSE_Y           equ VARS+62
+VAR_CLICK_AREA             equ VARS+64
+VAR_CLICK_VERB             equ VARS+66
+VAR_CLICK_OBJECT           equ VARS+70
+VAR_ROOM_RESOURCE          equ VARS+72
+VAR_LAST_SOUND             equ VARS+74
+VAR_BACKUP_VERB            equ VARS+76
+VAR_KEYPRESS               equ VARS+78
+VAR_CUTSCENEEXIT_KEY       equ VARS+80
+VAR_TALK_ACTOR             equ VARS+82
+VAR_PLAYER_MIN             equ VARS+84
+VAR_PLAYER_MAX             equ VARS+86

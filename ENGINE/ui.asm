@@ -41,7 +41,7 @@ ui_cursorcmd:   ld a,(ARGS)             ; el byte bajo, si no es 0, es VAR_CURSO
                 jr z,uc0
                 ld l,a
                 ld h,0
-                ld (VARS+42),hl
+                ld (VAR_CURSORSTATE),hl
 uc0:            ld a,(ARGS+1)
                 ld b,a
                 bit 2,a                 ; USERSTATE_SET_IFACE
@@ -203,7 +203,7 @@ ui_sentence:    ld a,(UI_DIRTY)
 
 ; ------------------------------------------------------------------------------------------------ pantalla
 ; cada fotograma, fuera de los scripts
-ui_update:      ld hl,VARS+52           ; si cambia la frase, se vuelve a escribir
+ui_update:      ld hl,VAR_SENTENCE_VERB           ; si cambia la frase, se vuelve a escribir
                 ld de,UI_PREV
                 ld b,8
 uu_c:           ld a,(de)
@@ -213,7 +213,7 @@ uu_c:           ld a,(de)
                 inc de
                 djnz uu_c
                 jr uu_d
-uu_ch:          ld hl,VARS+52
+uu_ch:          ld hl,VAR_SENTENCE_VERB
                 ld de,UI_PREV
                 ld bc,8
                 ldir
@@ -392,7 +392,7 @@ ui_draw_sentence:
                 call ui_row
                 ex de,hl
                 ld b,32                 ; B = sitio que queda
-                ld a,(VARS+52)          ; verbo
+                ld a,(VAR_SENTENCE_VERB)          ; verbo
                 call ui_find
                 jr nc,us_o1
                 push ix
@@ -403,9 +403,9 @@ ui_draw_sentence:
                 jr nc,us_v
                 inc h
 us_v:           call us_text
-us_o1:          ld hl,(VARS+54)         ; objeto 1
+us_o1:          ld hl,(VAR_SENTENCE_OBJECT1)         ; objeto 1
                 call us_obj
-                ld hl,(VARS+58)         ; preposicion
+                ld hl,(VAR_SENTENCE_PREPOSITION)         ; preposicion
                 ld a,h
                 or a
                 jr nz,us_o2
@@ -429,7 +429,7 @@ us_ps:          ld a,(hl)
                 jr nz,us_ps
                 jr us_p
 us_pf:          call us_text
-us_o2:          ld hl,(VARS+56)         ; objeto 2
+us_o2:          ld hl,(VAR_SENTENCE_OBJECT2)         ; objeto 2
                 jp us_obj
 
 
@@ -855,10 +855,10 @@ ui_cutscene:    ld a,c
                 ld (UI_SIF),a
                 ld a,(UI_CURSOR)
                 ld (UI_SCUR),a
-                ld hl,(VARS+42)
+                ld hl,(VAR_CURSORSTATE)
                 ld (UI_SV21),hl
                 ld hl,200
-                ld (VARS+42),hl
+                ld (VAR_CURSORSTATE),hl
                 xor a
                 ld (UI_IFACE),a
                 ld (UI_CURSOR),a
@@ -868,7 +868,7 @@ ui_endcut:      ld a,(UI_SIF)
                 ld a,(UI_SCUR)
                 ld (UI_CURSOR),a
                 ld hl,(UI_SV21)
-                ld (VARS+42),hl
+                ld (VAR_CURSORSTATE),hl
                 ld a,2
                 ld (cam_mode),a
                 ld a,$FF

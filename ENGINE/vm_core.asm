@@ -29,6 +29,7 @@ SCRIPT_NUM_ENCD equ 10002
 
 ; ---- datos (bloque 7, siempre mapeado)
 VARS            equ $E000       ; 256 variables de 16 bits
+                include "vars_v2.inc"
 OBJST           equ $E200       ; estado de cada objeto (780)
 OBJOWN          equ $E520       ; dueno de cada objeto (780)
 SLOTS           equ $E900       ; NSLOT x 16
@@ -187,7 +188,7 @@ vf_t:
                 ld a,(HAVEMSG)
                 ld l,a
                 ld h,0
-                ld (VARS+6),hl          ; VAR_HAVE_MSG
+                ld (VAR_HAVE_MSG),hl          ; VAR_HAVE_MSG
                 call process_input      ; el clic o la tecla pendiente: script 4
                 ld a,(ERR)
                 or a
@@ -1421,7 +1422,7 @@ h_o5_isScriptRunning:                   ; ARGS: resultado, script
                 ld a,(ARGS)
                 jp write_var
 h_o2_waitForMessage:
-                ld hl,(VARS+6)          ; VAR_HAVE_MSG
+                ld hl,(VAR_HAVE_MSG)          ; VAR_HAVE_MSG
                 ld a,h
                 or l
                 ret z

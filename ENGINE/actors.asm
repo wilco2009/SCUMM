@@ -132,7 +132,7 @@ acd_nomk:       ld a,(ix+5)             ; traje
                 jr z,acd_nt
                 ld a,(ac_id)
                 ld b,a
-                ld a,(VARS+82)          ; VAR_TALK_ACTOR
+                ld a,(VAR_TALK_ACTOR)          ; VAR_TALK_ACTOR
                 cp b
                 jr nz,acd_nt
                 ld a,c

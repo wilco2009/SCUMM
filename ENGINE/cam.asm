@@ -86,32 +86,32 @@ cm_clamp:       ld hl,(cam_cx)
                 sbc hl,de
                 jr nc,cc1
                 ld (cam_cx),de
-cc1:            ld hl,(VARS+48)
+cc1:            ld hl,(VAR_CAMERA_MAX_X)
                 ld de,32
                 add hl,de
                 ld de,(cam_cx)
                 or a
                 sbc hl,de
                 jr nc,cc2
-                ld hl,(VARS+48)
+                ld hl,(VAR_CAMERA_MAX_X)
                 ld de,32
                 add hl,de
                 ld (cam_cx),hl
 cc2:            ld bc,(cam_cx)          ; valor de la variable
-                ld hl,(VARS+46)
+                ld hl,(VAR_CAMERA_MIN_X)
                 ld d,b
                 ld e,c
                 or a
                 sbc hl,de               ; minimo - cx
                 jr c,cc3
-                ld bc,(VARS+46)
-cc3:            ld hl,(VARS+48)
+                ld bc,(VAR_CAMERA_MIN_X)
+cc3:            ld hl,(VAR_CAMERA_MAX_X)
                 ld d,b
                 ld e,c
                 or a
                 sbc hl,de               ; maximo - cx
                 jr nc,cc4
-                ld bc,(VARS+48)
+                ld bc,(VAR_CAMERA_MAX_X)
 cc4:            ld h,b
                 ld l,c
                 srl h
@@ -120,7 +120,7 @@ cc4:            ld h,b
                 rr l
                 srl h
                 rr l
-                ld (VARS+4),hl
+                ld (VAR_CAMERA_X),hl
                 ret
 
 ; la ventana se mueve hacia cam_cx - 128 (entre 0 y el ultimo sitio de la sala), B pixeles como mucho

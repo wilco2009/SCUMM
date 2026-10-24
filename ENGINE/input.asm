@@ -492,13 +492,13 @@ ds_p0:          ld (hl),a
                 ret
 ds_print:       ld hl,(ARGS)
                 ld h,0
-                ld (VARS+52),hl         ; VAR_SENTENCE_VERB
+                ld (VAR_SENTENCE_VERB),hl         ; VAR_SENTENCE_VERB
                 ld (EVARGS),hl
                 ld hl,(ARGS+2)
-                ld (VARS+54),hl
+                ld (VAR_SENTENCE_OBJECT1),hl
                 ld (EVARGS+2),hl
                 ld hl,(ARGS+4)
-                ld (VARS+56),hl
+                ld (VAR_SENTENCE_OBJECT2),hl
                 ld (EVARGS+4),hl
                 ld a,EV_SENTENCE
                 jp ev_emit
@@ -513,11 +513,11 @@ dse_1:          cp 253
                 jr z,dse_sp
                 ld l,a
                 ld h,0
-                ld (VARS+16),hl         ; VAR_ACTIVE_VERB
+                ld (VAR_ACTIVE_VERB),hl         ; VAR_ACTIVE_VERB
                 ld hl,(ARGS+2)
-                ld (VARS+18),hl         ; VAR_ACTIVE_OBJECT1
+                ld (VAR_ACTIVE_OBJECT1),hl         ; VAR_ACTIVE_OBJECT1
                 ld hl,(ARGS+4)
-                ld (VARS+20),hl         ; VAR_ACTIVE_OBJECT2
+                ld (VAR_ACTIVE_OBJECT2),hl         ; VAR_ACTIVE_OBJECT2
                 jr dse_slot
 dse_sp:         ld a,253
                 ld (ARGS),a
@@ -585,20 +585,20 @@ check_sentence: ld de,SENTENCE_SCRIPT
                 ret z
 cs_go:          ld l,(ix+0)
                 ld h,0
-                ld (VARS+16),hl         ; VAR_ACTIVE_VERB
+                ld (VAR_ACTIVE_VERB),hl         ; VAR_ACTIVE_VERB
                 ld l,(ix+1)
                 ld h,(ix+2)
-                ld (VARS+18),hl
+                ld (VAR_ACTIVE_OBJECT1),hl
                 ld l,(ix+3)
                 ld h,(ix+4)
-                ld (VARS+20),hl
+                ld (VAR_ACTIVE_OBJECT2),hl
                 ld e,(ix+1)
                 ld d,(ix+2)
                 ld a,(ix+0)
                 call verb_allowed
                 ld l,a
                 ld h,0
-                ld (VARS+36),hl         ; VAR_VERB_ALLOWED
+                ld (VAR_VERB_ALLOWED),hl         ; VAR_VERB_ALLOWED
                 ld a,$FF
                 ld (CUR),a
                 ld de,SENTENCE_SCRIPT
@@ -613,19 +613,19 @@ process_input:  ld a,(INP_FLAG)
                 ld a,(INP_AREA)
                 ld l,a
                 ld h,0
-                ld (VARS+64),hl         ; VAR_CLICK_AREA
+                ld (VAR_CLICK_AREA),hl         ; VAR_CLICK_AREA
                 ld hl,(INP_VAL)
                 cp 1
                 jr nz,pi_1
-                ld (VARS+66),hl         ; VAR_CLICK_VERB
+                ld (VAR_CLICK_VERB),hl         ; VAR_CLICK_VERB
                 jr pi_go
 pi_1:           cp 3
                 jr nz,pi_2
-                ld (VARS+70),hl         ; VAR_CLICK_OBJECT
+                ld (VAR_CLICK_OBJECT),hl         ; VAR_CLICK_OBJECT
                 jr pi_go
 pi_2:           cp 4
                 jr nz,pi_go
-                ld (VARS+78),hl         ; VAR_KEYPRESS
+                ld (VAR_KEYPRESS),hl         ; VAR_KEYPRESS
 pi_go:          ld a,$FF
                 ld (CUR),a
                 ld de,INPUT_SCRIPT
@@ -1064,7 +1064,7 @@ h_o2_cutscene:                          ; sin frases pendientes ni script de fra
 h_o2_endCutscene:
                 call unfreeze_scripts
                 ld hl,0
-                ld (VARS+10),hl         ; VAR_OVERRIDE = 0
+                ld (VAR_OVERRIDE),hl         ; VAR_OVERRIDE = 0
                 ld (CUTPTR),hl
                 jp h_host
 
@@ -1104,7 +1104,7 @@ vac_d:          ld (hl),a
                 call slot_addr
                 ld (hl),2               ; en marcha
                 ld hl,1
-                ld (VARS+10),hl
+                ld (VAR_OVERRIDE),hl
                 ld hl,0
                 ld (CUTPTR),hl
                 ret
@@ -1170,7 +1170,7 @@ h_o2_lights:
                 jr nz,li_h
                 ld hl,(ARGS)
                 ld h,0
-                ld (VARS+24),hl
+                ld (VAR_CURRENT_LIGHTS),hl
 li_h:           jp h_host
 
 ; getObjPreposition (R, W1): la preposicion del objeto (bits 5-7 del byte 12 de su bloque); 0 si no esta en la sala ni en un inventario

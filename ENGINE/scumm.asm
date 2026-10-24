@@ -507,12 +507,12 @@ kr_set:         ld (cur_x),hl
                 rr l
                 srl h
                 rr l
-                ld (VARS+60),hl
+                ld (VAR_VIRT_MOUSE_X),hl
                 ld a,(cur_y)
                 srl a                   ; / 2: VAR_VIRT_MOUSE_Y
                 ld l,a
                 ld h,0
-                ld (VARS+62),hl
+                ld (VAR_VIRT_MOUSE_Y),hl
                 ld a,(k_prev)           ; clic: ESPACIO recien pulsado
                 cpl
                 and c
@@ -601,7 +601,7 @@ kd_g:           ld a,b
                 ld (INP_FLAG),a
                 ld a,4                  ; zona 4: tecla
                 ld (INP_AREA),a
-                ld hl,(VARS+80)
+                ld hl,(VAR_CUTSCENEEXIT_KEY)
                 or a
                 sbc hl,de
                 call z,vm_abort_cutscene

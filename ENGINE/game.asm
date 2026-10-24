@@ -69,10 +69,10 @@ ev_null:        ret
 ; ============================================================================================ sonido
 h_o5_startSound:
                 ld hl,0
-                ld (VARS+34),hl         ; VAR_MUSIC_TIMER = 0
+                ld (VAR_MUSIC_TIMER),hl         ; VAR_MUSIC_TIMER = 0
 h_o5_startMusic:
                 ld hl,(ARGS)
-                ld (VARS+74),hl         ; VAR_LAST_SOUND
+                ld (VAR_LAST_SOUND),hl         ; VAR_LAST_SOUND
                 ld (LASTSND),hl
                 ld (EVARGS),hl
                 ld a,EV_SOUND_START
@@ -198,7 +198,7 @@ show_actor:                             ; IX = actor
 
 run_talk_script:                        ; runActorTalkScript: IX = actor, A = fotograma
                 ld c,a
-                ld hl,(VARS+82)         ; VAR_TALK_ACTOR
+                ld hl,(VAR_TALK_ACTOR)         ; VAR_TALK_ACTOR
                 ld a,h
                 or l
                 ret z
@@ -222,7 +222,7 @@ put_actor:                              ; IX = actor; PA_X, PA_Y, PA_ROOM
                 jr z,pa_set
                 ld c,(ix+15)            ; esta visible y cambia de sala: si habla, calla
                 ld b,0
-                ld hl,(VARS+82)
+                ld hl,(VAR_TALK_ACTOR)
                 or a
                 sbc hl,bc
                 jr nz,pa_set
@@ -443,7 +443,7 @@ stop_talk:                              ; stopTalk
                 ld h,a
                 ld l,a
                 ld (TALKDLY),hl
-                ld hl,(VARS+82)
+                ld hl,(VAR_TALK_ACTOR)
                 ld a,h
                 or l
                 jr z,stk_end
@@ -468,7 +468,7 @@ stop_talk:                              ; stopTalk
                 ld (USETALK),a
 stk_set:
                 ld hl,$00FF
-                ld (VARS+82),hl
+                ld (VAR_TALK_ACTOR),hl
 stk_end:
                 xor a
                 ld (KEEPTXT),a
@@ -632,7 +632,7 @@ cm_end:
 
 ; ---- escribir el mensaje (CHARSET_1 de ScummVM, sin dibujar)
 talker_ix:                              ; getTalkingActor + derefActorSafe: IX = actor, o carry si no hay
-                ld hl,(VARS+82)
+                ld hl,(VAR_TALK_ACTOR)
                 ld a,h
                 or a
                 jr nz,tk_none
@@ -749,7 +749,7 @@ dt_end:
                 ld l,a
                 ld (MSGCNT),hl
 dt_done:
-                ld hl,(VARS+82)
+                ld hl,(VAR_TALK_ACTOR)
                 ld (EVARGS),hl
                 ld hl,(TXTN)
                 ld (EVARGS+2),hl
@@ -772,9 +772,9 @@ dt_char:                                ; A = caracter
                 ld de,6
                 add hl,de
                 ld (TALKDLY),hl
-                ld hl,(VARS+14)         ; VAR_CHARCOUNT++
+                ld hl,(VAR_CHARCOUNT)         ; VAR_CHARCOUNT++
                 inc hl
-                ld (VARS+14),hl
+                ld (VAR_CHARCOUNT),hl
                 pop af
 dt_sum:                                 ; suma el caracter al resumen
                 ld hl,(TXTSUM)
@@ -807,7 +807,7 @@ actor_talk:
                 or a
                 call z,stop_talk
                 ld hl,$00FF
-                ld (VARS+82),hl
+                ld (VAR_TALK_ACTOR),hl
                 jr at_go
 at_actor:
                 ex de,hl
@@ -828,7 +828,7 @@ at_actor:
 at_1:
                 ld l,(ix+15)
                 ld h,0
-                ld (VARS+82),hl
+                ld (VAR_TALK_ACTOR),hl
                 ld a,TALK_START
                 call run_talk_script
                 ld a,1
@@ -842,9 +842,9 @@ at_go:
                 ld (HAVEMSG),a
                 ld h,0
                 ld l,a
-                ld (VARS+6),hl          ; VAR_HAVE_MSG
+                ld (VAR_HAVE_MSG),hl          ; VAR_HAVE_MSG
                 ld hl,0
-                ld (VARS+14),hl         ; VAR_CHARCOUNT
+                ld (VAR_CHARCOUNT),hl         ; VAR_CHARCOUNT
                 jp display_dialog
 
 h_o5_print:                             ; ARGS: actor, valor de la cadena; STRP = su inicio
@@ -876,12 +876,12 @@ ks_next:
                 ret
 
 reset_sentence:
-                ld hl,(VARS+76)         ; VAR_BACKUP_VERB
-                ld (VARS+52),hl         ; VAR_SENTENCE_VERB
+                ld hl,(VAR_BACKUP_VERB)         ; VAR_BACKUP_VERB
+                ld (VAR_SENTENCE_VERB),hl         ; VAR_SENTENCE_VERB
                 ld hl,0
-                ld (VARS+54),hl
-                ld (VARS+56),hl
-                ld (VARS+58),hl
+                ld (VAR_SENTENCE_OBJECT1),hl
+                ld (VAR_SENTENCE_OBJECT2),hl
+                ld (VAR_SENTENCE_PREPOSITION),hl
                 ret
 
 run_scene_script:                       ; A = pagina, HL = direccion, DE = numero (0 = no hay)
@@ -961,8 +961,8 @@ ss_hide:
                 ld a,(SS_ROOM)
                 ld l,a
                 ld h,0
-                ld (VARS+8),hl          ; VAR_ROOM
-                ld (VARS+72),hl         ; VAR_ROOM_RESOURCE
+                ld (VAR_ROOM),hl          ; VAR_ROOM
+                ld (VAR_ROOM_RESOURCE),hl         ; VAR_ROOM_RESOURCE
                 ld (CURROOM),a
                 or a
                 jr nz,ss_load
@@ -996,10 +996,10 @@ ss_load:
                 ld l,(iy+6)             ; ancho de la sala
                 ld h,(iy+7)
                 ld de,160
-                ld (VARS+46),de         ; VAR_CAMERA_MIN_X
+                ld (VAR_CAMERA_MIN_X),de         ; VAR_CAMERA_MIN_X
                 or a
                 sbc hl,de
-                ld (VARS+48),hl         ; VAR_CAMERA_MAX_X
+                ld (VAR_CAMERA_MAX_X),hl         ; VAR_CAMERA_MAX_X
                 ld ix,ACTORS+ASIZE      ; showActors
                 ld b,NACTORS-1
 ss_show:
