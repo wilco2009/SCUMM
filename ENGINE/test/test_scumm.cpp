@@ -78,7 +78,7 @@ static void mcu_byte(uint8_t b) {
   if (mcu_cmd == 34) {                                                                          // PLAY_VGM: longitud, nombre; responde el estado
     if (mcu_cnt == 0) { mcu_nlen = b; mcu_cnt = 1; }
     else {
-      mcu_name += (char)b;
+      { static const char T[] = " ??????????\"&$:?()><=+-*/;,.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"; mcu_name += (b < 64) ? T[b] : '?'; }   // como el MCU: asc81_to_ascii
       if ((int)mcu_name.size() == mcu_nlen) { printf("SND f=%d PLAY %s%c", g_fr, mcu_name.c_str(), 10); mcu_out.push_back(0); mcu_cmd = -1; }
     }
     return;

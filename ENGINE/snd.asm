@@ -269,9 +269,28 @@ sdx_sc_go:          ld hl,SND_NAME
                 jr sdx_sc_pt
 sdx_sc_ps:          ld a,(hl)
                 inc hl
+                call sdx_zx             ; PLAY_VGM espera el nombre en codigos del ZX81
                 call mcu_send
 sdx_sc_pt:          djnz sdx_sc_ps
                 jp mcu_recv
+
+; A = ASCII (espacio, '.', '/', cifras, mayusculas) -> codigo del ZX81
+sdx_zx:          cp '/'
+                jr nz,sdx_zx1
+                ld a,$18
+                ret
+sdx_zx1:            cp '.'
+                jr nz,sdx_zx2
+                ld a,$1B
+                ret
+sdx_zx2:            cp 'A'
+                jr c,sdx_zx3
+                sub 'A'-$26
+                ret
+sdx_zx3:            cp '0'
+                ret c                   ; el espacio y lo demas: 0
+                sub '0'-$1C
+                ret
 
 sdx_stopvgm:     ld a,CMD_STOPVGM
                 jp mcu_send

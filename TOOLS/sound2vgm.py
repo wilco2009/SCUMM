@@ -317,12 +317,12 @@ def vgm(events, total_ticks):
             body.extend(bytes([0xA0, r, ch[r]]))
     wait_to(total_ticks)
     body.append(0x66)
-    hdr = bytearray(0x80)
+    hdr = bytearray(0x100)
     hdr[0:4] = b'Vgm '
     struct.pack_into('<I', hdr, 4, len(hdr) + len(body) - 4)
     struct.pack_into('<I', hdr, 8, 0x161)
     struct.pack_into('<I', hdr, 0x18, done_samples)
-    struct.pack_into('<I', hdr, 0x34, 0x80 - 0x34)
+    struct.pack_into('<I', hdr, 0x34, 0x100 - 0x34)
     struct.pack_into('<I', hdr, 0x74, 1789773)       # reloj del AY
     hdr[0x78] = 0                                    # AY8910
     return bytes(hdr + body)
