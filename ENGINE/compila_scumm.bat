@@ -9,7 +9,7 @@ rem   python SCUMM\TOOLS\lfl2gfx.py SCUMM\V2\ManiacMansionDOS all -o SCUMM\previ
 rem   python SCUMM\TOOLS\pack_data.py SCUMM\V2\ManiacMansionDOS SCUMM\preview\DATA.BIN --game SCUMM\games\maniac.cfg --sounds SCUMM\preview\snd
 rem   python SCUMM\TOOLS\sound2vgm.py SCUMM\V2\ManiacMansionDOS SCUMM\preview\snd
 cd /d "%~dp0"
-set BASE=\ClaudeCode\Eightyone2\EightyOne\SD81
+set BASE=\ClaudeCode\Eightyone2\EightyOne\SD81\SD81
 rem sin argumento copia los datos de Maniac Mansion; con 'zak' (o 'zack') los de Zak McKracken (SCUMM\preview_zak, ver games\zak.cfg)
 set P=..\preview
 set G=MANIAC

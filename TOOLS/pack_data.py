@@ -112,6 +112,7 @@ def build(world, game, first_page=16, include_test=False, sounds=None):
                 costume2.SCALE = tuple(int(x) for x in tr['escala'].split('/'))
             for cid in range(1, 64):                          # los trajes que existan en el juego (hasta los 64 del COSTDIR)
                 try:
+                    costume2.SCALE = tuple(int(x) for x in tr.get('escala_%d' % cid, tr.get('escala', '3/4')).split('/'))     # escala_N = n/d: un traje concreto
                     cost = costume2.Costume(scumm2.resource(world.dir, ixd, 'costume', cid))
                     blob = costume2.costume_blob(cost, emap)
                     if len(blob) > 6100:                      # con las dos poses de la boca no cabe en una pagina: solo la abierta

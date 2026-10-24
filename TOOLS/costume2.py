@@ -113,12 +113,16 @@ class Costume:
             if code == 0x7B:
                 continue
             w, h, rx, ry, mx, my, pix = self.picture(limb, code)
-            x0, y0 = xm + rx - 80, ym + ry - 100      # el origen del traje esta en (80, 100): el centro de los pies
+            # ScummVM (BaseCostumeRenderer::drawCostume y Actor_v2::prepareDrawActorCostume): el origen es (72, 100) y en v2 la x del actor
+            # se retrasa una franja (8 pixeles), dos si mira a la izquierda; al reves (espejo) la imagen se refleja alrededor de esa x
+            x0, y0 = xm + rx - 72, ym + ry - 100
             xm += mx
             ym -= my
             if mirror:
-                x0 = -x0 - w
+                x0 = 16 - x0 - w
                 pix = [row[::-1] for row in pix]
+            else:
+                x0 += 8
             parts.append((x0, y0, pix))
         return parts
 
