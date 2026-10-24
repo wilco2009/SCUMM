@@ -1066,6 +1066,39 @@ h_o2_endCutscene:
                 ld hl,0
                 ld (VAR_OVERRIDE),hl         ; VAR_OVERRIDE = 0
                 ld (CUTPTR),hl
+                ld hl,(VARS)                 ; actorFollowCamera(VAR_EGO): si el protagonista esta en otra sala, empieza esa escena (setCameraFollows)
+                ld a,h
+                or a
+                jp nz,h_host
+                ld a,l
+                cp NACTORS
+                jp nc,h_host
+                call actor_addr
+                ld b,(ix+0)
+                ld a,b
+                or a
+                jp z,h_host
+                ld a,(CURROOM)
+                cp b
+                jp z,h_host
+                ld a,(OPC)
+                push af
+                ld a,(ARGN)
+                push af
+                ld hl,(ARGS)
+                push hl
+                ld l,b
+                ld h,0
+                call start_scene
+                pop hl
+                ld (ARGS),hl
+                pop af
+                ld (ARGN),a
+                pop af
+                ld (OPC),a
+                ld a,(ERR)
+                or a
+                ret nz
                 jp h_host
 
 h_o2_beginOverride:                     ; ARGS: b, w: el salto que sigue ya esta leido; si se salta la cutscene el script sigue en ese salto

@@ -83,6 +83,33 @@ static void mcu_byte(uint8_t b) {
     }
     return;
   }
+  if (mcu_cmd == 71) {                                                                          // FCREATE: como FOPEN pero crea el fichero (en la carpeta de datos)
+    if (mcu_cnt == 0) { mcu_nlen = b; mcu_cnt = 1; }
+    else {
+      mcu_name += (char)b;
+      if ((int)mcu_name.size() == mcu_nlen) {
+        size_t k = mcu_name.rfind('/');
+        std::string base = k == std::string::npos ? mcu_name : mcu_name.substr(k + 1);
+        FILE* f = fopen((sd_dir + "/" + base).c_str(), "w+b");
+        int h = 0xFF;
+        if (f) for (int i = 0; i < 8; i++) if (!mcu_files[i]) { mcu_files[i] = f; h = i; break; }
+        mcu_out.push_back((uint8_t)h);
+        mcu_cmd = -1;
+      }
+    }
+    return;
+  }
+  if (mcu_cmd == 56) {                                                                          // FWRITE: manejador, cuenta (2) y los bytes; responde el estado
+    if (mcu_cnt == 0) { mcu_h = b & 7; mcu_cnt = 1; }
+    else if (mcu_cnt == 1) { mcu_n = b; mcu_cnt = 2; }
+    else if (mcu_cnt == 2) { mcu_n |= b << 8; mcu_cnt = 3; if (mcu_n == 0) { mcu_out.push_back(0); mcu_cmd = -1; } }
+    else {
+      FILE* f = mcu_files[mcu_h];
+      if (f) fputc(b, f);
+      if (++mcu_cnt - 3 == mcu_n) { if (f) fflush(f); mcu_out.push_back(f ? 0 : 255); mcu_cmd = -1; }
+    }
+    return;
+  }
   if (mcu_cmd == 53) {
     if (mcu_cnt == 0) { mcu_nlen = b; mcu_cnt = 1; }
     else {
@@ -180,7 +207,7 @@ BYTE z80_readport_wrapper(int port, int*) {
     if (row == 0x7F) { if (cur_keys & 16) v &= ~1; if (cur_keys & 4) v &= ~8; if (cur_keys & 8) v &= ~16; }
     if (row == 0xFB) { if (cur_keys & 32) v &= ~16; if (cur_keys & 64) v &= ~1; }
     if (row == 0xFD && (cur_keys & 128)) v &= ~1;
-    if (row == 0xF7 && (cur_keys & 256)) v &= ~8; if (row == 0xF7 && (cur_keys & 512)) v &= ~1; if (row == 0xF7 && (cur_keys & 1024)) v &= ~2; if (row == 0xF7 && (cur_keys & 2048)) v &= ~4; if (row == 0xEF && (cur_keys & 4096)) v &= ~2;                   // tecla 4: salta la cutscene
+    if (row == 0xF7 && (cur_keys & 256)) v &= ~8; if (row == 0xF7 && (cur_keys & 512)) v &= ~1; if (row == 0xF7 && (cur_keys & 1024)) v &= ~2; if (row == 0xF7 && (cur_keys & 2048)) v &= ~4; if (row == 0xEF && (cur_keys & 4096)) v &= ~2; if (row == 0xEF && (cur_keys & 8192)) v &= ~4;                   // tecla 4: salta la cutscene
     return v;
   }
   return 0xFF;
@@ -211,7 +238,7 @@ int main(int argc, char** argv) {
       std::string it = sc.substr(p, q - p);
       size_t c = it.find(':');
       int keys = 0;
-      for (char ch : it.substr(0, c)) { if (ch == 'O') keys |= 1; if (ch == 'P') keys |= 2; if (ch == 'S') keys |= 16; if (ch == 'N') keys |= 4; if (ch == 'B') keys |= 8; if (ch == 'T') keys |= 32; if (ch == 'Q') keys |= 64; if (ch == 'A') keys |= 128; if (ch == '4') keys |= 256; if (ch == '1') keys |= 512; if (ch == '2') keys |= 1024; if (ch == '3') keys |= 2048; if (ch == '9') keys |= 4096; }
+      for (char ch : it.substr(0, c)) { if (ch == 'O') keys |= 1; if (ch == 'P') keys |= 2; if (ch == 'S') keys |= 16; if (ch == 'N') keys |= 4; if (ch == 'B') keys |= 8; if (ch == 'T') keys |= 32; if (ch == 'Q') keys |= 64; if (ch == 'A') keys |= 128; if (ch == '4') keys |= 256; if (ch == '1') keys |= 512; if (ch == '2') keys |= 1024; if (ch == '3') keys |= 2048; if (ch == '9') keys |= 4096; if (ch == '8') keys |= 8192; }
       script.push_back({atoi(it.substr(c + 1).c_str()), keys});
       p = q + 1;
     }

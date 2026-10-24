@@ -19,6 +19,8 @@ host_ops:       ld c,a
                 jp z,ui_setname
                 cp $70
                 jp z,ho_lights
+                cp $22
+                jp z,ho_saveload
                 cp $18
                 jr z,ho_restart
                 cp $52

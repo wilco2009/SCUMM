@@ -1227,6 +1227,11 @@ class GameMixin:
         op = self.opcode
         self.vars[VAR_OVERRIDE] = 0
         self.unfreeze_scripts()
+        ego = self.vars[0]                        # actorFollowCamera(VAR_EGO): si el protagonista esta en otra sala, empieza esa escena
+        if 0 <= ego < NUM_ACTORS:
+            room = self.actors[ego].room
+            if room and room != self.cur_room:
+                self.start_scene(room)
         self.host_log(op, [])
 
     def g_beginOverride(self):
