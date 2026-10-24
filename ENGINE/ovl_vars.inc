@@ -78,7 +78,7 @@ sdx_left         equ AV+12               ; fotogramas que le quedan al que suena
 ac_id           equ OVL_VARS+30         ; numero del actor que se dibuja
 UI_SIF           equ OVL_VARS+27         ; interfaz, cursor y VAR_CURSORSTATE guardados por cutscene()
 UI_SCUR          equ OVL_VARS+28
-UI_SV21          equ OVL_VARS+29
+UI_SV21          equ AV+22               ; palabra (no puede ir en OVL_VARS+29: pisaba ac_id)
 NAMEOV          equ $CE60               ; nombres de objeto cambiados por setObjectName: NNAMES entradas de NM_SIZE bytes (objeto, texto + 0)
 NNAMES          equ 8
 NM_SIZE         equ 26
