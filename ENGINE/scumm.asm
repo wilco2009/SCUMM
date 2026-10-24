@@ -191,7 +191,7 @@ sm_ok1:         ld a,'J'
                 ENDIF
                 ld a,(ERR)
                 or a
-                jr nz,sm_err
+                jp nz,sm_err
 
 main_loop:      ld a,(mk_first)
                 or a
@@ -200,7 +200,40 @@ main_loop:      ld a,(mk_first)
                 ld (mk_first),a
                 ld a,'O'
                 call sc_mark            ; O: primer fotograma
-ml_go:          call wait_vs
+ml_go:          xor a                   ; scummLoop dura VAR_TIMER_NEXT jiffies (1/60 s, minimo 1): al menos 5/6 de ese numero de fotogramas
+                ld (ml_acc),a
+ml_w:           call wait_vs
+                ld hl,ml_acc
+                add a,(hl)
+                ld (hl),a
+                ld a,(VAR_TIMER_NEXT)
+                cp 40
+                jr c,ml_t
+                ld a,40
+ml_t:           ld l,a
+                ld h,0
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,hl
+                add hl,de               ; * 5
+                ld de,3
+                add hl,de
+                ld b,0                  ; / 6
+ml_d:           ld de,6
+                or a
+                sbc hl,de
+                jr c,ml_dd
+                inc b
+                jr ml_d
+ml_dd:          ld a,b
+                or a
+                jr nz,ml_n
+                inc a
+ml_n:           ld b,a                  ; B = fotogramas que debe durar
+                ld a,(ml_acc)
+                cp b
+                jr c,ml_w
                 ld (DELTA),a
                 call vm_frame
                 ld a,(ERR)
@@ -215,7 +248,7 @@ ml_go:          call wait_vs
                 call keys
                 ld a,(rs_flag)          ; restart(): se vuelve a empezar como si se hubiera arrancado
                 or a
-                jr z,main_loop
+                jp z,main_loop
                 xor a
                 ld (rs_flag),a
                 call sc_hide_sprites
@@ -225,6 +258,7 @@ ml_go:          call wait_vs
                 ld sp,(sv_sp)
                 jp scumm_main
 rs_flag:        defb 0
+ml_acc:         defb 0
 sm_err:         call sc_hide_sprites
                 ld a,(ERR)
                 ld l,a
