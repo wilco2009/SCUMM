@@ -13,13 +13,14 @@ Formato del bloque (little endian):
   +15  u16 desplazamiento del nombre de los ficheros de sonido (VGM), +17 posicion de las tres cifras del sonido
   +20  10 x u16: valor de VAR_KEYPRESS para las teclas 1 2 3 4 5 6 7 8 9 0 (0: sin uso)
   +40  2 x u16: objetos que getState da siempre por abiertos (bit 8 del estado; 0 = ninguno)
-  +44  los textos
+  +44  numero de ids que son actores (0 = 25, como Maniac Mansion); los demas numeros son objetos
+  +45  los textos
 """
 import struct
 import sys
 
 SIZE = 256
-FIRST_TEXT = 44
+FIRST_TEXT = 45
 KEYS = '1234567890'
 
 
@@ -83,6 +84,7 @@ def build(path):
             struct.pack_into('<H', out, 20 + 2 * i, int(ky[k]))
     for i, o in enumerate([int(x) for x in c.get('objetos', {}).get('abiertos', '').split(',') if x.strip()][:2]):
         struct.pack_into('<H', out, 40 + 2 * i, o)
+    out[44] = int(c.get('objetos', {}).get('actores', '0') or 0)
     return bytes(out)
 
 

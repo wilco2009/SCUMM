@@ -1032,6 +1032,9 @@ def read_cfg(path):
                 o.setdefault('objcolor', {}).setdefault(oid, {})[de] = a
             elif k == 'pool':
                 o['pool'] = int(v)
+            elif k == 'map':                  # map=EGA,Chroma: cambia la correspondencia de un color en esa sala
+                de, a2 = (int(t) for t in v.split(','))
+                o.setdefault('map', {})[de] = a2
             elif k == 'rarity':
                 o['rarity'] = float(v)
     return out
@@ -1067,7 +1070,7 @@ def main():
     os.makedirs(a.outdir, exist_ok=True)
     gdir = os.path.join(a.outdir, 'gfx')
     os.makedirs(gdir, exist_ok=True)
-    emap = default_map(parse_map(a.map))
+    emap0 = default_map(parse_map(a.map))
     if a.rooms == ['all']:
         rooms = sorted(int(f[:2]) for f in os.listdir(a.dir) if f.upper().endswith('.LFL') and f[:2].isdigit())
     else:
@@ -1082,8 +1085,11 @@ def main():
             continue
         if h != 128 or w % 8 or w > 2000:
             continue
-        img = [[emap[p] for p in row] for row in img0]
         opt = cfg.get(r, {})
+        emap = list(emap0)
+        for de, a2 in opt.get('map', {}).items():
+            emap[de] = a2
+        img = [[emap[p] for p in row] for row in img0]
         PROTECT = opt.get('protect', []) + [tuple(int(v) for v in q.split(',')) for q in a.protect.split(';') if q.strip()]
         RARITY = opt.get('rarity', a.rarity)
         KEEP = opt.get('keep', [])

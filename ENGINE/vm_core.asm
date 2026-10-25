@@ -32,6 +32,8 @@ VARS            equ $E000       ; 256 variables de 16 bits
                 include "vars_v2.inc"
 OBJST           equ $E200       ; estado de cada objeto (780)
 PF_OPEN         equ PROF+40     ; perfil del juego: dos objetos (u16, 0 = ninguno) que getState da siempre por abiertos (bit 8 del estado)
+ACTN            equ $DC1E       ; byte: cuantos numeros (0..ACTN-1) son actores y no objetos; NACTORS salvo que el perfil diga otra cosa
+PF_ACT          equ PROF+44     ; perfil: numero de ids de actor (0 = NACTORS)
 OBJOWN          equ $E520       ; dueno de cada objeto (780)
 SLOTS           equ $E900       ; NSLOT x 16
 ; ranura: +0 estado, +1 donde, +2/+3 numero, +4 pagina, +5/+6 puntero, +7..+10 retardo (32 bits con signo)
@@ -96,6 +98,8 @@ vm_init:
                 xor a
                 ld (NBOXES),a
                 ld (NOBJS),a
+                ld a,NACTORS
+                ld (ACTN),a
                 ld ix,ACTORS
                 ld b,NACTORS
                 ld c,0
@@ -1462,6 +1466,12 @@ state_get:                              ; ARGS[0] = objeto -> HL = &estado, A = 
                 jr z,sg_hack
                 pop hl
                 jr sg_ok
+cp_act:         push hl                 ; compara A con el numero de ids de actor (flags como cp NACTORS)
+                ld hl,ACTN
+                cp (hl)
+                pop hl
+                ret
+
 sg_cmp:         ld a,h                  ; Z si el objeto del perfil (HL, 0 = ninguno) es DE
                 or l
                 jr z,sg_cmpn

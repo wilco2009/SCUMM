@@ -574,9 +574,10 @@ on_orig:        pop hl
                 ld a,h
                 or a
                 jr nz,on_obj
-                ld a,l
-                cp NACTORS
-                jr nc,on_obj
+                ld a,(ACTN)             ; ids de actor: los del perfil (Zak: 14); los demas son objetos
+                cp l
+                jr c,on_obj
+                jr z,on_obj
                 ld e,l                  ; un actor: su nombre esta en el script que lo puso (pagina y direccion)
                 ld d,0
                 ld hl,ACTNAME

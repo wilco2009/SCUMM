@@ -170,6 +170,11 @@ scumm_main:     di
                 ld hl,0                 ; la palabra de depuracion empieza a cero (la RAM no esta limpia)
                 ld (DBG_START),hl
                 call vm_init
+                ld a,(PF_ACT)           ; el perfil puede dar menos ids de actor (los demas numeros son objetos)
+                or a
+                jr z,pa_ok
+                ld (ACTN),a
+pa_ok:
                 ld hl,11               ; VAR_CURRENT_LIGHTS: luz de la sala, actores con colores y paleta base (como resetScummVars)
                 ld (VAR_CURRENT_LIGHTS),hl
                 ld hl,ev_handler

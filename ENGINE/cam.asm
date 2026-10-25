@@ -204,7 +204,7 @@ cm_fol:         ld a,(cam_fol)
                 cp $FF
                 jr nz,cf1
                 ld a,(VARS)             ; VAR_EGO
-cf1:            cp NACTORS
+cf1:            call cp_act
                 jp nc,cm_norm
                 call actor_addr
                 ld a,(CURROOM)

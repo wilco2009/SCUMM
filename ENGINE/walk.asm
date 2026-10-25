@@ -893,7 +893,7 @@ object_or_actor_xy:
                 or a
                 jr nz,oa_obj
                 ld a,l
-                cp NACTORS
+                call cp_act
                 jr nc,oa_obj
                 call actor_addr
                 jr oa_pos
@@ -912,7 +912,7 @@ oa_inv:
                 ld de,OBJOWN
                 add hl,de
                 ld a,(hl)
-                cp NACTORS
+                call cp_act
                 jr nc,oa_none
                 call actor_addr
 oa_pos:
@@ -1019,7 +1019,7 @@ h_o5_walkActorToActor:                  ; ARGS: actor, actor de destino, distanc
                 or a
                 ret nz
                 ld a,e
-                cp NACTORS
+                call cp_act
                 ret nc
                 call actor_addr
                 ld a,(CURROOM)
@@ -1032,7 +1032,7 @@ h_o5_walkActorToActor:                  ; ARGS: actor, actor de destino, distanc
                 or a
                 ret nz
                 ld a,e
-                cp NACTORS
+                call cp_act
                 ret nc
                 call actor_addr         ; IX = el destino
                 ld a,(CURROOM)
@@ -1117,7 +1117,7 @@ h_o5_faceActor:                         ; ARGS: actor, objeto
                 or a
                 ret nz
                 ld a,e
-                cp NACTORS
+                call cp_act
                 ret nc
                 call actor_addr
                 ld a,(CURROOM)
@@ -1189,7 +1189,7 @@ gx_go:
                 or a
                 jr nz,gx_obj
                 ld a,l
-                cp NACTORS
+                call cp_act
                 jr nc,gx_obj
                 ld bc,0
                 or a

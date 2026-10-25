@@ -973,7 +973,7 @@ gd_isact:       ld a,h
                 or a
                 jp nz,gd_no
                 ld a,l
-                cp NACTORS
+                call cp_act
                 jp nc,gd_no
                 ld a,1
                 ret
@@ -1071,7 +1071,7 @@ h_o2_endCutscene:
                 or a
                 jp nz,h_host
                 ld a,l
-                cp NACTORS
+                call cp_act
                 jp nc,h_host
                 call actor_addr
                 ld b,(ix+0)

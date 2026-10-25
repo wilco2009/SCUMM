@@ -126,7 +126,7 @@ deref_actor:                            ; derefActor: DE = numero -> IX; error: 
                 or a
                 jr nz,da_bad
                 ld a,e
-                cp NACTORS
+                call cp_act
                 jr nc,da_bad
                 call actor_addr
                 or a
@@ -308,7 +308,7 @@ h_o5_getActorRoom:                      ; ARGS: resultado, actor
                 or a
                 jr nz,gar_w
                 ld a,e
-                cp NACTORS
+                call cp_act
                 jr nc,gar_w
                 call actor_addr
                 ld c,(ix+0)
@@ -322,7 +322,7 @@ h_o5_animateActor:                      ; ARGS: actor, animacion
                 or a
                 ret nz                  ; actor no valido: no hace nada
                 ld a,e
-                cp NACTORS
+                call cp_act
                 ret nc
                 call actor_addr
                 ld a,(ARGS+2)           ; animacion (byte)
@@ -453,7 +453,7 @@ stop_talk:                              ; stopTalk
                 ld a,l
                 cp $80
                 jr nc,stk_end
-                cp NACTORS
+                call cp_act
                 jr nc,stk_bad
                 call actor_addr
                 ld a,(CURROOM)
@@ -639,7 +639,7 @@ talker_ix:                              ; getTalkingActor + derefActorSafe: IX =
                 ld a,l
                 cp $FF
                 jr z,tk_none
-                cp NACTORS
+                call cp_act
                 jr nc,tk_none
                 call actor_addr
                 or a
@@ -1102,7 +1102,7 @@ load_room_hl:                           ; loadRoom: HL = sala; no hace nada si y
 h_o5_actorFollowCamera:                 ; si el actor esta en otra sala, empieza esa escena; despues el anfitrion lleva la camara
                 ld hl,(ARGS)
                 ld a,l
-                cp NACTORS
+                call cp_act
                 jr nc,afc_host
                 call actor_addr
                 ld b,(ix+0)
