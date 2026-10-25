@@ -774,10 +774,14 @@ def plan_pool(room, emap, want):
     return min(want, len({t for g in pre if g for col in g for t in col}))
 
 
-def limit_pool(grids, pool):
+def limit_pool(grids, pool, weights=None):
     """Reduce los tiles de todos los objetos a `pool` como mucho (el mas frecuente y luego el que mas error ponderado
     se llevaria) y devuelve (lista de tiles de la reserva, rejillas con el indice del tile de la reserva)."""
-    counts = Counter(t for g in grids if g for col in g for t in col)
+    counts = Counter()
+    for k, g in enumerate(grids):
+        for col in (g or []):
+            for t in col:
+                counts[t] += weights[k] if weights else 1
     pats = list(counts)
     if len(pats) > pool:
         kept = [max(pats, key=lambda p: counts[p])]
@@ -1032,6 +1036,8 @@ def read_cfg(path):
                 o.setdefault('objcolor', {}).setdefault(oid, {})[de] = a
             elif k == 'pool':
                 o['pool'] = int(v)
+            elif k == 'objprio':              # objprio=ID: los tiles de ese objeto pesan mucho al repartir la reserva (se funden los ultimos)
+                o.setdefault('objprio', set()).add(int(v))
             elif k == 'map':                  # map=EGA,Chroma: cambia la correspondencia de un color en esa sala
                 de, a2 = (int(t) for t in v.split(','))
                 o.setdefault('map', {})[de] = a2
@@ -1120,7 +1126,7 @@ def main():
         grids = None
         if pool:
             grids = object_grids(room, emap)             # con los pesos de color de esta sala
-            tiles, idx = limit_pool(grids, pool)
+            tiles, idx = limit_pool(grids, pool, [30 if ob.id in opt.get('objprio', ()) else 1 for ob in room.objects])
             layer = (tiles, idx)
         global MASK_MIN
         MASK_MIN = a.mask_min
