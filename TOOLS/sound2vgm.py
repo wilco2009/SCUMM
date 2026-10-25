@@ -17,7 +17,7 @@ import scumm2
 
 TICK_HZ = 236
 SAMPLE_RATE = 44100
-MAX_TICKS = 236 * 180            # 3 minutos: un sonido que no acaba antes se corta (bucle)
+MAX_TICKS = 236 * 3600           # 1 hora: tope de seguridad para un sonido que no repite nunca el estado del secuenciador (los que acaban o repiten salen antes: el 70, 30 min)
 
 NOTE_LENGTHS = [0, 0, 0, 2, 0, 3, 4, 5, 6, 8, 9, 12, 16, 18, 24, 32, 36, 48, 64, 72, 96]
 HULL_OFFSETS = [0, 12, 24, 36, 48, 60, 72, 88, 104, 120, 136, 256, 152, 164, 180]
