@@ -192,6 +192,8 @@ acd_nomk:       ld a,(ix+5)             ; traje
                 cp (hl)
                 jr nc,acd_tno
                 inc hl
+                inc hl
+                inc hl                  ; tras el numero de animaciones y el offset del fondo de celdas
                 ld e,c
                 ld d,0
                 add hl,de
@@ -216,6 +218,8 @@ acd_anim:       ld hl,(ac_blob)
                 ld a,c
                 cp (hl)                 ; numero de animaciones
                 ret nc
+                inc hl
+                inc hl
                 inc hl
                 ld e,c
                 ld d,0
@@ -310,28 +314,37 @@ acd_nd:         push iy
 acd_cell:       ld a,b
                 or a
                 ret z
+                ld a,(hl)               ; referencia: cx | cy << 4 y el indice de la celda en el fondo de celdas del traje (TOOLS/costume2.py)
+                ld (ac_pos),a
+                inc hl
+                ld a,(hl)
+                inc hl
+                ld (ac_nx),hl           ; la siguiente referencia
+                ld l,a
+                ld h,0
+                add hl,hl
+                ex de,hl                ; DE = 2 * indice
+                ld hl,(ac_blob)
+                inc hl
+                ld a,(hl)
+                inc hl
+                ld h,(hl)
+                ld l,a                  ; HL = offset de la tabla de celdas
+                add hl,de
+                ld de,(ac_blob)
+                add hl,de
+                ld a,(hl)
+                inc hl
+                ld h,(hl)
+                ld l,a                  ; HL = offset de la celda (banderas, forma, mascara, color)
+                add hl,de
+                dec hl                  ; el codigo de abajo cuenta con un byte antes de las banderas
                 ld (ac_cp),hl
                 inc hl
                 ld a,(hl)               ; banderas: bit 0 mascara completa, bit 1 color uniforme
                 ld (ac_fl),a
-                ld e,10                 ; tamano de la celda: posicion, banderas, forma (8) y, si no, mascara (8) y color (8 o 1)
-                bit 0,a
-                jr nz,acd_s1
-                ld e,18
-acd_s1:         bit 1,a
-                jr z,acd_s2
-                inc e
-                jr acd_s3
-acd_s2:         ld a,e
-                add a,8
-                ld e,a
-acd_s3:         ld d,0
-                ld hl,(ac_cp)
-                add hl,de
-                ld (ac_nx),hl
-                ld hl,(ac_cp)
                 push bc
-                ld a,(hl)               ; cx | cy << 4
+                ld a,(ac_pos)
                 ld c,a
                 and $0F
                 add a,a

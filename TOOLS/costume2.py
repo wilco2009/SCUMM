@@ -227,16 +227,19 @@ def cells_of(parts, emap):
     return gx, gy, cw, ch, cells
 
 
-def costume_blob(cost, emap, talk=True, two=True):
-    """Datos de un traje para el Z80: u8 numero de animaciones; por animacion u16 offset de su lista (0: no existe); la lista: u8 pasos y, por paso,
-    u16 offset del fotograma; fotograma: s8 dx, s8 dy, u8 cw, u8 ch, u8 n y n celdas no vacias: u8 cx | cy << 4, u8 banderas (bit 0: mascara completa, no se guarda; bit 1: color uniforme, un solo byte), pix[8], [mascara[8]], color (1 u 8 bytes)."""
-    # 0-3 caminar (dos poses; quieto = la primera); 4-7 hablando (cabeza de inicio + quieto + TALK_START = anim 20 + dir; segunda pose con TALK_STOP), si el traje lo tiene
+def costume_blob(cost, emap, talk=True, two=True, walk=2):
+    """Datos de un traje para el Z80. Cabecera: u8 numero de animaciones, u16 offset de la tabla del fondo de celdas y, por animacion, u16 offset de
+    su lista (0: no existe). La lista: u8 pasos y, por paso, u16 offset del fotograma. Fotograma: s8 dx, s8 dy, u8 cw, u8 ch, u8 n y n referencias
+    (u8 cx | cy << 4, u8 indice en el fondo). El fondo de celdas (comun a todos los fotogramas del traje: una celda repetida se guarda una vez):
+    tabla de u16 offsets y, por celda, u8 banderas (bit 0: mascara completa, no se guarda; bit 1: color uniforme, un solo byte), pix[8], [mascara[8]], color (1 u 8 bytes).
+    `walk` = poses de caminar por direccion como mucho (se reparten por igual entre los pasos del original)."""
+    # 0-3 caminar (quieto = la primera pose); 4-7 hablando (cabeza de inicio + quieto + TALK_START = anim 20 + dir; segunda pose con TALK_STOP), si el traje lo tiene
     na = 8 if talk and cost.num_anim >= 20 else min(cost.num_anim + 1, 4)
-    head = bytearray(1 + 2 * na)
-    head[0] = na
+    head_len = 3 + 2 * na
     body = bytearray()
     frames = {}
-    base = len(head)
+    pool, pool_idx = bytearray(), {}
+    pool_off = []
     lists = {}
     for anim in range(na):
         if anim >= 4:
@@ -256,8 +259,8 @@ def costume_blob(cost, emap, talk=True, two=True):
         else:
             limbs = cost.merged(anim)
             seq = cost.steps(limbs) if limbs else []
-            if len(seq) > 2:
-                seq = [seq[0], seq[len(seq) // 2]]             # dos poses de caminar
+            if len(seq) > walk:
+                seq = [seq[i * len(seq) // walk] for i in range(walk)]      # las poses de caminar, repartidas por igual
             poses = [(limbs, pos) for pos in seq]
         if not poses:
             continue
@@ -277,20 +280,30 @@ def costume_blob(cost, emap, talk=True, two=True):
                 for p, pix, mask, col in cells:
                     full = all(m == 0xFF for m in mask)
                     uni = len(set(col)) == 1
-                    body += bytes([p, (1 if full else 0) | (2 if uni else 0)]) + bytes(pix)
-                    if not full:
-                        body += bytes(mask)
-                    body += bytes(col[:1]) if uni else bytes(col)
+                    rec = bytes([(1 if full else 0) | (2 if uni else 0)]) + bytes(pix) + (b'' if full else bytes(mask)) + (bytes(col[:1]) if uni else bytes(col))
+                    if rec not in pool_idx:
+                        pool_idx[rec] = len(pool_off)
+                        pool_off.append(len(pool))
+                        pool += rec
+                    body += bytes([p, pool_idx[rec]])
             offs.append(frames[key])
         lists[anim] = offs
+    assert len(pool_off) <= 256, 'mas de 256 celdas distintas en un traje'
+    body_base = head_len
     lst = bytearray()
-    list_base = base + len(body)
+    lists_base = body_base + len(body)
+    head = bytearray(head_len)
+    head[0] = na
     for anim, offs in lists.items():
-        struct.pack_into('<H', head, 1 + 2 * anim, list_base + len(lst))
+        struct.pack_into('<H', head, 3 + 2 * anim, lists_base + len(lst))
         lst.append(len(offs))
         for o in offs:
-            lst += struct.pack('<H', o if o == 0xFFFF else base + o)
-    return bytes(head) + bytes(body) + bytes(lst)
+            lst += struct.pack('<H', o if o == 0xFFFF else body_base + o)
+    tab_base = lists_base + len(lst)
+    pool_base = tab_base + 2 * len(pool_off)
+    struct.pack_into('<H', head, 1, tab_base)
+    tab = b''.join(struct.pack('<H', pool_base + o) for o in pool_off)
+    return bytes(head) + bytes(body) + bytes(lst) + tab + bytes(pool)
 
 
 def bounds(parts):

@@ -42,6 +42,24 @@ SYNTH_SCRIPT = 180
 SYNTH_ROOM = 60
 
 
+
+COST_MAX = 6100                                  # lo que cabe en una pagina de datos
+
+
+def best_costume(costume2, cost, emap):
+    """El traje mas completo que cabe en una pagina: primero las dos poses de la boca, luego solo la abierta, luego sin boca; con cada una, las
+    poses de caminar (4, 3 o 2 por direccion). Si ni asi cabe devuelve el mas pequeno (el que llama lo descarta)."""
+    blob = None
+    for talk, two in ((True, True), (True, False), (False, False)):
+        for walk in (4, 3, 2):
+            try:
+                blob = costume2.costume_blob(cost, emap, talk=talk, two=two, walk=walk)
+            except (AssertionError, ValueError):       # mas de 256 celdas distintas
+                continue
+            if len(blob) <= COST_MAX:
+                return blob
+    return blob
+
 def room_mask(world, rn):
     import lfl2gfx
     try:
@@ -114,11 +132,7 @@ def build(world, game, first_page=16, include_test=False, sounds=None):
                 try:
                     costume2.SCALE = tuple(int(x) for x in tr.get('escala_%d' % cid, tr.get('escala', '3/4')).split('/'))     # escala_N = n/d: un traje concreto
                     cost = costume2.Costume(scumm2.resource(world.dir, ixd, 'costume', cid))
-                    blob = costume2.costume_blob(cost, emap)
-                    if len(blob) > 6100:                      # con las dos poses de la boca no cabe en una pagina: solo la abierta
-                        blob = costume2.costume_blob(cost, emap, two=False)
-                    if len(blob) > 6100:                      # ni asi: sin boca
-                        blob = costume2.costume_blob(cost, emap, talk=False)
+                    blob = best_costume(costume2, cost, emap)
                 except Exception:
                     continue
                 if len(blob) > 6100:                      # no cabe en una pagina: ese traje se queda con el rectangulo

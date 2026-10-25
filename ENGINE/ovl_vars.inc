@@ -77,6 +77,7 @@ dk_dst           equ $DCA8
 AL               equ $DCB0               ; hasta 2 x NACTORS bytes
 sdx_left         equ AV+12               ; fotogramas que le quedan al que suena (65535: sin fin)                ; desplazamiento en pixeles de la celda dentro de su tira
 ac_id           equ OVL_VARS+30         ; numero del actor que se dibuja
+ac_pos           equ AV+24               ; posicion (cx | cy << 4) de la celda que se dibuja
 UI_SIF           equ OVL_VARS+27         ; interfaz, cursor y VAR_CURSORSTATE guardados por cutscene()
 UI_SCUR          equ OVL_VARS+28
 UI_SV21          equ AV+22               ; palabra (no puede ir en OVL_VARS+29: pisaba ac_id)
