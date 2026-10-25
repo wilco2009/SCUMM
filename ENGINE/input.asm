@@ -684,7 +684,10 @@ od_cmp:         and 8
                 ld c,a
                 ld a,(FO_A)
                 cp c
-                ret nz                  ; el estado del padre no es el pedido: NC
+                jr z,od_okp
+                or a                    ; el estado del padre no es el pedido: NC (cp deja el acarreo a 1 si A < C)
+                ret
+od_okp:
                 ld hl,FO_CAP
                 dec (hl)
                 jr nz,od_chain
