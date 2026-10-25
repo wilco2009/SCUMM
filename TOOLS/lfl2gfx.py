@@ -1138,7 +1138,24 @@ def main():
                     if 0 <= x < w:
                         orig[y][x] = (255, 0, 255)
         mapped = [[CHROMA[p] for p in row] for row in img]
-        write_png(os.path.join(a.outdir, 'sala%02d.png' % r), orig + sep + mapped + sep + render)
+        withobj = None
+        if room is not None and not a.no_objects:       # cuarta banda: la sala con las imagenes de sus objetos puestas en su sitio (las escenas de la intro son objetos)
+            withobj = [list(row) for row in render]
+            for o in room.objects:
+                if not o.obim or o.width == 0 or o.height == 0 or o.id in OBJ_HIDE:
+                    continue
+                try:
+                    im = decode_obim(room.file, o.obim, o.width, o.height)
+                except IndexError:
+                    continue
+                fix = OBJ_COLOR.get(o.id, {})
+                for yy in range(o.height):
+                    for xx in range(o.width):
+                        if 0 <= o.y + yy < h and 0 <= o.x + xx < w:
+                            withobj[o.y + yy][o.x + xx] = CHROMA[fix.get(emap[im[yy][xx]], emap[im[yy][xx]])]
+            if withobj == [list(row) for row in render]:
+                withobj = None
+        write_png(os.path.join(a.outdir, 'sala%02d.png' % r), orig + sep + mapped + sep + render + (sep + withobj if withobj else []))
         if any(mcols):                         # mascaraNN.png: la sala en grises; arriba en rojo los pixeles de la mascara original, abajo las celdas que tapan al personaje
             def gris(v):
                 g = sum(EGA[v]) // 6 + 40

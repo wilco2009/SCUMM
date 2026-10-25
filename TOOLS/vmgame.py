@@ -1160,9 +1160,9 @@ class GameMixin:
             d = self.obj_act_dist(a, i)
             if d < dist:
                 best, dist = i, d
-            i = (i - 1) & 255
-            if not i >= mn:
+            if i <= mn:                      # sin envolver: con MIN = 0 el 8 bits de --obj nunca bajaria de MIN
                 break
+            i -= 1
         self.write_var(r, best)
 
     def g_setBoxFlags(self):
