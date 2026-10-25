@@ -167,6 +167,8 @@ scumm_main:     di
                 call cursor_init
                 call cursor_draw
                 ENDIF
+                ld hl,0                 ; la palabra de depuracion empieza a cero (la RAM no esta limpia)
+                ld (DBG_START),hl
                 call vm_init
                 ld hl,11               ; VAR_CURRENT_LIGHTS: luz de la sala, actores con colores y paleta base (como resetScummVars)
                 ld (VAR_CURRENT_LIGHTS),hl
