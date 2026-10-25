@@ -239,7 +239,15 @@ ml_n:           ld b,a                  ; B = fotogramas que debe durar
                 cp b
                 jr c,ml_w
                 ld (DELTA),a
-                call vm_frame
+                ld hl,(DBG_START)       ; depuracion: un numero de script escrito aqui desde el emulador se arranca en este fotograma
+                ld a,h
+                or l
+                jr z,ml_nd
+                ld (APIN),hl
+                ld hl,0
+                ld (DBG_START),hl
+                call vm_run_script
+ml_nd:          call vm_frame
                 ld a,(ERR)
                 or a
                 jr nz,sm_err

@@ -1,5 +1,6 @@
 ; GENERADO A MANO: variables del overlay y de la interfaz (RAM; el overlay esta en una pagina de solo lectura)
 OVL_VARS        equ $CE30
+DBG_START       equ $DC1C               ; palabra de depuracion (la escribe el usuario desde el emulador): numero de script a arrancar; el motor la pone a 0
 cam_cx          equ OVL_VARS+0
 cam_mode        equ OVL_VARS+2
 cam_dest        equ OVL_VARS+3
