@@ -98,8 +98,7 @@ vm_init:
                 xor a
                 ld (NBOXES),a
                 ld (NOBJS),a
-                ld a,NACTORS
-                ld (ACTN),a
+                call act_init
                 ld ix,ACTORS
                 ld b,NACTORS
                 ld c,0
@@ -1466,6 +1465,13 @@ state_get:                              ; ARGS[0] = objeto -> HL = &estado, A = 
                 jr z,sg_hack
                 pop hl
                 jr sg_ok
+act_init:       ld a,(PF_ACT)           ; ids de actor: los del perfil, o NACTORS si no dice
+                or a
+                jr nz,ai_ok
+                ld a,NACTORS
+ai_ok:          ld (ACTN),a
+                ret
+
 cp_act:         push hl                 ; compara A con el numero de ids de actor (flags como cp NACTORS)
                 ld hl,ACTN
                 cp (hl)
