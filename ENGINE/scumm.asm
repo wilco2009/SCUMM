@@ -1290,12 +1290,20 @@ text_update:    ld a,(tx_on)
 ; ---------------------------------------------------------------------
 ;  Salas: .GFX (SCUMM/TOOLS/lfl2gfx.py, ver SCUMM/TOOLS/LFL2GFX.md)
 ; ---------------------------------------------------------------------
+gl_open:        ld a,h
+                or l
+                ret z
+                ld de,OBJST
+                add hl,de
+                set 3,(hl)
+                ret
+
 gf_load_room:   ld a,(EVARGS)
                 ld (gf_room),a
-                ld hl,OBJST+182         ; la puerta de seguridad cuenta como abierta desde que se carga la sala (el parche de getState, vm_core.asm,
-                set 3,(hl)              ; solo la abre cuando el script la lee, y entonces la sala ya esta pintada)
-                ld hl,OBJST+193
-                set 3,(hl)
+                ld hl,(PF_OPEN)         ; los objetos que el perfil da por abiertos (getState, vm_core.asm) se dibujan abiertos desde que se carga la sala
+                call gl_open
+                ld hl,(PF_OPEN+2)
+                call gl_open
                 ld hl,160               ; camara: seguir al protagonista, desde el centro
                 ld (cam_cx),hl
                 ld a,2

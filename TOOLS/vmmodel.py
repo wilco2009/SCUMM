@@ -190,8 +190,6 @@ class VM(GameMixin):
     def get_state(self, obj):
         if not 0 <= obj < NUM_OBJECTS:
             raise VMError(E_BADOBJ)
-        if obj in (182, 193):
-            self.state[obj] |= 8
         return self.state[obj]
 
     def put_state(self, obj, st):

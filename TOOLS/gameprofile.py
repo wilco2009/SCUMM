@@ -12,6 +12,7 @@ Formato del bloque (little endian):
   +13  u16 desplazamiento del nombre de los ficheros de sala
   +15  u16 desplazamiento del nombre de los ficheros de sonido (VGM), +17 posicion de las tres cifras del sonido
   +20  10 x u16: valor de VAR_KEYPRESS para las teclas 1 2 3 4 5 6 7 8 9 0 (0: sin uso)
+  +40  2 x u16: objetos que getState da siempre por abiertos (bit 8 del estado; 0 = ninguno)
   +44  los textos
 """
 import struct
@@ -80,6 +81,8 @@ def build(path):
     for i, k in enumerate(KEYS):
         if k in ky:
             struct.pack_into('<H', out, 20 + 2 * i, int(ky[k]))
+    for i, o in enumerate([int(x) for x in c.get('objetos', {}).get('abiertos', '').split(',') if x.strip()][:2]):
+        struct.pack_into('<H', out, 40 + 2 * i, o)
     return bytes(out)
 
 

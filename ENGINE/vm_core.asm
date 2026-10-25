@@ -31,6 +31,7 @@ SCRIPT_NUM_ENCD equ 10002
 VARS            equ $E000       ; 256 variables de 16 bits
                 include "vars_v2.inc"
 OBJST           equ $E200       ; estado de cada objeto (780)
+PF_OPEN         equ PROF+40     ; perfil del juego: dos objetos (u16, 0 = ninguno) que getState da siempre por abiertos (bit 8 del estado)
 OBJOWN          equ $E520       ; dueno de cada objeto (780)
 SLOTS           equ $E900       ; NSLOT x 16
 ; ranura: +0 estado, +1 donde, +2/+3 numero, +4 pagina, +5/+6 puntero, +7..+10 retardo (32 bits con signo)
@@ -1451,19 +1452,28 @@ state_get:                              ; ARGS[0] = objeto -> HL = &estado, A = 
                 add hl,de
                 ld de,OBJST
                 add hl,de
+                push hl
                 ld de,(ARGS)
-                ld a,d
-                or a
-                jr nz,sg_ok
-                ld a,e
-                cp 182                  ; getState: la copia "pirata" mantiene abierta la puerta de seguridad
+                ld hl,(PF_OPEN)
+                call sg_cmp
                 jr z,sg_hack
-                cp 193
-                jr nz,sg_ok
-sg_hack:
+                ld hl,(PF_OPEN+2)
+                call sg_cmp
+                jr z,sg_hack
+                pop hl
+                jr sg_ok
+sg_cmp:         ld a,h                  ; Z si el objeto del perfil (HL, 0 = ninguno) es DE
+                or l
+                jr z,sg_cmpn
+                or a
+                sbc hl,de
+                ret
+sg_cmpn:        or 1
+                ret
+sg_hack:        pop hl
                 bit 3,(hl)
                 jr nz,sg_ok
-                set 3,(hl)              ; la puerta pasa a abierta al leerla: se avisa para que se vuelva a dibujar
+                set 3,(hl)              ; getState lo da por abierto; se avisa para que se vuelva a dibujar
                 push hl
                 ld a,(hl)
                 ld l,a

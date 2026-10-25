@@ -300,13 +300,17 @@ us_set:         ld (cur_x),a
                 ret
 
 ; las filas del bufer virtual a la pantalla (32 columnas desde UI_OFF); con un mensaje en pantalla las filas 20 en adelante son suyas
-ui_blit:        ld a,(tx_on)
-                or a
-                ld b,24-UI_R0
-                jr z,ub_n
-                ld b,TXT_ROW-UI_R0
-ub_n:           ld hl,UIVB
+ui_blit:        ld hl,UIVB              ; la primera fila (la frase) no se desplaza con la ventana: siempre desde la columna 0
                 ld de,DFILE+1+UI_R0*33
+                ld bc,32
+                ldir
+                ld a,(tx_on)
+                or a
+                ld b,24-UI_R0-1
+                jr z,ub_n
+                ld b,TXT_ROW-UI_R0-1
+ub_n:           ld hl,UIVB+UI_COLS
+                ld de,DFILE+1+(UI_R0+1)*33
 ub_l:           push bc
                 push hl
                 push de

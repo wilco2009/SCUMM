@@ -24,6 +24,9 @@ pasmo scumm.asm scumm.bin scumm.sym || goto error
 pasmo overlay.asm overlay.bin overlay.sym || goto error
 pasmo scumm.asm scumm.bin scumm.sym || goto error
 set D=%BASE%\SCUMM\%G%
+rem el perfil del juego (games\*.cfg) va dentro de DATA.BIN: se regenera siempre para que un cambio en el .cfg llegue a la SD
+if /i "%G%"=="MANIAC" python ..\TOOLS\pack_data.py ..\V2\ManiacMansionDOS %P%\DATA.BIN --game ..\games\maniac.cfg --sounds %P%\snd >nul || goto error
+if /i "%G%"=="ZAK" python ..\TOOLS\pack_data.py "..\V2\Zak McKracken" %P%\DATA.BIN --game ..\games\zak.cfg --sounds %P%\snd >nul || goto error
 if not exist "%D%\DATA\SND" mkdir "%D%\DATA\SND"
 copy /y scumm.bin "%BASE%\SCUMM\SCUMM.BIN" >nul || goto error
 copy /y SCUMM.B81 "%D%\%G%.B81" >nul || goto error
