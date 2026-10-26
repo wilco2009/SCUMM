@@ -202,6 +202,21 @@ static std::vector<Key> script;
 static int cur_keys = 0, frames_done = 0, frame_limit = 0;
 static bool finished = false;
 static uint16_t main_loop_addr = 0;
+// ---- TS_PROF=desde-hasta (fotogramas): cuenta T-estados por rutina (el simbolo anterior) y por vuelta del bucle principal
+#include <map>
+#include <algorithm>
+static std::vector<std::pair<unsigned, std::string>> syms;
+static std::map<std::string, long long> prof;
+static long long prof_loop_start = 0, prof_total = 0, prof_work = 0;
+static std::map<int, std::map<std::string, long long>> prof_by_loop;
+static int prof_n = 0;
+static std::vector<long long> prof_loops;
+static int prof_lo = -1, prof_hi = -1;
+static const char* sym_of(unsigned pc) {
+  static std::string cur; const std::pair<unsigned, std::string>* best = nullptr;
+  for (auto& p : syms) { if (p.first <= pc && (!best || p.first >= best->first)) best = &p; }
+  cur = best ? best->second : "?"; return cur.c_str();
+}
 static void dump(const char* path) {
   FILE* f = fopen(path, "wb");
   fwrite(shadow, 1, 65536, f);
@@ -273,7 +288,7 @@ int main(int argc, char** argv) {
   { FILE* s = fopen(argv[2], "r"); char line[256];
     while (s && fgets(line, sizeof line, s)) {
       char name[128]; unsigned v;
-      if (sscanf(line, "%127s EQU %xH", name, &v) == 2 && !strcmp(name, "main_loop")) main_loop_addr = v;
+      if (sscanf(line, "%127s EQU %xH", name, &v) == 2) { if (!strcmp(name, "main_loop")) main_loop_addr = v; if (v >= 0x4200 && v < 0x8000) syms.push_back({v, name}); }
     }
     if (s) fclose(s); }
   sd_dir = argv[3];
@@ -304,6 +319,10 @@ int main(int argc, char** argv) {
   z80.sp.w = 0xCFF8;
   wr(0xCFF8, 0xE0); wr(0xCFF9, 0xFF);
   z80.pc.w = 0x4212; z80.halted = 0; z80.iff1 = z80.iff2 = 0;
+  if (const char* os = getenv("TS_OSYM")) { FILE* q = fopen(os, "r"); char line[256];
+    while (q && fgets(line, sizeof line, q)) { char name[128]; unsigned v; if (sscanf(line, "%127s EQU %xH", name, &v) == 2 && v < 0x2000) syms.push_back({v, std::string("ovl:") + name}); }
+    if (q) fclose(q); }
+  if (const char* pf = getenv("TS_PROF")) sscanf(pf, "%d-%d", &prof_lo, &prof_hi);
   if (const char* w = getenv("TS_WATCH")) { unsigned lo = 0, hi = 0, fr = 0; sscanf(w, "%x-%x,%u", &lo, &hi, &fr); w_lo = lo; w_hi = hi; w_from = fr; }
   long long steps = 0;
   size_t ki = 0;
@@ -311,6 +330,8 @@ int main(int argc, char** argv) {
   while (!finished) {
     if (z80.pc.w == main_loop_addr) {
       motor_tick(true);
+      if (prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi) { prof_loops.push_back(prof_work); }
+      prof_work = 0; prof_n = frames_done;
       frames_done++; g_fr = frames_done;
       if (const char* pk = getenv("TS_POKE")) {            // TS_POKE=fotograma:direccion:valor[,...]: escribe un byte (hex) en ese fotograma
         unsigned f, a, v; const char* p = pk;
@@ -339,11 +360,28 @@ int main(int argc, char** argv) {
       printf("%c", 10); break;
     }
     hist[hi++ & 255] = z80.pc.w;
+    int ts0 = tstates;
     z80_do_opcode();
+    if (prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi) { const char* sn = sym_of(hist[(hi - 1) & 255]); if (strcmp(sn, "hs_w")) { prof[sn] += 1; prof_by_loop[prof_n][sn] += 1; prof_total++; prof_work++; } }
     steps_g++;
     if (cmd_pend) motor_tick(false);
     if (steps > 50000000LL && !getenv("TS_NOSTOP")) { printf("atascado; ultimos PC:%c", 10); for (int k = 120; k > 0; k--) printf("%04X ", hist[(hi - k) & 255]); printf("%c", 10); break; }
     if (++steps > 2000000000LL) { printf("demasiadas instrucciones, pc=%04X%c", z80.pc.w, 10); break; }
+  }
+  if (prof_lo >= 0) {
+    std::vector<std::pair<long long, std::string>> v; for (auto& kv : prof) v.push_back({kv.second, kv.first});
+    std::sort(v.rbegin(), v.rend());
+    printf("PERFIL de los fotogramas %d-%d: %lld T-estados (%zu vueltas)%c", prof_lo, prof_hi, prof_total, prof_loops.size(), 10);
+    for (size_t i = 0; i < v.size() && i < 25; i++) printf("  %-18s %9lld  %5.1f%%%c", v[i].second.c_str(), v[i].first, 100.0 * v[i].first / prof_total, 10);
+    { std::vector<std::pair<long long, int>> w; for (auto& kv : prof_by_loop) { long long t = 0; for (auto& q : kv.second) t += q.second; w.push_back({t, kv.first}); }
+      std::sort(w.rbegin(), w.rend());
+      printf("las 8 vueltas mas pesadas (instrucciones):%c", 10);
+      for (size_t i = 0; i < w.size() && i < 8; i++) {
+        auto& m = prof_by_loop[w[i].second]; std::vector<std::pair<long long, std::string>> t; for (auto& q : m) t.push_back({q.second, q.first}); std::sort(t.rbegin(), t.rend());
+        printf("  vuelta %d: %lld;", w[i].second, w[i].first); for (size_t k = 0; k < 3 && k < t.size(); k++) printf(" %s=%lld", t[k].second.c_str(), t[k].first); printf("%c", 10);
+      } }
+    std::sort(prof_loops.begin(), prof_loops.end());
+    if (!prof_loops.empty()) printf("instrucciones por vuelta: mediana %lld, p90 %lld, maxima %lld (un fotograma de 50 Hz son unas 8000 instrucciones a 3,25 MHz)%c", prof_loops[prof_loops.size() / 2], prof_loops[prof_loops.size() * 9 / 10], prof_loops.back(), 10);
   }
   printf("fotogramas: %d, instrucciones: %lld, ERR=%d, sala=%d%c", frames_done, steps, rd(0xEB0B), rd(0xEB40), 10);
   dump(argv[5]);

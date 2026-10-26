@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Comprueba el volcado de test_scumm en HiRes 8x1: la sombra (lo que ve la FPGA) tiene que ser, columna a columna, la sala en la posicion del
-hardware (hv_cam, hv_fine) y los bufers de entrada las columnas hv_cam - 1 y hv_cam + 32. Se ignoran las zonas de los objetos (se dibujan o no segun su estado).
+hardware (hv_cam, hv_fine) y los bufers de entrada las columnas hv_cam - 1 y hv_cam + 32. Los objetos se componen con la lista de los que se dibujan (HR_DLIST).
 Uso: check_hr.py volcado.bin scumm.sym carpeta_con_los_ROOMnn.GFX"""
 import os
 import struct
@@ -21,13 +21,14 @@ gcam = lg[sym['gf_cam']] | (lg[sym['gf_cam'] + 1] << 8)
 gfine = lg[sym['gf_fine']]
 g = open(os.path.join(sys.argv[3], 'gfx', 'ROOM%02d.GFX' % room) if os.path.exists(os.path.join(sys.argv[3], 'gfx')) else os.path.join(sys.argv[3], 'ROOM%02d.GFX' % room), 'rb').read()
 cols, h, nobj, sec = struct.unpack_from('<HBBH', g, 6)
-rects = []
+recs = []
 for i in range(nobj):
-    off, c, l, nc, nl = struct.unpack_from('<HBBBB', g, sec + 6 * i)
-    if off != 0xFFFF:
-        rects.append((c, l, nc, nl))
+    recs.append(struct.unpack_from('<HBBBB', g, sec + 6 * i))
+ndl = lg[sym['hv_ndl']]
+dlist = list(lg[sym['HR_DLIST']:sym['HR_DLIST'] + ndl])
+rects = []
 base = d[131072 + 2048 + 7] << 8
-print('sala %d, camara hw %d+%d/8 (logica %d+%d/8), orden pendiente %d, columnas %d, objetos %d' % (room, cam, fine, gcam, gfine, pend, cols, len(rects)))
+print('sala %d, camara hw %d+%d/8 (logica %d+%d/8), orden pendiente %d, columnas %d, objetos %d' % (room, cam, fine, gcam, gfine, pend, cols, len(recs)))
 if pend:
     print('orden del motor en curso: estado transitorio, no se comprueba')
     sys.exit(0)
@@ -42,15 +43,23 @@ def covered(w, y):
 def col(w):
     if w < 0 or w >= cols:
         return bytes(256)
-    return g[256 * (w + 1):256 * (w + 2)]
+    b = bytearray(g[256 * (w + 1):256 * (w + 2)])
+    for i in dlist:                               # los objetos que se dibujan, en el orden de la lista: el ultimo escrito queda encima
+        if i >= len(recs):
+            continue
+        off, c, l, nc, nl = recs[i]
+        if off == 0xFFFF or not (c <= w < c + nc):
+            continue
+        p = off + (w - c) * 2 * nl
+        b[l:l + nl] = g[p:p + nl]
+        b[128 + l:128 + l + nl] = g[p + nl:p + 2 * nl]
+    return bytes(b)
 
 
 for s in range(34):
     w = cam + s if s < 32 else (cam + 32 if s == 32 else cam - 1)
     cb = col(w)
     for y in range(128):
-        if covered(w, y):
-            continue
         if s < 32:
             got = (sh[base + y * 32 + s], sh[0xC000 + y * 32 + s])
         elif s == 32:

@@ -22,6 +22,8 @@ HR_LATT         equ $DC00
 HR_OBJREC       equ HR_BM+$1A07         ; 6 bytes por objeto (hasta 84): desplazamiento (2), columna, linea, columnas, lineas; sitio libre del bloque del bitmap
 HR_DLIST        equ HR_BM+$1E00         ; indices de los objetos que se dibujan, del ultimo al primero
 HR_COLBUF       equ HR_BM+$1F00         ; la columna que se compone: 128 bytes de bitmap y 128 de atributos
+HR_FLAGS        equ HR_ATT+$1A07        ; un byte por objeto (hasta 84): 1 si se dibujaba la ultima vez (sitio libre del bloque de atributos)
+HR_NFLAGS       equ HR_ATT+$1B00        ; lo mismo, con el estado de ahora
 ROOMPG0         equ 8                   ; paginas fisicas de la sala (8-13)
 ROOMMAX         equ 6*8192
 DBGPORT         equ $3FEF
@@ -49,6 +51,9 @@ hv_oh           equ HV+25
 hv_so           equ HV+26
 hv_rem          equ HV+28
 hv_pg           equ HV+30
+hv_c0            equ HV+32               ; columnas (minima y maxima) de los objetos que han cambiado
+hv_c1            equ HV+33
+hv_ch            equ HV+34
 hv_drawn        equ HV+31               ; 0: la sala aun no se ha dibujado (se dibuja ya en su sitio: el salto de la camara, o gd_update si nadie la mueve)
 
 ; ---------------------------------------------------------------------
@@ -297,6 +302,11 @@ hp_l:           ld hl,HR_COLBUF
 ; ---------------------------------------------------------------------
 hr_mkdl:        xor a
                 ld (hv_ndl),a
+                ld hl,HR_NFLAGS
+                ld de,HR_NFLAGS+1
+                ld bc,83
+                ld (hl),a
+                ldir
                 ld a,(NOBJS)
                 ld (hv_i),a
 hd_l:           ld a,(hv_i)
@@ -306,7 +316,15 @@ hd_l:           ld a,(hv_i)
                 ld (hv_i),a
                 call obj_drawn
                 jr nc,hd_l
-                ld a,(hv_ndl)
+                ld a,(hv_i)
+                cp 84
+                jr nc,hd_nf
+                ld e,a
+                ld d,0
+                ld hl,HR_NFLAGS
+                add hl,de
+                ld (hl),1
+hd_nf:          ld a,(hv_ndl)
                 ld e,a
                 ld d,0
                 ld hl,HR_DLIST
@@ -687,6 +705,10 @@ gf_draw_window: call hr_settle
                 ld (gd_pending),a
                 ld (hv_c),a
                 call hr_mkdl
+                ld hl,HR_NFLAGS
+                ld de,HR_FLAGS
+                ld bc,84
+                ldir
 dw_l:           ld a,(hv_c)
                 ld e,a
                 ld d,0
@@ -714,6 +736,113 @@ dw_l:           ld a,(hv_c)
                 call hr_makecol         ; y el de la izquierda
                 ld a,$FF
                 call hr_put
+                jp hr_unmap
+
+; un objeto ha cambiado de estado: solo se vuelven a componer las columnas de los objetos cuyo "se dibuja" ha cambiado (y que estan en pantalla o en los bufers)
+hr_objupd:      call hr_settle
+                xor a
+                ld (gd_pending),a
+                call hr_mkdl
+                xor a
+                ld (hv_i),a
+                ld (hv_ch),a
+                ld (hv_c1),a
+                dec a
+                ld (hv_c0),a
+hou_l:          ld a,(hv_i)
+                ld hl,hv_nobj
+                cp (hl)
+                jr nc,hou_cmp
+                cp 84
+                jr nc,hou_cmp
+                ld e,a
+                ld d,0
+                ld hl,HR_FLAGS
+                add hl,de
+                ld b,(hl)
+                ld hl,HR_NFLAGS
+                add hl,de
+                ld a,(hl)
+                cp b
+                jr z,hou_n              ; sigue igual
+                ld h,d
+                ld l,e
+                add hl,hl
+                add hl,de
+                add hl,hl               ; 6 * objeto
+                ld de,HR_OBJREC
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                inc hl
+                ld a,d
+                and e
+                inc a
+                jr z,hou_n              ; sin imagen: no hay nada que redibujar
+                ld a,1
+                ld (hv_ch),a
+                ld a,(hl)               ; primera columna
+                ld c,a
+                inc hl
+                inc hl
+                ld b,(hl)               ; columnas
+                ld hl,hv_c0
+                cp (hl)
+                jr nc,hou_a
+                ld (hl),a
+hou_a:          ld a,c
+                add a,b
+                dec a                   ; ultima columna
+                ld hl,hv_c1
+                cp (hl)
+                jr c,hou_n
+                jr z,hou_n
+                ld (hl),a
+hou_n:          ld hl,hv_i
+                inc (hl)
+                jr hou_l
+hou_cmp:        ld a,(hv_ch)
+                or a
+                jr z,hou_cp
+                xor a
+                ld (hv_c),a             ; 0 = bufer de la izquierda, 1-32 = columnas de pantalla 0-31, 33 = bufer de la derecha
+hou_s:          ld a,(hv_c)
+                ld e,a
+                ld d,0
+                ld hl,(hv_cam)
+                add hl,de
+                dec hl                  ; columna del mundo
+                ld a,h
+                or a
+                jr nz,hou_sn
+                ld c,l
+                ld hl,hv_c0
+                ld a,c
+                cp (hl)
+                jr c,hou_sn
+                ld a,(hv_c1)
+                cp c
+                jr c,hou_sn
+                ld e,c
+                ld d,0
+                call hr_makecol
+                ld a,(hv_c)
+                or a
+                jr nz,hou_nl
+                ld a,$FF
+                jr hou_p
+hou_nl:         dec a
+hou_p:          call hr_put
+hou_sn:         ld hl,hv_c
+                inc (hl)
+                ld a,(hl)
+                cp 34
+                jr c,hou_s
+hou_cp:         ld hl,HR_NFLAGS
+                ld de,HR_FLAGS
+                ld bc,84
+                ldir
                 jp hr_unmap
 
 ; salto de la camara: HL = posicion en pixeles (se acota a la sala)
@@ -755,7 +884,7 @@ gd_update:      ld a,(gf_have)
                 ld a,(gd_pending)
                 or a
                 ret z
-                jp gf_draw_window
+                jp hr_objupd
 
 ; camara logica (la de los scripts): los movimientos de gf_move_* no tocan el hardware
 gf_move_right:  ld hl,(gf_cam)
