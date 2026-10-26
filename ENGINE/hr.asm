@@ -621,12 +621,39 @@ hfn_r:          dec hl                  ; derecha
                 call hr_put
                 jp hr_unmap
 
-; al final de la vuelta del bucle principal: si hay una orden del motor, se espera a que acabe (se ejecuta en la linea 254, y el borrado
-; vertical sigue ~7 ms) y se cierra el movimiento (fino a 0 o 7 y bufer de entrada) en seguida, con el haz todavia fuera de la pantalla. Si se
-; cerrara al principio del fotograma siguiente, una vuelta que dura mas de un fotograma dejaria ver la memoria movida con el fino viejo (salto de 8 px)
-hr_end:         ld a,(hv_pend)
+; al FINAL de la vuelta del bucle principal: si la camara tiene que cruzar de columna, aqui se manda la orden del motor, se espera a que acabe (se ejecuta en
+; la linea 254; la espera sustituye a la del VSYNC, que se haria igual) y se cierra el movimiento (fino a 0 o 7 y bufer de entrada) en seguida, con el haz
+; fuera de la pantalla. Asi el movimiento de la memoria y el cambio del fino quedan pegados aunque la vuelta dure mas de un fotograma. hr_frame solo mueve
+; el fino dentro de la columna.
+hr_end:         ld a,(gf_have)
                 or a
                 ret z
+                ld a,(hv_drawn)
+                or a
+                ret z
+                ld a,(hv_pend)
+                or a
+                jp nz,hr_settle
+                call gf_lpos
+                push hl
+                call gf_campx
+                ex de,hl
+                pop hl
+                or a
+                sbc hl,de               ; logica - hardware
+                ret z
+                jr c,he_right
+                ld a,(hv_fine)
+                cp 7
+                ret nz
+                ld a,1
+                call hr_send
+                jp hr_settle
+he_right:       ld a,(hv_fine)
+                or a
+                ret nz
+                ld a,2
+                call hr_send
                 jp hr_settle
 
 ; una vez por fotograma: la camara del hardware hacia la logica (hasta 8 pixeles)
@@ -655,10 +682,7 @@ hfl_l:          cp 7
                 inc a
                 djnz hfl_l
                 jr hf_set
-hfl_cmd:        ld (hv_fine),a
-                ld (2090),a
-                ld a,1
-                jp hr_send
+hfl_cmd:        jr hf_set               ; en 7: cruzar de columna lo hace hr_end, al final de la vuelta
 hf_right:       ld a,h
                 cpl
                 ld h,a
@@ -673,10 +697,7 @@ hfr_l:          or a
                 dec a
                 djnz hfr_l
                 jr hf_set
-hfr_cmd:        ld (hv_fine),a
-                ld (2090),a
-                ld a,2
-                jp hr_send
+hfr_cmd:        jr hf_set
 hf_set:         ld (hv_fine),a
                 ld (2090),a
                 ret
