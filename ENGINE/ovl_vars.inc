@@ -74,6 +74,11 @@ dk_pr            equ $97A4
 dk_row           equ $97A5
 dk_src           equ $97A6
 dk_dst           equ $97A8
+ACSIG           equ $DE00               ; cache de sprites de los actores (en el bloque de atributos: sitio libre): por actor 6 bytes (firma, primer sprite, cuantos, fotograma), luego las variables
+ac_stamp        equ ACSIG+156           ; palabra: numero de fotograma
+ac_ent          equ ACSIG+158           ; palabra
+ac_sg           equ ACSIG+160           ; palabra
+ac_n0           equ ACSIG+162
 AL               equ $97B0               ; hasta 2 x NACTORS bytes
 sdx_left         equ AV+12               ; fotogramas que le quedan al que suena (65535: sin fin)                ; desplazamiento en pixeles de la celda dentro de su tira
 ac_id           equ OVL_VARS+30         ; numero del actor que se dibuja

@@ -16,6 +16,7 @@
                 jp snd_event
                 jp snd_tick
                 jp dk_entry
+                jp hr_ui
 
 ov_init:        call sdx_ini
                 ld hl,NAMEOV            ; sin nombres cambiados
@@ -38,6 +39,7 @@ ov_init:        call sdx_ini
                 ret
 
                 include "ui.asm"
+                include "hrui.asm"
                 include "cam.asm"
                 include "actors.asm"
                 include "snd.asm"

@@ -228,6 +228,7 @@ ml_nd:          call vm_frame
                 call gd_update
                 call text_update
                 call OVL_UI_UPDATE
+                call OVL_HRUI           ; la rejilla de la interfaz al bitmap (hrui.asm)
                 call OVL_ACTORS_UPDATE
                 call OVL_SND_TICK
                 call keys
@@ -394,7 +395,8 @@ sc_fatal:       ld de,DFILE+1+21*33+1
                 call sc_wait_key
                 jp sc_quit
 
-sc_wait_key:    call sc_scan
+sc_wait_key:    call OVL_HRUI
+                call sc_scan
                 or a
                 jr nz,sc_wait_key       ; primero que suelte la que tuviera
 swk1:           call sc_scan

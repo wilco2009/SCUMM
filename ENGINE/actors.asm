@@ -3,6 +3,9 @@ actors_update:  ld a,(gf_have)
                 ret z
                 call gf_campx
                 ld (ac_cam),hl
+                ld hl,(ac_stamp)
+                inc hl
+                ld (ac_stamp),hl
                 xor a
                 ld (ac_n),a
                 ld a,(ac_hold)          ; sala nueva: los sprites siguen apagados hasta saber donde van
@@ -71,7 +74,7 @@ ad_l:           push bc
                 ld a,(hl)
                 ld (ac_id),a
                 call actor_addr
-                call ac_draw
+                call ac_cdraw
                 pop hl
                 inc hl
                 inc hl
@@ -92,6 +95,135 @@ ac_off:         ld a,b
                 inc b
                 jr ac_off
 
+
+; ---------------------------------------------------------------------------------------------------------------------------------
+;  Cache de sprites: si un actor tiene la misma firma (posicion, traje, pose, direccion, camara, quien habla) y los mismos sprites que en el
+;  fotograma anterior, sus sprites ya estan bien y no se vuelven a escribir (ac_draw cuesta mas de la mitad de lo que tarda una vuelta).
+;  Una entrada vale solo si su marca es la del fotograma anterior: los actores que no se dibujan un fotograma pierden la entrada.
+; ---------------------------------------------------------------------------------------------------------------------------------
+ac_cdraw:       call ac_hash
+                ld (ac_sg),de
+                ld a,(ac_id)
+                ld l,a
+                ld h,0
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,de
+                add hl,hl               ; 6 * actor
+                ld de,ACSIG
+                add hl,de
+                ld (ac_ent),hl
+                push hl
+                ld de,4
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)               ; marca de la entrada
+                ld hl,(ac_stamp)
+                dec hl
+                or a
+                sbc hl,de
+                pop hl
+                jr nz,acc_miss
+                ld e,(hl)
+                inc hl
+                ld d,(hl)               ; firma de la entrada
+                inc hl
+                push hl
+                ld hl,(ac_sg)
+                or a
+                sbc hl,de
+                pop hl
+                jr nz,acc_miss
+                ld a,(ac_n)
+                cp (hl)                 ; el mismo primer sprite
+                jr nz,acc_miss
+                inc hl
+                ld a,(hl)               ; cuantos sprites usa
+                ld hl,ac_n
+                add a,(hl)
+                ld (hl),a
+                ld hl,(ac_ent)
+                ld de,4
+                add hl,de
+                ld de,(ac_stamp)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                ret
+acc_miss:       ld a,(ac_n)
+                ld (ac_n0),a
+                call ac_draw
+                ld hl,(ac_ent)
+                ld de,(ac_sg)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                ld a,(ac_n0)
+                ld (hl),a
+                inc hl
+                ld c,a
+                ld a,(ac_n)
+                sub c
+                ld (hl),a
+                inc hl
+                ld de,(ac_stamp)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                ret
+
+; DE = firma del actor IX: lo que ac_draw lee de el, de la camara y de quien habla
+ac_hash:        ld hl,(ac_cam)
+                ld a,(ix+1)
+                call ach
+                ld a,(ix+2)
+                call ach
+                ld a,(ix+3)
+                call ach
+                ld a,(ix+4)
+                call ach
+                ld a,(ix+5)
+                call ach
+                ld a,(ix+6)
+                call ach
+                ld a,(ix+7)
+                call ach
+                ld a,(ix+9)
+                call ach
+                ld a,(ix+10)
+                call ach
+                ld a,(ix+16)
+                call ach
+                ld a,(ix+17)
+                call ach
+                ld a,(ix+45)
+                srl a
+                srl a
+                srl a
+                call ach
+                ld a,(HAVEMSG)
+                call ach
+                ld a,(VAR_TALK_ACTOR)
+                call ach
+                ex de,hl
+                ret
+ach:            ld d,h                  ; HL = HL * 31 + A
+                ld e,l
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                or a
+                sbc hl,de
+                add a,l
+                ld l,a
+                ret nc
+                inc h
+                ret
 
 ; HL = angulo (0, 90, 180, 270) -> A = direccion de v2: 0 izquierda, 1 derecha, 2 de frente, 3 de espaldas
 ac_olddir:      ld a,h
