@@ -10,6 +10,8 @@
 /V2/dump_out/
 /V2/tmp_obj/
 /V2/45/
+/V3/Indy*/
+/V3/Monkey*/
 
 # Salidas de montaje y de pruebas
 *.bin
