@@ -1,93 +1,191 @@
 ; =====================================================================
-;  hrui.asm - la interfaz en HiRes (rama hires16): la interfaz y los mensajes siguen escribiendo en la rejilla de caracteres DFILE (33 x 24) como
-;  siempre; hr_ui, una vez por fotograma, pinta en el bitmap y los atributos las celdas de las filas UI_R0..23 que han cambiado desde la ultima vez
-;  (HRUI_PREV guarda los codigos ya pintados). Los glifos son los 208-255 de scumm.asm (TILES): los 210-255 la fuente, en blanco brillante sobre negro, y
-;  los 208-209 las flechas del inventario, en amarillo brillante. Cualquier otro codigo se pinta en negro.
+;  hrui.asm - la interfaz en HiRes (rama hires16), 40 columnas de 6 pixeles. La interfaz escribe en UIVB (40 x 8, las filas UI_R0..23) y los mensajes
+;  en MSGB (TXT_ROWS x 40; mientras tx_on tapan las filas TXT_ROW.. de la interfaz). hr_ui, una vez por fotograma, pinta en el bitmap y los atributos los
+;  grupos de 4 caracteres (4 x 6 = 24 pixeles = 3 bytes) que han cambiado desde la ultima vez (HRUI_PREV guarda los codigos pintados). El texto va centrado
+;  (un byte de margen a cada lado: 240 de 256 pixeles). La fuente (TILES, scumm.asm) son las columnas 1-6 de los glifos de la ROM del ZX81, 6 bits por linea.
+;  Texto blanco brillante sobre negro (los atributos son de 8 pixeles).
 ; =====================================================================
-HRUI_PREV       equ $DF00
-hu_att          equ ACSIG+164           ; (el overlay es de solo lectura: las variables van en RAM)               ; 8 filas x 32 columnas: el codigo que hay pintado en cada celda (en el bloque de atributos: sitio libre)
+HRUI_PREV       equ $DEC0               ; 8 filas x 40 columnas: el codigo que hay pintado en cada celda (en el bloque de atributos: sitio libre)
+HU_GL           equ HR_ATT+$1900        ; 4 glifos x 8 lineas (el buffer de abajo del scroll vertical, que no usamos)
+hu_r            equ ACSIG+157           ; fila (0-7) y grupo (0-9) que se pintan
+hu_g            equ ACSIG+158
+hu_src          equ ACSIG+159           ; palabra: detras de los 4 caracteres del grupo
 
-hr_ui:          ld hl,DFILE+1+UI_R0*33
-                ld de,HRUI_PREV
-                ld c,0
-hu_row:         ld b,0
-hu_col:         ld a,(de)
-                cp (hl)
-                jr z,hu_same
-                ld a,(hl)
-                call hu_cell
-hu_same:        inc hl
-                inc de
-                inc b
-                ld a,b
-                cp 32
-                jr nz,hu_col
-                inc hl                  ; la rejilla tiene 33 columnas
-                inc c
+hr_ui:          push ix
+                xor a
+                ld (hu_r),a
+hu_row:         ld a,(hu_r)             ; HL = origen de la fila
+                ld c,a
+                ld a,(tx_on)
+                or a
+                jr z,hu_vb
                 ld a,c
+                cp TXT_ROW-UI_R0
+                jr c,hu_vb
+                sub TXT_ROW-UI_R0
+                call hu_mul40
+                ld de,MSGB
+                jr hu_sr
+hu_vb:          ld a,c
+                call hu_mul40
+                ld de,UIVB
+hu_sr:          add hl,de
+                push hl                 ; origen
+                ld a,(hu_r)
+                call hu_mul40
+                ld de,HRUI_PREV
+                add hl,de
+                ex de,hl                ; DE = lo pintado
+                pop hl
+                xor a
+                ld (hu_g),a
+hu_gr:          push hl
+                push de
+                ld c,4
+hu_cmp:         ld a,(de)
+                cp (hl)
+                jr nz,hu_diff
+                inc hl
+                inc de
+                dec c
+                jr nz,hu_cmp
+                pop de
+                pop hl
+                ld bc,4
+                add hl,bc
+                ex de,hl
+                add hl,bc
+                ex de,hl
+                jr hu_next
+hu_diff:        pop de
+                pop hl
+                ldi
+                ldi
+                ldi
+                ldi                     ; lo nuevo pasa a lo pintado
+                ld (hu_src),hl
+                push hl
+                push de
+                call hu_group
+                pop de
+                pop hl
+hu_next:        ld a,(hu_g)
+                inc a
+                ld (hu_g),a
+                cp 10
+                jr nz,hu_gr
+                ld a,(hu_r)
+                inc a
+                ld (hu_r),a
                 cp 24-UI_R0
                 jr nz,hu_row
+                pop ix
                 ret
 
-; A = codigo, HL = su celda de la rejilla, DE = su sitio en HRUI_PREV, B = columna, C = fila (0 = UI_R0): lo pinta
-hu_cell:        push hl
-                push de
-                push bc
-                ld (de),a
-                ld d,a
-                ld e,$0F
-                cp 210
-                jr nc,hu_a
-                ld e,$0E
+hu_mul40:       ld l,a                  ; A * 40 -> HL
+                ld h,0
+                ld e,l
+                ld d,h
+                add hl,hl
+                add hl,hl
+                add hl,de
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ret
+
+; pinta el grupo hu_g de la fila hu_r: los 4 codigos estan antes de (hu_src)
+hu_group:       ld hl,(hu_src)
+                ld bc,-4
+                add hl,bc
+                ld de,HU_GL
+                ld b,4
+hg_c:           push bc
+                push hl
+                ld a,(hl)
                 cp 208
-                jr nc,hu_a
-                ld e,0
-hu_a:           ld a,e
-                ld (hu_att),a
-                ld a,d
-                cp 208
-                jr nc,hu_s
+                jr nc,hg_s
                 ld hl,hu_zero
-                jr hu_d
-hu_s:           ld l,a
+                jr hg_cp
+hg_s:           ld l,a
                 ld h,0
                 add hl,hl
                 add hl,hl
                 add hl,hl
+                push de
                 ld de,TILES
                 add hl,de
-hu_d:           pop bc
-                push bc
-                ld a,c
-                add a,(HR_BM>>8)+UI_R0
-                ld d,a
-                ld e,b
-                ld b,8
-hu_b:           ld a,(hl)
-                cpl                     ; las formas de TILES estan al reves (el bit 7 del codigo invertia el video)
-                ld (de),a
-                inc hl
-                ld a,e
-                add a,32
-                ld e,a
-                djnz hu_b
-                pop bc
-                push bc
-                ld a,(hu_att)
-                ld l,a
-                ld a,c
-                add a,(HR_ATT>>8)+UI_R0
-                ld d,a
-                ld e,b
-                ld b,8
-hu_t:           ld a,l
-                ld (de),a
-                ld a,e
-                add a,32
-                ld e,a
-                djnz hu_t
-                pop bc
                 pop de
+hg_cp:          ld bc,8
+                ldir
                 pop hl
+                inc hl
+                pop bc
+                djnz hg_c
+                ld a,(hu_g)             ; destino: fila hu_r de la zona de la interfaz, byte 1 + 3 * grupo, linea 0
+                ld c,a
+                add a,a
+                add a,c
+                inc a
+                ld l,a
+                ld a,(hu_r)
+                add a,(HR_BM>>8)+UI_R0
+                ld h,a
+                ld ix,HU_GL
+                ld b,8
+hg_l:           ld a,(ix+0)             ; x1 << 2 | x2 >> 4
+                add a,a
+                add a,a
+                ld c,a
+                ld a,(ix+8)
+                srl a
+                srl a
+                srl a
+                srl a
+                or c
+                ld (hl),a
+                inc hl
+                ld a,(ix+8)             ; (x2 & 15) << 4 | x3 >> 2
+                and 15
+                add a,a
+                add a,a
+                add a,a
+                add a,a
+                ld c,a
+                ld a,(ix+16)
+                srl a
+                srl a
+                or c
+                ld (hl),a
+                inc hl
+                ld a,(ix+16)            ; (x3 & 3) << 6 | x4
+                and 3
+                rrca
+                rrca
+                or (ix+24)
+                ld (hl),a
+                ld de,30
+                add hl,de
+                inc ix
+                djnz hg_l
+                ld a,(hu_g)             ; los atributos de esos 3 bytes: blanco brillante sobre negro
+                ld c,a
+                add a,a
+                add a,c
+                inc a
+                ld l,a
+                ld a,(hu_r)
+                add a,(HR_ATT>>8)+UI_R0
+                ld h,a
+                ld b,8
+                ld a,$0F
+hg_a:           ld (hl),a
+                inc hl
+                ld (hl),a
+                inc hl
+                ld (hl),a
+                ld de,30
+                add hl,de
+                djnz hg_a
                 ret
-hu_zero:        defs 8,$FF
+hu_zero:        defs 8,0

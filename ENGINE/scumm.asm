@@ -27,7 +27,10 @@ SLOW_FAST       equ $0207
 MAP_PORT        equ $E7
 
 TILES           equ $9E20-GLYPH0*8      ; las formas de los glifos 208-255 (8 bytes cada uno, 384 en total); el color lo pondra la capa de texto
-DFILE           equ $9B00               ; la rejilla de caracteres de la interfaz (33 x 24 + 1): en RAM, sin pintar todavia (rama hires16)
+MSGB            equ $9B00               ; los mensajes: TXT_ROWS filas de 40 caracteres (hrui.asm los pinta en las filas TXT_ROW.. mientras tx_on)
+MSGW            equ 40
+DFILE           equ $9B00               ; (solo lo usan las marcas de depuracion, DIAG = 0)
+ERRPOS          equ $99C9               ; UIVB ($9900, ui.asm) + 5 * 40 + 1: la fila 21 de la zona de la interfaz (errores fatales)
 FONT_I          equ $38
 GLYPH0          equ 210                 ; codigos 210-255: la fuente (46 glifos); el 210 es el espacio y el tile en blanco
 NGLYPH          equ 46
@@ -113,12 +116,7 @@ scumm_main:     di
                 call OVL_OV_INIT
                 call OVL_UI_INIT
                 call hr_init            ; HiRes 8x1: bitmap y atributos a cero
-                ld a,BLANK
-                ld hl,DFILE
-                ld (scr_base),hl
-                call fill_screen        ; la rejilla de la interfaz
-                ld hl,DFILE+1+23*33
-                ld (mk_p),hl
+                call tx_clear           ; la zona de mensajes en blanco
                 ld a,'E'
                 call sc_mark            ; E: fuente y pantalla definitiva (esta marca ya sale en blanco: codigo 42 = glifo de la ROM)
                 ld bc,$7FEF
@@ -247,10 +245,12 @@ ml_nd:          call vm_frame
 rs_flag:        defb 0
 ml_acc:         defb 0
 sm_err:         call sc_hide_sprites
+                xor a
+                ld (tx_on),a
                 ld a,(ERR)
                 ld l,a
                 ld h,0
-                ld de,DFILE+1+21*33+1
+                ld de,ERRPOS
                 ld b,2
                 push hl
                 ld hl,tx_err
@@ -390,7 +390,9 @@ mk_hist:        defs 32
 
 
 ; mensaje fatal en la fila 21 y espera una tecla
-sc_fatal:       ld de,DFILE+1+21*33+1
+sc_fatal:       xor a
+                ld (tx_on),a
+                ld de,ERRPOS
                 call put_str
                 call sc_wait_key
                 jp sc_quit
@@ -923,7 +925,8 @@ if_cus:         sub $80
                 add hl,bc
 if_cp:          ld b,8
 if_b:           ld a,(hl)
-                cpl                     ; el bit 7 del codigo invierte el video
+                rrca                    ; las columnas 1-6 del glifo (la 0 y la 7 estan vacias): una fuente de 6 pixeles de ancho, 1 = tinta
+                and $3F
                 ld (de),a
                 inc hl
                 inc de
@@ -937,8 +940,8 @@ if_b:           ld a,(hl)
                 ld bc,16
                 ldir
                 ret
-arrow_pix:      defb $E7,$C3,$81,$00,$E7,$E7,$E7,$E7       ; la forma al reves (como los glifos: 1 = fondo)
-                defb $E7,$E7,$E7,$E7,$00,$81,$C3,$E7
+arrow_pix:      defb $0C,$1E,$3F,$0C,$0C,$0C,$0C,$0C       ; 6 pixeles de ancho, 1 = tinta
+                defb $0C,$0C,$0C,$0C,$0C,$3F,$1E,$0C
 
 ; espacio, 0-9, A-Z, / : . , ? - " y dos propios (! ')
 
@@ -1100,9 +1103,9 @@ tx_clear:       ld a,(UI_DIRTY)         ; el texto tapa el inventario: se vuelve
                 ld (UI_DIRTY),a
                 ld a,1
                 ld (tx_sp),a
-                ld hl,DFILE+1+TXT_ROW*33
-                ld de,DFILE+2+TXT_ROW*33
-                ld bc,TXT_ROWS*33-1
+                ld hl,MSGB
+                ld de,MSGB+1
+                ld bc,TXT_ROWS*MSGW-1
                 ld (hl),BLANK
                 ldir
                 xor a
@@ -1198,7 +1201,7 @@ txw_e:          ld a,(tx_col)
                 or a
                 jr z,txw_n              ; ya al principio de la fila
                 add a,b
-                cp 33
+                cp MSGW+1
                 jr c,txw_n
                 call tx_newline
 txw_n:          pop af
@@ -1218,7 +1221,7 @@ txn1:           ld (tx_row),a
 ; A = ASCII: lo pone en el cursor del texto
 tx_put:         push af
                 ld a,(tx_col)
-                cp 32
+                cp MSGW
                 call nc,tx_newline
                 ld a,(tx_row)
                 ld l,a
@@ -1227,11 +1230,11 @@ tx_put:         push af
                 ld d,h
                 add hl,hl
                 add hl,hl
+                add hl,de               ; * 5
                 add hl,hl
                 add hl,hl
-                add hl,hl               ; * 32
-                add hl,de               ; * 33
-                ld de,DFILE+1+TXT_ROW*33
+                add hl,hl               ; * 40
+                ld de,MSGB
                 add hl,de
                 ld a,(tx_col)
                 ld e,a

@@ -14,7 +14,6 @@ NVERBS          equ 15
 UI_COLS         equ 40                  ; la zona de abajo es de 40 columnas (como el original): se pinta en un bufer virtual (UIVB, de la fila UI_R0 a la 23) y la
 UI_R0           equ 16                  ; pantalla muestra 32 de ellas desde UI_OFF (0 u 8); el cursor en un borde cambia de ventana (ui_scroll)
 UIVB            equ $9900
-UI_OFF          equ $8831
 
 ; ---- A = ranura -> IX
 ui_entry:       ld l,a
@@ -155,7 +154,8 @@ ui_label:       push bc                 ; conserva BC y DE (ui_click guarda en E
                 pop de
                 pop bc
                 ret
-ui_label0:      ld a,(ix+0)
+ui_label0:      jr ul_none              ; con 40 columnas siempre el texto completo (ya no hay etiquetas cortas)
+                ld a,(ix+0)
                 ld hl,(PF_SHORT)
                 ld de,PROF
                 add hl,de
@@ -241,8 +241,7 @@ uu_d:           ld a,(VARS)             ; otro protagonista: otro inventario
                 ld a,(UI_DIRTY)
                 or 4
                 ld (UI_DIRTY),a
-uu_e:           call ui_scroll
-                ld a,(UI_DIRTY)
+uu_e:           ld a,(UI_DIRTY)
                 or a
                 ret z
                 ld b,a
@@ -266,69 +265,21 @@ uu_e:           call ui_scroll
 uu_w:           ld a,(UI_DIRTY)
                 or 4
                 ld (UI_DIRTY),a
-uu_blit:        jp ui_blit
+uu_blit:        ret                     ; (hr_ui, hrui.asm, pinta UIVB y los mensajes directamente)
 
-; el cursor en la parte de abajo y en un borde: la ventana de 32 columnas pasa al otro lado del bufer de 40 (el cursor se queda sobre lo mismo)
-ui_scroll:      ld a,(UI_CURSOR)
-                or a
-                ret z
-                ld a,(cur_y)
-                cp UI_R0*8
-                ret c
-                ld a,(UI_OFF)
-                or a
-                ld a,(cur_x)
-                jr nz,us_back
-                cp 224
-                ret c
-                ld a,8
-                ld (UI_OFF),a
-                ld a,(cur_x)
-                sub 64
-                jr us_set
-us_back:        cp 32
-                ret nc
+; columna de texto (6 pixeles cada una, a partir del pixel 4) de la coordenada x de la pantalla A -> A (0-39)
+ui_xcol:        sub 4
+                jr nc,ux1
                 xor a
-                ld (UI_OFF),a
-                ld a,(cur_x)
-                add a,64
-us_set:         ld (cur_x),a
-                call cursor_draw
-                ld a,(UI_DIRTY)
-                or 7
-                ld (UI_DIRTY),a
-                ret
-
-; las filas del bufer virtual a la pantalla (32 columnas desde UI_OFF); con un mensaje en pantalla las filas 20 en adelante son suyas
-ui_blit:        ld hl,UIVB              ; la primera fila (la frase) no se desplaza con la ventana: siempre desde la columna 0
-                ld de,DFILE+1+UI_R0*33
-                ld bc,32
-                ldir
-                ld a,(tx_on)
-                or a
-                ld b,24-UI_R0-1
-                jr z,ub_n
-                ld b,TXT_ROW-UI_R0-1
-ub_n:           ld hl,UIVB+UI_COLS
-                ld de,DFILE+1+(UI_R0+1)*33
-ub_l:           push bc
-                push hl
-                push de
-                ld a,(UI_OFF)
-                ld c,a
-                ld b,0
-                add hl,bc
-                ld bc,32
-                ldir
-                pop de
-                ld hl,33
-                add hl,de
-                ex de,hl
-                pop hl
-                ld bc,UI_COLS
-                add hl,bc
-                pop bc
-                djnz ub_l
+ux1:            ld l,0
+ux2:            sub 6
+                jr c,ux3
+                inc l
+                jr ux2
+ux3:            ld a,l
+                cp UI_COLS
+                ret c
+                ld a,UI_COLS-1
                 ret
 
 ; HL = direccion de pantalla de la fila A, columna 0
@@ -677,12 +628,8 @@ uk_v:           ld hl,PF_VROW
                 cp 3
                 jp nc,uk_inv
                 ld a,(cur_x)
-                srl a
-                srl a
-                srl a
-                ld hl,UI_OFF
-                add a,(hl)
-                ld b,a                  ; columna (del bufer virtual)
+                call ui_xcol
+                ld b,a                  ; columna
                 ld ix,UI_VT
                 ld d,NVERBS
 uk_l:           ld a,(ix+0)
@@ -875,11 +822,7 @@ uk_inv:         ld a,c
                 bit 6,a
                 ret z
                 ld a,(cur_x)
-                srl a
-                srl a
-                srl a
-                ld hl,UI_OFF
-                add a,(hl)
+                call ui_xcol
                 cp 18
                 jr c,uki_l
                 cp 21
