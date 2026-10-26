@@ -49,6 +49,7 @@ hv_oh           equ HV+25
 hv_so           equ HV+26
 hv_rem          equ HV+28
 hv_pg           equ HV+30
+hv_drawn        equ HV+31               ; 0: la sala aun no se ha dibujado (se dibuja ya en su sitio: el salto de la camara, o gd_update si nadie la mueve)
 
 ; ---------------------------------------------------------------------
 ;  Pagina de la sala -> ventana de datos; hr_unmap devuelve la que habia
@@ -492,6 +493,7 @@ gf_load_room:   ld a,(EVARGS)
                 ld (hv_fine),a
                 ld (hv_ndl),a
                 ld (hv_nobj),a
+                ld (hv_drawn),a
                 ld (2090),a
                 ld h,a
                 ld l,a
@@ -509,8 +511,7 @@ gf_load_room:   ld a,(EVARGS)
                 ret c
                 call hr_parse
                 ret c
-                call gf_draw_window
-                ld a,1
+                ld a,1                  ; la sala se dibuja cuando la camara sepa donde esta (cm_snap), no antes en la posicion 0
                 ld (gf_have),a
                 ret
 
@@ -606,6 +607,9 @@ hfn_r:          dec hl                  ; derecha
 hr_frame:       ld a,(gf_have)
                 or a
                 ret z
+                ld a,(hv_drawn)
+                or a
+                ret z
                 ld a,(hv_pend)
                 or a
                 jr z,hf_free
@@ -667,6 +671,8 @@ hf_cnt:         ld a,h                  ; B = min(HL, 8)
 ;  La sala entera
 ; ---------------------------------------------------------------------
 gf_draw_window: call hr_settle
+                ld a,1
+                ld (hv_drawn),a
                 ld hl,(gf_cam)
                 ld (hv_cam),hl
                 ld a,(gf_fine)
@@ -738,10 +744,13 @@ gf_flip:        ret
 gd_update:      ld a,(gf_have)
                 or a
                 ret z
+                ld a,(hv_drawn)
+                or a
+                jp z,gf_draw_window     ; nadie ha movido la camara: se dibuja donde esta
                 ld a,(gd_pending)
                 or a
-                jp nz,gf_draw_window
-                jp hr_frame
+                ret z
+                jp gf_draw_window
 
 ; camara logica (la de los scripts): los movimientos de gf_move_* no tocan el hardware
 gf_move_right:  ld hl,(gf_cam)

@@ -11,11 +11,11 @@ rem   python SCUMM\TOOLS\sound2vgm.py SCUMM\V2\ManiacMansionDOS SCUMM\preview\sn
 cd /d "%~dp0"
 set BASE=\ClaudeCode\Eightyone2\EightyOne\SD81\SD81
 rem sin argumento copia los datos de Maniac Mansion; con 'zak' (o 'zack') los de Zak McKracken (SCUMM\preview_zak, ver games\zak.cfg)
-set P=..\preview
+set P=..\preview_hr
 set G=MANIAC
-if /i "%1"=="zak" set P=..\preview_zak
+if /i "%1"=="zak" set P=..\preview_zak_hr
 if /i "%1"=="zak" set G=ZAK
-if /i "%1"=="zack" set P=..\preview_zak
+if /i "%1"=="zack" set P=..\preview_zak_hr
 if /i "%1"=="zack" set G=ZAK
 echo Juego: %G% (datos de %P%)
 rem montaje en tres pasos: el overlay (overlay.asm) necesita las direcciones del programa (scumm.sym) y el programa incluye overlay.bin al final

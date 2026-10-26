@@ -209,6 +209,7 @@ ml_n:           ld b,a                  ; B = fotogramas que debe durar
                 cp b
                 jr c,ml_w
                 ld (DELTA),a
+                call hr_frame           ; el hardware sigue a la camara nada mas empezar el fotograma: el fino y el movimiento de memoria tienen que cambiar con el haz fuera de la pantalla
                 ld hl,(DBG_START)       ; depuracion: un numero de script escrito aqui desde el emulador se arranca en este fotograma
                 ld a,h
                 or l
