@@ -337,6 +337,13 @@ int main(int argc, char** argv) {
         unsigned f, a, v; const char* p = pk;
         while (sscanf(p, "%u:%x:%x", &f, &a, &v) == 3) { if ((int)f == frames_done) wr(a, v); p = strchr(p, ','); if (!p) break; p++; }
       }
+      if (const char* pc = getenv("TS_CALL")) {            // TS_CALL=fotograma:direccion[,...]: en ese fotograma llama a la rutina (hex) y vuelve a main_loop (para probar guardar / cargar)
+        unsigned f, a; const char* p = pc;
+        while (sscanf(p, "%u:%x", &f, &a) == 2) {
+          if ((int)f == frames_done) { z80.sp.w -= 2; wr16(z80.sp.w, main_loop_addr); z80.pc.w = a; }
+          p = strchr(p, ','); if (!p) break; p++;
+        }
+      }
       while (ki < script.size() && script[ki].frame <= frames_done) { cur_keys = script[ki].keys; ki++; }
       if (frames_done > frame_limit) { finished = true; break; }
     }
