@@ -1,3 +1,4 @@
+NOCACHE        equ 0                   ; 1: sin cache (para comparar sprites con y sin ella)
 actors_update:  ld a,(gf_have)
                 or a
                 ret z
@@ -114,7 +115,21 @@ ac_cdraw:       call ac_hash
                 ld de,ACSIG
                 add hl,de
                 ld (ac_ent),hl
-                push hl
+                IF NOCACHE
+                jr acc_miss
+                ENDIF
+                ld a,(ix+10)            ; caminando: ac_draw avanza el contador de la animacion, no se puede saltar
+                or a
+                jr z,acc_miss
+                ld a,(HAVEMSG)          ; hablando: tambien avanza (la boca)
+                or a
+                jr z,acc_ok
+                ld a,(ac_id)
+                ld b,a
+                ld a,(VAR_TALK_ACTOR)
+                cp b
+                jr z,acc_miss
+acc_ok:         push hl
                 ld de,4
                 add hl,de
                 ld e,(hl)
