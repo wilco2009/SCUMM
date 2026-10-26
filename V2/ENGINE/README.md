@@ -15,6 +15,13 @@ Diseno y estado: `claude/planning/scumm_interprete.md` y `claude/planning/scumm_
 | `tables.inc` | Tabla de despacho. **Generada** por `../TOOLS/gen_vmtables.py`; no editar |
 | `test/` | Arnes de PC: el Z80 de EightyOne con el paginado real, contra un modelo en Python |
 
+## En la SD
+
+`compila_scumm.bat` deja el programa y los datos con un nivel por version de SCUMM (la V3 irá en `SCUMM\V3\`):
+`SCUMM\V2\SCUMM.BIN` (común a los juegos de la V2), `SCUMM\V2\<JUEGO>\<JUEGO>.B81` (el BASIC que lo carga con `../SCUMM.BIN`) y
+`SCUMM\V2\<JUEGO>\DATA\` (`DATA.BIN`, `ROOMnn.GFX`, `SND\`). Los guardados (`SAVEnn.SAV`) van en la carpeta del juego.
+(El visor de salas `VIEWER/` es de la época de los tiles y sigue leyendo `/SCUMM/ROOMnn.GFX`: no vale con los `.GFX` HiRes.)
+
 ## Probar
 
 Necesita `pasmo`, `g++`/`gcc` y el nucleo Z80 de EightyOne (`Z80SRC`, por defecto

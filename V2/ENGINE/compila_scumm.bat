@@ -1,8 +1,8 @@
 @echo off
 rem Ensambla el programa SCUMM y lo copia a la SD del emulador con esta disposicion:
-rem   SCUMM\SCUMM.BIN                      el programa, comun a todos los juegos
-rem   SCUMM\MANIAC\MANIAC.B81              el BASIC que lo arranca (la carpeta actual debe ser la del juego)
-rem   SCUMM\MANIAC\DATA\DATA.BIN, ROOMnn.GFX, SND\SOUNDnnn.VGM   los datos del juego
+rem   SCUMM\V2\SCUMM.BIN                   el programa, comun a todos los juegos de la version 2 (cada version de SCUMM tiene su carpeta: V2, V3...)
+rem   SCUMM\V2\MANIAC\MANIAC.B81           el BASIC que lo arranca (la carpeta actual debe ser la del juego)
+rem   SCUMM\V2\MANIAC\DATA\DATA.BIN, ROOMnn.GFX, SND\SOUNDnnn.VGM   los datos del juego
 rem Los nombres de los ficheros son relativos a la carpeta actual, asi que el mismo SCUMM.BIN sirve para cualquier juego.
 rem Antes hay que haber generado los datos (ver SCUMM\V2\TOOLS\LFL2GFX.md y SCUMM\V2\TOOLS\pack_data.py):
 rem   python SCUMM\V2\TOOLS\lfl2hr.py SCUMM\V2\ManiacMansionDOS all -o SCUMM\V2\preview_hr           (HiRes 8x1; ver SCUMM\V2\TOOLS\LFL2HR.md)
@@ -23,17 +23,18 @@ if not exist overlay.bin type nul > overlay.bin
 pasmo scumm.asm scumm.bin scumm.sym || goto error
 pasmo overlay.asm overlay.bin overlay.sym || goto error
 pasmo scumm.asm scumm.bin scumm.sym || goto error
-set D=%BASE%\SCUMM\%G%
+set S=%BASE%\SCUMM\V2
+set D=%S%\%G%
 rem el perfil del juego (games\*.cfg) va dentro de DATA.BIN: se regenera siempre para que un cambio en el .cfg llegue a la SD
 if /i "%G%"=="MANIAC" python ..\TOOLS\pack_data.py ..\ManiacMansionDOS %P%\DATA.BIN --game ..\games\maniac.cfg --sounds %P%\snd >nul || goto error
 if /i "%G%"=="ZAK" python ..\TOOLS\pack_data.py "..\Zak McKracken" %P%\DATA.BIN --game ..\games\zak.cfg --sounds %P%\snd >nul || goto error
 if not exist "%D%\DATA\SND" mkdir "%D%\DATA\SND"
-copy /y scumm.bin "%BASE%\SCUMM\SCUMM.BIN" >nul || goto error
+copy /y scumm.bin "%S%\SCUMM.BIN" >nul || goto error
 copy /y SCUMM.B81 "%D%\%G%.B81" >nul || goto error
 copy /y %P%\DATA.BIN "%D%\DATA" >nul || goto error
 copy /y %P%\gfx\*.GFX "%D%\DATA" >nul || goto error
 if exist %P%\snd\*.VGM copy /y %P%\snd\*.VGM "%D%\DATA\SND" >nul
-echo OK: %BASE%\SCUMM\SCUMM.BIN y el juego en %D%
+echo OK: %S%\SCUMM.BIN y el juego en %D%
 echo Para jugar: entra en la carpeta %G% y carga %G%
 exit /b 0
 
