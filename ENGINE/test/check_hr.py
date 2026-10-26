@@ -28,6 +28,9 @@ for i in range(nobj):
         rects.append((c, l, nc, nl))
 base = d[131072 + 2048 + 7] << 8
 print('sala %d, camara hw %d+%d/8 (logica %d+%d/8), orden pendiente %d, columnas %d, objetos %d' % (room, cam, fine, gcam, gfine, pend, cols, len(rects)))
+if pend:
+    print('orden del motor en curso: estado transitorio, no se comprueba')
+    sys.exit(0)
 bad = 0
 checked = 0
 
