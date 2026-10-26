@@ -1,4 +1,7 @@
-# lfl2gfx.py: conversor de salas de SCUMM v2 a gráficos del SD81 Booster
+# lfl2gfx.py: conversor de salas de SCUMM v2 a gráficos del SD81 Booster (TILES: obsoleto)
+
+> **Desde la rama `hires16` el motor usa el HiRes 8x1 de 16 colores y el conversor es `lfl2hr.py` (ver `LFL2HR.md`).** Este documento describe
+> el formato de tiles de 8x8 con 208 por ventana, que ya no carga el motor; se conserva para comparar y por la última versión de tiles (etiqueta `tiles-final`).
 
 Convierte el fondo de cada sala de Maniac Mansion (DOS v2, ficheros `NN.LFL`) a `ROOMnn.GFX`, el formato que
 carga el motor (y el visor `SCUMM/VIEWER`). Es **offline**: se ejecuta en el PC y los `.GFX` se copian a la SD.
