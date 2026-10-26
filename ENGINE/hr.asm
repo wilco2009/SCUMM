@@ -603,6 +603,14 @@ hfn_r:          dec hl                  ; derecha
                 call hr_put
                 jp hr_unmap
 
+; al final de la vuelta del bucle principal: si hay una orden del motor, se espera a que acabe (se ejecuta en la linea 254, y el borrado
+; vertical sigue ~7 ms) y se cierra el movimiento (fino a 0 o 7 y bufer de entrada) en seguida, con el haz todavia fuera de la pantalla. Si se
+; cerrara al principio del fotograma siguiente, una vuelta que dura mas de un fotograma dejaria ver la memoria movida con el fino viejo (salto de 8 px)
+hr_end:         ld a,(hv_pend)
+                or a
+                ret z
+                jp hr_settle
+
 ; una vez por fotograma: la camara del hardware hacia la logica (hasta 8 pixeles)
 hr_frame:       ld a,(gf_have)
                 or a
@@ -612,10 +620,7 @@ hr_frame:       ld a,(gf_have)
                 ret z
                 ld a,(hv_pend)
                 or a
-                jr z,hf_free
-                call hr_busy
-                ret nz
-                jp hr_finish
+                call nz,hr_settle       ; (no deberia: hr_end ya lo ha cerrado al acabar el fotograma anterior)
 hf_free:        call gf_lpos
                 push hl
                 call gf_campx

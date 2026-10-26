@@ -231,6 +231,7 @@ ml_nd:          call vm_frame
                 call OVL_ACTORS_UPDATE
                 call OVL_SND_TICK
                 call keys
+                call hr_end             ; si el motor de scroll tiene una orden, se cierra ahora (hr.asm)
                 ld a,(rs_flag)          ; restart(): se vuelve a empezar como si se hubiera arrancado
                 or a
                 jp z,main_loop
