@@ -61,6 +61,7 @@ gf_lstp         equ SV+19
 gf_llp          equ SV+21
 gf_srcp         equ SV+23
 gf_have         equ SV+25               ; 1 si hay un .GFX cargado
+tx_clr          equ SV+98               ; color Chroma (tinta) del mensaje en pantalla: el color de habla del actor que habla, o blanco
 tx_col          equ SV+26
 tx_row          equ SV+27
 tx_on           equ SV+28               ; hay texto en pantalla
@@ -1107,7 +1108,10 @@ tx_clear:       ld a,(UI_DIRTY)         ; el texto tapa el inventario: se vuelve
 ; lo que el nucleo acaba de escribir: de TXTSTART a MSGPTR
 ev_text:        ld a,(tx_cont)
                 or a
-                call z,tx_clear
+                jr nz,evt_nc
+                call tx_clear
+                call tx_setclr          ; un mensaje nuevo: el color del que habla
+evt_nc:
                 xor a
                 ld (tx_cont),a
                 ld a,1
@@ -1151,6 +1155,27 @@ evt_esc:        ld hl,(TXTSTART)
                 jr evt_l
 evt_nl:         call tx_newline
                 jr evt_l
+
+; el color del mensaje: el de habla del actor VAR_TALK_ACTOR (EGA -> Chroma), o blanco si no habla un actor o su color es el 0
+tx_setclr:      ld a,$0F
+                ld (tx_clr),a
+                ld a,(VAR_TALK_ACTOR)
+                or a
+                ret z
+                call cp_act
+                ret nc
+                call actor_addr
+                ld a,(ix+11)
+                and 15
+                ld e,a
+                ld d,0
+                ld hl,ega2chroma
+                add hl,de
+                ld a,(hl)
+                or a
+                ret z
+                ld (tx_clr),a
+                ret
 
 ; A = caracter: antes de escribirlo, si empieza palabra y no cabe en la fila, pasa a la siguiente.
 ; Z si no hay que escribirlo (un espacio en la columna 0 de una fila que no es la primera)

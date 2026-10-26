@@ -178,7 +178,7 @@ hg_l:           ld a,(ix+0)             ; x1 << 2 | x2 >> 4
                 add a,(HR_ATT>>8)+UI_R0
                 ld h,a
                 ld b,8
-                ld a,$0F
+                call hu_clr
 hg_a:           ld (hl),a
                 inc hl
                 ld (hl),a
@@ -187,5 +187,16 @@ hg_a:           ld (hl),a
                 ld de,30
                 add hl,de
                 djnz hg_a
+                ret
+; A = atributo del texto de la fila hu_r: blanco brillante, o (los mensajes) el color del que habla
+hu_clr:         ld a,(tx_on)
+                or a
+                jr z,hc_w
+                ld a,(hu_r)
+                cp TXT_ROW-UI_R0
+                jr c,hc_w
+                ld a,(tx_clr)
+                ret
+hc_w:           ld a,$0F
                 ret
 hu_zero:        defs 8,0
