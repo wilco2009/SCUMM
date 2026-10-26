@@ -1,10 +1,15 @@
 # Datos originales de LucasArts y todo lo derivado de ellos: no se redistribuyen
 /V1/
-/V2/
-/preview/
-/preview_log.txt
-/dump_out/
-/tmp_obj/
+/V2/ManiacMansionDOS/
+/V2/Zak McKracken/
+/V2/preview/
+/V2/preview_hr/
+/V2/preview_zak/
+/V2/preview_zak_hr/
+/V2/preview_log.txt
+/V2/dump_out/
+/V2/tmp_obj/
+/V2/45/
 
 # Salidas de montaje y de pruebas
 *.bin
@@ -14,6 +19,3 @@
 **/build/
 __pycache__/
 *~
-/preview_zak/
-preview_hr/
-preview_zak_hr/
