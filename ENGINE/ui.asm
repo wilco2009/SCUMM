@@ -73,9 +73,9 @@ uc2:            ld (UI_CURSOR),a
 ; ARGS: subcodigo; 0: borrar (ranura); $FF: verbo, modo; otro: es el verbo y siguen x, y, ranura, prep y la cadena (STRP)
 ui_verbops:     ld a,(ARGS)
                 or a
-                jr z,uv_del
+                jp z,uv_del
                 cp $FF
-                jr z,uv_mode
+                jp z,uv_mode
                 ld a,(ARGS+6)           ; ranura
                 cp NVERBS
                 ret nc
@@ -111,6 +111,20 @@ uv_c:           ld (ix+1),a
                 ld (ix+2),a
                 ld (ix+3),1
                 ld hl,(STRP)
+                ld c,(ix+1)             ; los espacios (y '@') del principio del texto se quitan y la columna avanza lo mismo: cabe en los 11 caracteres
+uv_sk:          ld a,(hl)               ; (el verbo de Dave es "        Dave ")
+                cp ' '
+                jr z,uv_sp
+                cp '@'
+                jr nz,uv_go
+uv_sp:          inc hl
+                inc c
+                jr uv_sk
+uv_go:          ld a,c
+                cp UI_COLS
+                jr c,uv_ok
+                ld a,UI_COLS-1
+uv_ok:          ld (ix+1),a
                 push ix
                 pop de
                 ld bc,4
