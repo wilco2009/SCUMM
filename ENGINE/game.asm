@@ -21,7 +21,7 @@ EV_ROOM_LOAD    equ 6
 EV_OBJSTATE     equ 8
 E_BADROOM       equ 6
 ASIZE           equ 48          ; tamano del registro de actor
-ODIRBUF         equ $D000       ; 780 x 3: pagina y direccion del bloque de codigo de cada objeto (lo carga loader.asm)
+ODIRBUF         equ $8B00       ; 780 x 3: pagina y direccion del bloque de codigo de cada objeto (lo carga loader.asm)
 NINV            equ 48          ; ranuras de inventario (_inventory de ScummVM): el orden del inventario es el de las ranuras
 INVSL           equ ODIRBUF+780*3 ; NINV palabras: el objeto de cada ranura (0: libre); el relleno de DATA.BIN la deja a cero
 

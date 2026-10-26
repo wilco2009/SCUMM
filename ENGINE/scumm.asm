@@ -26,21 +26,17 @@ SET_FAST        equ $02E7
 SLOW_FAST       equ $0207
 MAP_PORT        equ $E7
 
-DFILE           equ $C800
-GFXBUF          equ $8800               ; el codigo del programa llega hasta aqui; el .GFX mas grande mide 12,9 KB
-DFILE_TMP       equ $A800               ; pantalla provisional mientras arranca: tras OVERLAY_IMAGE (hasta 8 KB desde $8600) y antes de que se cargue ningun .GFX
-GFXMAX          equ $3600               ; lo que cabe (hasta $BDFF)
-TILES           equ $3800
-COLORS          equ $C000
+TILES           equ $9E20-GLYPH0*8      ; las formas de los glifos 208-255 (8 bytes cada uno, 384 en total); el color lo pondra la capa de texto
+DFILE           equ $9B00               ; la rejilla de caracteres de la interfaz (33 x 24 + 1): en RAM, sin pintar todavia (rama hires16)
 FONT_I          equ $38
 GLYPH0          equ 210                 ; codigos 210-255: la fuente (46 glifos); el 210 es el espacio y el tile en blanco
 NGLYPH          equ 46
 BLANK           equ GLYPH0
 ARROW_UP        equ 208                 ; flechas del inventario (UP y DN): codigos 208 y 209, que el fondo de las salas ya no usa
 ARROW_DN        equ 209
-SV              equ $CC00               ; variables del programa
-BACKBUF         equ $DA00               ; bufer trasero de las 16 filas de la sala (528 bytes)
-STACK           equ $CFF0               ; la pila ocupa $CF00-$CFEF
+SV              equ $8700               ; variables del programa
+BACKBUF         equ $9500               ; bufer trasero de las 16 filas de la sala (528 bytes)
+STACK           equ $8AF0               ; la pila ocupa $8A00-$8AEF
 TXT_ROW         equ 20                  ; filas 20-23: el texto de los mensajes (tapa al inventario mientras esta en pantalla)
 TXT_ROWS        equ 4
 CMD_64C         equ $1C
@@ -98,26 +94,11 @@ scumm_main:     di
                 ld (gf_have),a
                 ld (ac_used),a
                 call sc_clear_owner
-                ; pantalla provisional (DFILE_TMP) (RAM normal) para poder ver marcas de progreso (A..) en blanco y negro
-                ld hl,DFILE_TMP
-                ld (mk_base),hl
-                ld (scr_base),hl
-                xor a
-                call fill_screen        ; codigos nativos del ZX81 (espacio)
-                ld hl,DFILE_TMP
-                ld (2096),hl
-                ld a,170
-                ld (2098),a
-                ld (2045),a             ; Superfast texto
-                ld hl,DFILE_TMP+1+23*33
-                ld (mk_p),hl
-                ld a,'A'
-                call sc_mark            ; A: Superfast
                 ld a,CMD_FULLPAGING
                 call mcu_send
                 ld a,'B'
                 call sc_mark            ; B: paginacion completa
-                ld b,6                  ; bloques 6 y 7 a sus paginas (el $C000 es la tabla de color)
+                ld b,6                  ; bloques 6 y 7 a sus paginas ($C000 son los atributos de video)
                 ld a,6
                 call sc_map
                 ld b,7
@@ -127,29 +108,15 @@ scumm_main:     di
                 ld (2058),a             ; WRX apagado
                 ld a,'C'
                 call sc_mark            ; C: bloques 6 y 7
-                ld a,CMD_256C
-                call mcu_send
-                ld a,'D'
-                call sc_mark            ; D: 256C
-                ld a,FONT_I
-                ld i,a
-                call init_font
+                call init_font          ; la fuente sale de la ROM: antes de que el bloque 0 pase a ser el overlay
                 call ov_install         ; (la ROM ya no se necesita) el overlay (interfaz, camara y personajes) a su pagina y al bloque 0
                 call OVL_OV_INIT
                 call OVL_UI_INIT
-                ld a,1
-                ld (font_ready),a
-                ld hl,COLORS+38*8       ; las marcas (glifos 38-47 de la ROM) en blanco sobre negro cuando haya color
-                ld (hl),$0F
-                ld de,COLORS+38*8+1
-                ld bc,10*8-1
-                ldir
+                call hr_init            ; HiRes 8x1: bitmap y atributos a cero
                 ld a,BLANK
                 ld hl,DFILE
                 ld (scr_base),hl
-                call fill_screen        ; la pantalla definitiva ($C800)
-                ld hl,DFILE
-                ld (2096),hl
+                call fill_screen        ; la rejilla de la interfaz
                 ld hl,DFILE+1+23*33
                 ld (mk_p),hl
                 ld a,'E'
@@ -961,19 +928,9 @@ if_b:           ld a,(hl)
                 inc hl
                 pop bc
                 djnz if_g
-                ld hl,COLORS+GLYPH0*8
-                ld (hl),$0F             ; papel negro, tinta blanca brillante
-                ld de,COLORS+GLYPH0*8+1
-                ld bc,NGLYPH*8-1
-                ldir
                 ld hl,arrow_pix         ; las flechas del inventario: codigos 208 (arriba) y 209 (abajo), en amarillo brillante
                 ld de,TILES+ARROW_UP*8
                 ld bc,16
-                ldir
-                ld hl,COLORS+ARROW_UP*8
-                ld (hl),$0E
-                ld de,COLORS+ARROW_UP*8+1
-                ld bc,16-1
                 ldir
                 ret
 arrow_pix:      defb $E7,$C3,$81,$00,$E7,$E7,$E7,$E7       ; la forma al reves (como los glifos: 1 = fondo)
@@ -1309,568 +1266,7 @@ gl_open:        ld a,h
                 set 3,(hl)
                 ret
 
-gf_load_room:   ld a,(EVARGS)
-                ld (gf_room),a
-                ld hl,(PF_OPEN)         ; los objetos que el perfil da por abiertos (getState, vm_core.asm) se dibujan abiertos desde que se carga la sala
-                call gl_open
-                ld hl,(PF_OPEN+2)
-                call gl_open
-                ld hl,160               ; camara: seguir al protagonista, desde el centro
-                ld (cam_cx),hl
-                ld a,2
-                ld (cam_mode),a
-                ld a,$FF
-                ld (cam_fol),a
-                ld a,1
-                ld (cam_new),a
-                ld a,4                  ; los personajes no vuelven a aparecer hasta saber donde van (y la camara ya esta en su sitio)
-                ld (ac_hold),a
-                call sc_hide_sprites
-                ld hl,0
-                ld (gf_objsec),hl
-                xor a
-                ld (gf_have),a
-                ld (gf_fine),a
-                ld (2090),a
-                ld h,a
-                ld l,a
-                ld (gf_cam),hl
-                ld a,BLANK
-                call fill_screen
-                ld a,(UI_DIRTY)         ; la pantalla se ha borrado entera: la interfaz se vuelve a dibujar
-                or 7
-                ld (UI_DIRTY),a
-                ld a,'K'
-                call sc_mark            ; K: empieza a cargar una sala
-                call mk_redraw
-                ld a,(gf_room)
-                or a
-                ret z                   ; sala 0: no hay imagen
-                call gf_read
-                ret c
-                ld a,'L'
-                call sc_mark            ; L: leido el .GFX
-                call gf_parse
-                call gf_load_pool
-                call gf_load_right
-                call gf_draw_window
-                ld a,'M'
-                call sc_mark            ; M: dibujada la sala
-                ld a,1
-                ld (gf_have),a
-                ret
-
-; "DATA/ROOMnn.GFX"
-gf_make_name:   ld hl,(PF_TPL)
-                ld de,PROF
-                add hl,de
-                ld de,gf_name
-gmn0:           ld a,(hl)               ; el nombre de los ficheros de sala del perfil, acabado en 0
-                ld (de),a
-                inc hl
-                inc de
-                or a
-                jr nz,gmn0
-                ld a,(gf_room)
-                ld b,'0'-1
-gmn1:           inc b
-                sub 10
-                jr nc,gmn1
-                add a,10+'0'
-                ld hl,PF_TPLPOS
-                ld e,(hl)
-                ld d,0
-                ld hl,gf_name
-                add hl,de
-                ld (hl),b
-                inc hl
-                ld (hl),a
-                ret
-
-gf_read:        call gf_make_name
-                ld hl,gf_name
-                call f_open
-                cp $FF
-                jr nz,gfr1
-                scf
-                ret
-gfr1:           ld (ld_h),a
-                ld hl,ld_stat           ; fstat: 4 bytes de tamano, 4 de fecha y el estado
-                ld a,CMD_FSTAT
-                call mcu_send
-                ld a,(ld_h)
-                call mcu_send
-                ld b,4
-gfr2:           call mcu_recv
-                ld (hl),a
-                inc hl
-                djnz gfr2
-                ld b,5
-gfr3:           call mcu_recv
-                djnz gfr3
-                ld hl,(ld_stat+2)
-                ld a,h
-                or l
-                jr nz,gfr_bad
-                ld hl,(ld_stat)
-                ld (gf_size),hl
-                ld de,GFXMAX
-                or a
-                sbc hl,de
-                jr nc,gfr_bad
-                ld a,(ld_h)
-                ld hl,GFXBUF
-                ld bc,(ld_stat)
-                call f_read_n
-                ld a,(ld_h)
-                call f_close
-                or a
-                ret
-gfr_bad:        ld a,(ld_h)
-                call f_close
-                scf
-                ret
-ld_stat:        defs 4
-
-; cabecera del .GFX: "SGFX", version, nslots, cols(2), rows, view, npos(2), n(2), codebase(2); luego mapa, ...
-gf_parse:       ld hl,(GFXBUF+6)
-                ld (gf_cols),hl
-                ld hl,(GFXBUF+10)
-                ld (gf_npos),hl
-                ld hl,(GFXBUF+12)
-                ld (gf_ninst),hl
-                ld hl,GFXBUF+16
-                ld (gf_mapp),hl
-                ld hl,(gf_cols)
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                ld de,GFXBUF+16
-                add hl,de
-                ld (gf_rstp),hl
-                ld de,(gf_npos)
-                inc de
-                ex de,hl
-                add hl,hl
-                ex de,hl
-                add hl,de
-                ld (gf_instp),hl
-                ld hl,(gf_ninst)
-                ld d,h
-                ld e,l
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,de
-                ld de,(gf_instp)
-                add hl,de
-                ld (gf_lstp),hl
-                ld de,(gf_npos)
-                inc de
-                ex de,hl
-                add hl,hl
-                ex de,hl
-                add hl,de
-                ld (gf_llp),hl
-                ld hl,0                 ; seccion de objetos (version 2 del .GFX): sus dos ultimos bytes dicen donde empieza
-                ld (gf_objsec),hl
-                ld a,(GFXBUF+4)
-                cp 2
-                ret c
-                ld hl,(gf_size)
-                ld de,GFXBUF-2
-                add hl,de
-                ld e,(hl)
-                inc hl
-                ld d,(hl)
-                ld hl,GFXBUF
-                add hl,de
-                ld (gf_objsec),hl
-                ld a,(hl)               ; tabla = seccion + 4 + 16 * P
-                ld e,a
-                ld d,0
-                ex de,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                ld de,4
-                add hl,de
-                ex de,hl
-                ld hl,(gf_objsec)
-                add hl,de
-                ld (gf_objtab),hl
-                ret
-
-; copia las 32 columnas visibles y la 33 (la que asoma con el scroll fino)
-; Se pinta la sala en un bufer trasero (BACKBUF) y se copia de golpe a la pantalla justo despues de un VSYNC: asi no se ve el fondo
-; sin los objetos ni a medio dibujar (parpadeo al hacer scroll).
-gf_draw_window: call gf_draw_back
-gf_flip:        ld a,(gd_sync)
-                or a
-                jr z,gfl1
-                call wait_vs
-                ld (vs_extra),a         ; el VSYNC ya ha pasado: el bucle principal no espera otro
-gfl1:           ld a,(VAR_CURRENT_LIGHTS)
-                and 2
-                jr nz,gfl2
-                xor a
-                call OVL_DARK       ; sin luz: la sala negra y, con linterna, una ventana alrededor del cursor (dark.asm)
-                jr gfl3
-gfl2:           ld hl,BACKBUF+1
-                ld de,DFILE+1
-                ld bc,16*33
-                ldir
-gfl3:           xor a
-                ld (gd_pending),a
-                ret
-gd_sync:        defb 1                  ; 0: sin esperar al VSYNC (el salto de camara de golpe)
-gd_pending:     defb 0                  ; hay que volver a dibujar la sala
-vs_extra:       defb 0
-; los eventos del nucleo piden el redibujado; se hace una sola vez por fotograma
-gd_update:      ld a,(gd_pending)
-                or a
-                ret z
-                ld a,(gf_have)
-                or a
-                ret z
-                jp gf_draw_window
-
-gf_draw_back:   ld hl,(gf_mapp)
-                ld de,(gf_cam)
-                add hl,de
-                ld (gf_srcp),hl
-                ld de,BACKBUF+1
-                ld b,16
-gdw1:           push bc
-                ld hl,(gf_srcp)
-                ld bc,33
-                ldir
-                ld hl,(gf_cam)          ; ultima posicion: la columna 33 no existe
-                ld bc,(gf_npos)
-                or a
-                sbc hl,bc
-                jr c,gdw2
-                dec de
-                ld a,BLANK
-                ld (de),a
-                inc de
-gdw2:           ld hl,(gf_srcp)
-                ld bc,(gf_cols)
-                add hl,bc
-                ld (gf_srcp),hl
-                pop bc
-                djnz gdw1
-                jp gf_compose           ; y encima, los objetos que se dibujan
-
-; los tiles de la reserva de objetos a sus codigos (seccion de objetos: P, codigo del primero, 16 bytes por tile)
-gf_load_pool:   ld hl,(gf_objsec)
-                ld a,h
-                or l
-                ret z
-                ld a,(hl)
-                or a
-                ret z
-                ld b,a
-                inc hl
-                ld c,(hl)
-                inc hl
-                inc hl
-                inc hl
-                ld (glp_src),hl
-glp_l:          push bc
-                ld l,c
-                ld h,0
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                ld (glp_off),hl
-                ld de,TILES
-                add hl,de
-                ex de,hl
-                ld hl,(glp_src)
-                ld bc,8
-                ldir
-                push hl
-                ld hl,(glp_off)
-                ld de,COLORS
-                add hl,de
-                ex de,hl
-                pop hl
-                ld bc,8
-                ldir
-                ld (glp_src),hl
-                pop bc
-                inc c
-                djnz glp_l
-                ret
-
-; pone sobre la pantalla las imagenes de los objetos que se dibujan, del ultimo al primero (el primero queda encima)
-gf_compose:     ld hl,(gf_objsec)
-                ld a,h
-                or l
-                ret z
-                ld a,(NOBJS)
-                or a
-                ret z
-                ld (gc_i),a
-gc_loop:        ld a,(gc_i)
-                dec a
-                ld (gc_i),a
-                call obj_drawn
-                jp nc,gc_next
-                ld hl,(gf_objtab)       ; donde estan sus celdas
-                ld a,(gc_i)
-                ld e,a
-                ld d,0
-                add hl,de
-                add hl,de
-                ld e,(hl)
-                inc hl
-                ld d,(hl)
-                ld a,d
-                and e
-                inc a
-                jp z,gc_next            ; $FFFF: no tiene imagen
-                ld hl,(gf_objsec)
-                add hl,de
-                ld (gc_cp),hl
-                ld a,(gc_i)
-                call fo_rec
-                ld a,(ix+5)
-                ld (gc_x8),a
-                ld a,(ix+6)
-                ld (gc_y8),a
-                ld a,(ix+7)
-                ld (gc_w),a
-                ld a,(ix+8)
-                ld (gc_h),a
-                xor a
-                ld (gc_r),a
-gc_row:         ld a,(gc_r)
-                ld hl,gc_h
-                cp (hl)
-                jp nc,gc_next
-                ld hl,gc_y8
-                add a,(hl)
-                cp 16
-                jr nc,gc_rown           ; por debajo de la sala
-                ld l,a
-                ld h,0
-                ld d,h
-                ld e,l
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,de               ; * 33
-                ld de,BACKBUF+1
-                add hl,de
-                ld (gc_rowp),hl
-                xor a
-                ld (gc_c),a
-gc_col:         ld a,(gc_c)
-                ld hl,gc_w
-                cp (hl)
-                jr nc,gc_rown
-                ld hl,gc_x8
-                add a,(hl)
-                ld e,a
-                ld a,0
-                adc a,0
-                ld d,a                  ; DE = columna de la celda
-                ld hl,(gf_cols)
-                or a
-                sbc hl,de
-                jr z,gc_cn              ; fuera de la sala
-                jr c,gc_cn
-                ld hl,(gf_cam)
-                ex de,hl                ; HL = columna, DE = camara
-                or a
-                sbc hl,de
-                jr c,gc_cn              ; a la izquierda de la camara
-                ld a,h
-                or a
-                jr nz,gc_cn
-                ld a,l
-                cp 33
-                jr nc,gc_cn             ; a la derecha de la camara
-                ld e,a
-                ld d,0
-                ld hl,(gc_rowp)
-                add hl,de
-                ex de,hl                ; DE = destino
-                ld hl,(gc_cp)
-                ld a,(gc_c)
-                ld c,a
-                ld b,0
-                add hl,bc
-                ld a,(hl)
-                ld (de),a
-gc_cn:          ld hl,gc_c
-                inc (hl)
-                jr gc_col
-gc_rown:        ld a,(gc_w)             ; las celdas de la fila siguiente
-                ld e,a
-                ld d,0
-                ld hl,(gc_cp)
-                add hl,de
-                ld (gc_cp),hl
-                ld hl,gc_r
-                inc (hl)
-                jp gc_row
-gc_next:        ld a,(gc_i)
-                or a
-                jp nz,gc_loop
-                ret
-
-; HL = tabla + 2 * cam -> DE = primer indice, BC = ultimo + 1
-gf_range:       ld de,(gf_cam)
-                ex de,hl
-                add hl,hl
-                ex de,hl
-                add hl,de
-                ld e,(hl)
-                inc hl
-                ld d,(hl)
-                inc hl
-                ld c,(hl)
-                inc hl
-                ld b,(hl)
-                ret
-
-gf_load_right:  ld hl,(gf_rstp)
-                call gf_range
-glr1:           ld a,d
-                xor b
-                jr nz,glr2
-                ld a,e
-                xor c
-                ret z
-glr2:           push bc
-                push de
-                ld b,d
-                ld c,e
-                call gf_inst
-                pop de
-                pop bc
-                inc de
-                jr glr1
-
-gf_load_left:   ld hl,(gf_lstp)
-                call gf_range
-gll1:           ld a,d
-                xor b
-                jr nz,gll2
-                ld a,e
-                xor c
-                ret z
-gll2:           push bc
-                push de
-                ld hl,(gf_llp)
-                add hl,de
-                add hl,de
-                ld c,(hl)
-                inc hl
-                ld b,(hl)
-                call gf_inst
-                pop de
-                pop bc
-                inc de
-                jr gll1
-
-; BC = indice de instancia: 8 bytes de forma a TILES + 8 * codigo y 8 de color a COLORS + 8 * codigo
-gf_inst:        ld h,b
-                ld l,c
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,bc               ; 17 * k
-                ld de,(gf_instp)
-                add hl,de
-                ld a,(hl)
-                inc hl
-                push hl
-                ld l,a
-                ld h,0
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                push hl
-                ld de,TILES
-                add hl,de
-                ex de,hl
-                pop bc
-                pop hl
-                push bc
-                ld bc,8
-                ldir
-                pop de
-                push hl
-                ld hl,COLORS
-                add hl,de
-                ex de,hl
-                pop hl
-                ld bc,8
-                ldir
-                ret
-
-gf_move_right:  ld hl,(gf_cam)
-                ld de,(gf_npos)
-                or a
-                sbc hl,de
-                ret nc                  ; ya en la ultima posicion
-                ld a,(gf_fine)
-                inc a
-                cp 8
-                jr c,gmr_set
-                ld hl,(gf_cam)
-                inc hl
-                ld (gf_cam),hl
-                ld de,(gf_npos)
-                or a
-                sbc hl,de
-                call c,gf_load_right    ; en cam = npos no entra nada
-                call gf_draw_window
-                xor a
-gmr_set:        ld (gf_fine),a
-                ld (2090),a
-                ret
-
-gf_move_left:   ld a,(gf_fine)
-                or a
-                jr z,gml_cam
-                dec a
-                ld (gf_fine),a
-                ld (2090),a
-                ret
-gml_cam:        ld hl,(gf_cam)
-                ld a,h
-                or l
-                ret z
-                dec hl
-                ld (gf_cam),hl
-                call gf_load_left
-                call gf_draw_window
-                ld a,7
-                ld (gf_fine),a
-                ld (2090),a
-                ret
-
-; posicion de la camara en pixeles -> HL
-gf_campx:       ld hl,(gf_cam)
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                ld a,(gf_fine)
-                ld e,a
-                ld d,0
-                add hl,de
-                ret
+                include "hr.asm"
 
 ; ---------------------------------------------------------------------
 ;  Actores: un rectangulo de 2 x 4 sprites (16 x 32) del color de su texto, hasta 8 actores
@@ -1910,5 +1306,6 @@ ac_sp:          defb 0           ; fin del programa (el resto del codigo esta en
                 org $8000
                 include "tables.inc"
                 include "progdata.inc"
+                org $A000               ; la imagen del overlay se carga en el area del bitmap (aun vacia): $8700-$9AFF son variables
 OVERLAY_IMAGE:  incbin "overlay.bin"
 OVERLAY_END:

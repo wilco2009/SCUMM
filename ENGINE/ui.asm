@@ -8,13 +8,13 @@
 ;
 ;  Los verbos los crean los scripts con o2_verbOps (el nucleo los pasa al programa por HOSTVEC: host_ops).
 ; ---------------------------------------------------------------------------------------------------------------
-UI_VT           equ $CD40               ; 15 verbos de 16 bytes: id (0 = libre), columna, fila, modo, texto (11 + 0)
+UI_VT           equ $8840               ; 15 verbos de 16 bytes: id (0 = libre), columna, fila, modo, texto (11 + 0)
 VT_SIZE         equ 16
 NVERBS          equ 15
 UI_COLS         equ 40                  ; la zona de abajo es de 40 columnas (como el original): se pinta en un bufer virtual (UIVB, de la fila UI_R0 a la 23) y la
 UI_R0           equ 16                  ; pantalla muestra 32 de ellas desde UI_OFF (0 u 8); el cursor en un borde cambia de ventana (ui_scroll)
-UIVB            equ $DE00
-UI_OFF          equ $CD31
+UIVB            equ $9900
+UI_OFF          equ $8831
 
 ; ---- A = ranura -> IX
 ui_entry:       ld l,a

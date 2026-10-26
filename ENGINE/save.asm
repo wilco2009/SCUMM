@@ -8,18 +8,18 @@
 ; =====================================================================
 CMD_FWRITE      equ 56
 CMD_FCREATE     equ 71
-SV_NAME         equ $DC40               ; el nombre del fichero (12 bytes)
-SV_HDR          equ $DC50               ; la cabecera: la de DATA.BIN (ld_hdr, 16 bytes) y la direccion de ev_handler (identifica la version del programa)
-SV_TMP          equ $DC70               ; cabecera leida (18 bytes)
-SV_LIVE         equ $DD00               ; el estado vivo del interprete mientras se carga: $EB00-$EB3F, los dos primeros bytes de ARGS y los vectores EVVEC / HOSTVEC (73 bytes)
-sv_h            equ $DC90               ; variables (el overlay esta en una pagina de solo lectura)
-wr_err          equ $DC91
-wr_h            equ $DC92
-wr_src          equ $DC93
-wr_cnt          equ $DC95
+SV_NAME         equ $9740               ; el nombre del fichero (12 bytes)
+SV_HDR          equ $9750               ; la cabecera: la de DATA.BIN (ld_hdr, 16 bytes) y la direccion de ev_handler (identifica la version del programa)
+SV_TMP          equ $9770               ; cabecera leida (18 bytes)
+SV_LIVE         equ $9800               ; el estado vivo del interprete mientras se carga: $EB00-$EB3F, los dos primeros bytes de ARGS y los vectores EVVEC / HOSTVEC (73 bytes)
+sv_h            equ $9790               ; variables (el overlay esta en una pagina de solo lectura)
+wr_err          equ $9791
+wr_h            equ $9792
+wr_src          equ $9793
+wr_cnt          equ $9795
 SV_LEN_E        equ $2000
 SV_LEN_O        equ $0290
-SV_LEN_I        equ $DA00-INVSL
+SV_LEN_I        equ $9500-INVSL
 
 ho_saveload:    ld a,(ARGS+2)
                 and $E0
@@ -96,7 +96,7 @@ sl_save:        call update_ptr         ; el puntero del script en marcha va a s
                 ld bc,SV_LEN_E
                 call f_write_n
                 ld a,(sv_h)
-                ld hl,$CD00
+                ld hl,UI_DIRTY
                 ld bc,SV_LEN_O
                 call f_write_n
                 ld a,(sv_h)
@@ -148,7 +148,7 @@ sll_c:          ld a,(de)
                 ld bc,SV_LEN_E
                 call f_read_n
                 ld a,(sv_h)
-                ld hl,$CD00
+                ld hl,UI_DIRTY
                 ld bc,SV_LEN_O
                 call f_read_n
                 ld a,(sv_h)

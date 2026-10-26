@@ -23,7 +23,23 @@ def main():
     fine, rows = t[0], t[1:4]
     W, H = 256, 192
     img = [[(0, 0, 0)] * W for _ in range(H)]
-    for r in range(24):
+    hires = t[6] == 171
+    base = t[7] << 8
+    if hires:                                    # HiRes 8x1: bitmap lineal en base, atributos (papel | tinta) en $C000, entrada de la derecha en base + $1800 / $D800
+        for y in range(H):
+            off = fine if (rows[y // 64] >> ((y // 8) % 8)) & 1 else 0
+            px = []
+            for c in range(33):
+                if c < 32:
+                    byte, att = sh[base + y * 32 + c], sh[0xC000 + y * 32 + c]
+                else:
+                    byte, att = sh[base + 0x1800 + y], sh[0xD800 + y]
+                paper, ink = att >> 4, att & 15
+                for k in range(8):
+                    px.append(L.CHROMA[ink if (byte >> (7 - k)) & 1 else paper])
+            for x in range(W):
+                img[y][x] = px[x + off]
+    for r in range(0 if hires else 0, 0 if hires else 24):
         shifted = (rows[r // 8] >> (r % 8)) & 1
         off = fine if shifted else 0
         line = [sh[DFILE + 1 + 33 * r + c] for c in range(33)]

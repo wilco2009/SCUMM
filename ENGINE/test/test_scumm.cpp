@@ -32,7 +32,47 @@ static inline uint16_t rd16(int a) { return rd(a) | (rd(a + 1) << 8); }
 
 struct Spr { int on = 0, x = 0, y = 0; uint8_t col[8], pix[8], mask[8]; };
 static Spr spr[64];
-static int sel = 0, fine = 0, rows[3] = {255, 255, 255}, chroma = 0, sfast = 0;
+static int sel = 0, fine = 0, rows[3] = {255, 255, 255}, chroma = 0, sfast = 0, hfile = 0;
+
+// ---- motor de scroll por hardware (puerto $3FEF; ver claude/planning/scroll_hardware.md): modelo en software, sobre la sombra.
+// La orden se ejecuta al acabar el fotograma (main_loop) o, si el Z80 sondea el estado, tras 30000 instrucciones.
+static int ridx = 0, wreg2 = 0, cmd_pend = 0, cmd_val = 0, motor_run = 0, moves = 0;
+static bool wexp2 = false;
+static long long cmd_at = 0, steps_g = 0;
+static bool row_moves(int r) { int m = rows[r / 8]; return (m >> (r & 7)) & 1; }
+static void move_chain(const int ch[34], int dir) {
+  uint8_t tmp[34];
+  for (int q = 0; q < 34; q++) tmp[q] = ch[q] >= 0 ? shadow[ch[q]] : 0;
+  if (dir == 1) {
+    for (int q = 1; q <= 32; q++) shadow[ch[q]] = tmp[q + 1];
+    if (ch[0] >= 0) shadow[ch[0]] = tmp[1];
+  } else {
+    for (int q = 2; q <= 33; q++) shadow[ch[q]] = tmp[q - 1];
+    if (ch[0] >= 0) shadow[ch[1]] = tmp[0];
+    shadow[ch[33]] = tmp[32];
+  }
+}
+static void do_move(int dir) {
+  if (sfast != 171 || (dir != 1 && dir != 2)) return;
+  int base = hfile, ch[34];
+  for (int y = 0; y < 192; y++) {                                      // bitmap
+    if (!row_moves(y >> 3)) continue;
+    ch[0] = base + 0x1C00 + y; ch[33] = base + 0x1800 + y;
+    for (int c = 0; c < 32; c++) ch[c + 1] = base + y * 32 + c;
+    move_chain(ch, dir);
+  }
+  if ((chroma & 0x20) && !(chroma & 0x10))                             // atributos de HiRes modo 0 (8x1)
+    for (int y = 0; y < 192; y++) {
+      if (!row_moves(y >> 3)) continue;
+      ch[0] = 0xDC00 + y; ch[33] = 0xD800 + y;
+      for (int c = 0; c < 32; c++) ch[c + 1] = 0xC000 + y * 32 + c;
+      move_chain(ch, dir);
+    }
+  moves++;
+}
+static void motor_tick(bool frame_end) {
+  if (cmd_pend && (frame_end || steps_g - cmd_at > 30000)) { do_move(cmd_val); cmd_pend = 0; }
+}
 
 static int g_fr = 0, w_lo = -1, w_hi = -1, w_from = 0;   // TS_WATCH=lo-hi[,desde fotograma]: imprime las escrituras
 static inline void wr(int a, uint8_t v) {
@@ -52,10 +92,11 @@ static inline void wr(int a, uint8_t v) {
     else if (a == 2092) rows[1] = v;
     else if (a == 2093) rows[2] = v;
     else if (a == 2045) sfast = v;
+    else if (a == 2044) hfile = v << 8;
     return;
   }
   ram[blk[a >> 13]][a & 0x1FFF] = v;
-  if ((a >= 0x3800 && a < 0x4000) || (a >= 0xC000 && a < 0xD000)) shadow[a] = v;
+  shadow[a] = v;                                    // la sombra refleja toda la memoria logica
 }
 static inline void wr16(int a, uint16_t v) { wr(a, v & 255); wr(a + 1, v >> 8); }
 
@@ -173,7 +214,7 @@ static void dump(const char* path) {
     memcpy(b + 4, spr[i].col, 8); memcpy(b + 12, spr[i].pix, 8); memcpy(b + 20, spr[i].mask, 8);
     fwrite(b, 1, 32, f);
   }
-  uint8_t t[8] = {(uint8_t)fine, (uint8_t)rows[0], (uint8_t)rows[1], (uint8_t)rows[2], z80.i, (uint8_t)chroma, (uint8_t)sfast, 0};
+  uint8_t t[8] = {(uint8_t)fine, (uint8_t)rows[0], (uint8_t)rows[1], (uint8_t)rows[2], z80.i, (uint8_t)chroma, (uint8_t)sfast, (uint8_t)(hfile >> 8)};
   fwrite(t, 1, 8, f);
   fclose(f);
 }
@@ -190,9 +231,17 @@ void z80_writeport_wrapper(int port, int d, int*) {
   if (lo == 0xE7) blk[d & 7] = (port >> 8) & 0x3F;           // mapeador (paginacion completa): B = pagina, dato = bloque
   else if (lo == 0xA7) { mcu_byte(d & 255); mcu_clk ^= 1; }
   else if (lo == 0xEF && (port >> 8) == 0x7F) chroma = d;
+  else if (port == 0x3FEF) {                                  // puerto del depurador: orden del motor (registro 9 = OUT $41 + dato) y estado (OUT $20 + IN)
+    if (wexp2) { wexp2 = false; if (wreg2 == 1 && (d & 7) != 0) { if (!cmd_pend) { cmd_pend = 1; cmd_val = d & 7; cmd_at = steps_g; } } }
+    else if (d >= 0x20 && d <= 0x2F) ridx = 16 + (d & 15);
+    else if (d >= 0x40 && d <= 0x4F) { wexp2 = true; wreg2 = d & 15; }
+    else if (d <= 0x0F) ridx = d;
+  }
 }
 BYTE z80_readport_wrapper(int port, int*) {
   int lo = port & 0xFF;
+  if (port == 0x3FEF) return ridx == 16 ? (cmd_pend ? 0xC0 : 0) : 0;
+  if (lo == 0xE7) return blk[(port >> 8) & 7];
   if (lo == 0xAF) return (mcu_clk << 7) | 0x02;
   if (lo == 0xA7) {
     uint8_t v = mcu_outpos < mcu_out.size() ? mcu_out[mcu_outpos++] : 0;
@@ -261,6 +310,7 @@ int main(int argc, char** argv) {
   static int hist[256]; static int hi = 0;           // ultimos PC, para ver como se escapa el programa
   while (!finished) {
     if (z80.pc.w == main_loop_addr) {
+      motor_tick(true);
       frames_done++; g_fr = frames_done;
       if (const char* pk = getenv("TS_POKE")) {            // TS_POKE=fotograma:direccion:valor[,...]: escribe un byte (hex) en ese fotograma
         unsigned f, a, v; const char* p = pk;
@@ -290,6 +340,8 @@ int main(int argc, char** argv) {
     }
     hist[hi++ & 255] = z80.pc.w;
     z80_do_opcode();
+    steps_g++;
+    if (cmd_pend) motor_tick(false);
     if (steps > 50000000LL && !getenv("TS_NOSTOP")) { printf("atascado; ultimos PC:%c", 10); for (int k = 120; k > 0; k--) printf("%04X ", hist[(hi - k) & 255]); printf("%c", 10); break; }
     if (++steps > 2000000000LL) { printf("demasiadas instrucciones, pc=%04X%c", z80.pc.w, 10); break; }
   }

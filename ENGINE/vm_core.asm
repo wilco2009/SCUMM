@@ -32,7 +32,8 @@ VARS            equ $E000       ; 256 variables de 16 bits
                 include "vars_v2.inc"
 OBJST           equ $E200       ; estado de cada objeto (780)
 PF_OPEN         equ PROF+40     ; perfil del juego: dos objetos (u16, 0 = ninguno) que getState da siempre por abiertos (bit 8 del estado)
-ACTN            equ $DC1E       ; byte: cuantos numeros (0..ACTN-1) son actores y no objetos; NACTORS salvo que el perfil diga otra cosa
+ACTN            equ $971E       ; byte: cuantos numeros (0..ACTN-1) son actores y no objetos; NACTORS salvo que el perfil diga otra cosa
+WINPG           equ $971F       ; byte: la pagina fisica que tiene la ventana de datos (map_phys)
 PF_ACT          equ PROF+44     ; perfil: numero de ids de actor (0 = NACTORS)
 OBJOWN          equ $E520       ; dueno de cada objeto (780)
 SLOTS           equ $E900       ; NSLOT x 16
@@ -227,6 +228,7 @@ slot_addr:                              ; A = ranura -> HL (conserva DE)
 map_page:       jp map_page_x           ; A = pagina de datos -> ventana de datos (bloque WINBLK). En el programa completo es la cache por demanda de
                                         ; loader.asm; en el nucleo de pruebas (vm.asm) es map_phys: la pagina fisica tal cual
 map_phys:       ld b,a
+                ld (WINPG),a            ; la pagina que hay en la ventana de datos (la sala la asoma un momento: hr.asm)
                 ld c,$E7
                 ld a,WINBLK
                 out (c),a

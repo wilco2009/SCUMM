@@ -75,22 +75,13 @@ cm_arg8:        ld a,(ARGS)
                 add hl,hl
                 ret
 
-; la ventana alcanza el centro de golpe (hasta 160 vueltas de 8 pixeles)
+; la ventana alcanza el centro de golpe: la camara salta y se vuelve a dibujar la sala
 cm_snap:        ld a,(gf_have)
                 or a
                 ret z
-                xor a                   ; sin esperar al VSYNC en cada vuelta
-                ld (gd_sync),a
-                ld c,160
-cn_l:           ld b,8
-                push bc
-                call cm_show_b
-                pop bc
-                dec c
-                jr nz,cn_l
-                ld a,1
-                ld (gd_sync),a
-                jp gf_flip              ; y una sola copia con VSYNC
+                call cm_target
+                ld hl,(cu_t)
+                jp gf_jump
 
 ; cam_cx entre 128 y ancho - 128 (nuestra ventana mide 256: asi llega a los dos bordes de la sala) y VAR_CAMERA_POS_X =
 ; cam_cx acotado a VAR_CAMERA_MIN_X..MAX_X (160 y ancho - 160, como en el original) / 8
@@ -137,8 +128,8 @@ cc4:            ld h,b
                 ld (VAR_CAMERA_X),hl
                 ret
 
-; la ventana se mueve hacia cam_cx - 128 (entre 0 y el ultimo sitio de la sala), B pixeles como mucho
-cm_show_b:      ld hl,(cam_cx)
+; el objetivo de la camara, en pixeles: cam_cx - 128 entre 0 y el ultimo sitio de la sala -> cu_t
+cm_target:      ld hl,(cam_cx)
                 ld de,128
                 or a
                 sbc hl,de
@@ -153,11 +144,16 @@ cs1:            ld (cu_t),hl
                 ld hl,(cu_t)
                 or a
                 sbc hl,de
-                jr c,cs2
+                ret c
                 ld (cu_t),de
-cs2:
+                ret
+
+; la camara logica se mueve hacia cam_cx - 128 (entre 0 y el ultimo sitio de la sala), B pixeles como mucho (el hardware la sigue: hr_frame)
+cm_show_b:      push bc
+                call cm_target
+                pop bc
 cs_l:           push bc
-                call gf_campx
+                call gf_lpos
                 ld de,(cu_t)
                 or a
                 sbc hl,de               ; actual - objetivo

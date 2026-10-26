@@ -1,6 +1,6 @@
 ; GENERADO A MANO: variables del overlay y de la interfaz (RAM; el overlay esta en una pagina de solo lectura)
-OVL_VARS        equ $CE30
-DBG_START       equ $DC1C               ; palabra de depuracion (la escribe el usuario desde el emulador): numero de script a arrancar; el motor la pone a 0
+OVL_VARS        equ $8930
+DBG_START       equ $971C               ; palabra de depuracion (la escribe el usuario desde el emulador): numero de script a arrancar; el motor la pone a 0
 cam_cx          equ OVL_VARS+0
 cam_mode        equ OVL_VARS+2
 cam_dest        equ OVL_VARS+3
@@ -18,15 +18,15 @@ ac_cp           equ OVL_VARS+21
 ac_nx           equ OVL_VARS+23
 ac_fl           equ OVL_VARS+25
 ac_hold         equ OVL_VARS+26         ; fotogramas que los personajes siguen ocultos tras cambiar de sala
-UI_DIRTY        equ $CD00               ; bit 0 verbos, bit 1 frase, bit 2 inventario
-UI_IFACE        equ $CD01               ; bits 5-7 del estado de usuario: frase, inventario, verbos
-UI_CURSOR       equ $CD02               ; 1: el cursor esta activo
-UI_PREV         equ $CD04               ; copia de VAR_SENTENCE_VERB, OBJECT1, OBJECT2 y PREPOSITION (4 palabras)
-UI_NAME         equ $CD0C               ; nombre de objeto convertido (hasta 31 + 0)
-UI_PEGO         equ $CD2D               ; protagonista cuyo inventario esta dibujado
-UI_INVO         equ $CD2E               ; primer objeto del inventario que se ve (de 2 en 2)
-UI_TMP          equ $CD2F
-UI_LIM          equ $CD30
+UI_DIRTY        equ $8800               ; bit 0 verbos, bit 1 frase, bit 2 inventario
+UI_IFACE        equ $8801               ; bits 5-7 del estado de usuario: frase, inventario, verbos
+UI_CURSOR       equ $8802               ; 1: el cursor esta activo
+UI_PREV         equ $8804               ; copia de VAR_SENTENCE_VERB, OBJECT1, OBJECT2 y PREPOSITION (4 palabras)
+UI_NAME         equ $880C               ; nombre de objeto convertido (hasta 31 + 0)
+UI_PEGO         equ $882D               ; protagonista cuyo inventario esta dibujado
+UI_INVO         equ $882E               ; primer objeto del inventario que se ve (de 2 en 2)
+UI_TMP          equ $882F
+UI_LIM          equ $8830
 PF_IROW         equ PROF+1              ; perfil del juego (TOOLS/gameprofile.py): fila del inventario, de los verbos y de la frase
 PF_VROW         equ PROF+2
 PF_SROW         equ PROF+3
@@ -66,22 +66,22 @@ sdx_tctr         equ AV+16
 ac_cnt           equ AV+18               ; personajes a dibujar este fotograma y su lista (clave = y, numero), ordenada por y: el de mas abajo se dibuja el ultimo
 fl_xs            equ AV+19               ; linterna: celdas de ancho y de alto (lights a, b, 1); 0: sin linterna
 fl_ys            equ AV+20
-dk_ok            equ $DCA0               ; ventana de la linterna: hay, primera columna y fila, y las de la ultima vez que se pinto
-dk_c0            equ $DCA1
-dk_r0            equ $DCA2
-dk_pc            equ $DCA3
-dk_pr            equ $DCA4
-dk_row           equ $DCA5
-dk_src           equ $DCA6
-dk_dst           equ $DCA8
-AL               equ $DCB0               ; hasta 2 x NACTORS bytes
+dk_ok            equ $97A0               ; ventana de la linterna: hay, primera columna y fila, y las de la ultima vez que se pinto
+dk_c0            equ $97A1
+dk_r0            equ $97A2
+dk_pc            equ $97A3
+dk_pr            equ $97A4
+dk_row           equ $97A5
+dk_src           equ $97A6
+dk_dst           equ $97A8
+AL               equ $97B0               ; hasta 2 x NACTORS bytes
 sdx_left         equ AV+12               ; fotogramas que le quedan al que suena (65535: sin fin)                ; desplazamiento en pixeles de la celda dentro de su tira
 ac_id           equ OVL_VARS+30         ; numero del actor que se dibuja
 ac_pos           equ AV+24               ; posicion (cx | cy << 4) de la celda que se dibuja
 UI_SIF           equ OVL_VARS+27         ; interfaz, cursor y VAR_CURSORSTATE guardados por cutscene()
 UI_SCUR          equ OVL_VARS+28
 UI_SV21          equ AV+22               ; palabra (no puede ir en OVL_VARS+29: pisaba ac_id)
-NAMEOV          equ $CE60               ; nombres de objeto cambiados por setObjectName: NNAMES entradas de NM_SIZE bytes (objeto, texto + 0)
+NAMEOV          equ $8960               ; nombres de objeto cambiados por setObjectName: NNAMES entradas de NM_SIZE bytes (objeto, texto + 0)
 NNAMES          equ 8
 NM_SIZE         equ 26
 ACTNAME         equ NAMEOV+NNAMES*NM_SIZE ; nombre de cada actor (actorOps 3): pagina del script (0: sin nombre) y direccion de la cadena en el

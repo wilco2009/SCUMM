@@ -12,8 +12,8 @@ Formato (little endian; plan en claude/planning/scumm_hires16.md):
   +6   u16 columnas de la sala (ancho / 8)
   +8   u8 lineas (128), u8 numero de objetos
   +10  u16 donde esta la seccion de objetos (0: no hay)
-  +12  4 bytes a 0
-  +16  las columnas: por cada una, 128 bytes de bitmap (linea 0..127) y 128 de atributos; 256 bytes por columna
+  +12  hasta +255 a 0
+  +256 las columnas: por cada una, 128 bytes de bitmap (linea 0..127) y 128 de atributos; 256 bytes por columna
 Seccion de objetos: por objeto, en el orden de la sala, 6 bytes: u16 donde estan sus datos (desde el principio del fichero;
 FFFF = sin imagen), u8 columna, u8 linea, u8 columnas, u8 lineas. Los datos de un objeto: por columna, `lineas` bytes de bitmap y
 `lineas` de atributos (como las columnas de la sala). Los objetos son opacos. Los datos iguales se comparten.
@@ -30,7 +30,7 @@ import lfl2gfx as L
 import scumm2
 
 MAGIC = b'HRGF'
-HDR = 16
+HDR = 256                # las columnas empiezan en un multiplo de 256: la columna k esta en 256 * (k + 1), asi que 32 columnas llenan una pagina de 8 KB
 LINES = 128
 
 
@@ -63,7 +63,8 @@ def build(w, h, img, objs):
     """objs: lista, en el orden de la sala, de None o (col, linea, columnas, lineas, imagen). Devuelve (bytes, render, renders de objetos)."""
     bm, at, render = cells(img, w, h)
     data = bytearray(MAGIC)
-    data += struct.pack('<BBHBBH4x', 1, 0, w // 8, h, len(objs), 0)
+    data += struct.pack('<BBHBBH', 1, 0, w // 8, h, len(objs), 0)
+    data += bytes(HDR - len(data))
     data += column_bytes(bm, at)
     recs, blobs, share, orender = [], bytearray(), {}, []
     secoff = len(data)

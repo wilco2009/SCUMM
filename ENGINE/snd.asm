@@ -9,7 +9,7 @@
 ; =====================================================================
 SND_REST        equ 1
 SND_LOOP        equ 2
-SND_NAME        equ $DC20             ; el nombre del fichero se compone aqui (fuera de BACKBUF, que guarda la sala para la oscuridad)
+SND_NAME        equ $9720             ; el nombre del fichero se compone aqui (fuera de BACKBUF, que guarda la sala para la oscuridad)
 
 ; A = suceso (EV_SOUND_*), EVARGS = sonido
 snd_event:      cp EV_SOUND_STOPALL
