@@ -54,6 +54,7 @@ hv_pg           equ HV+30
 hv_c0            equ HV+32               ; columnas (minima y maxima) de los objetos que han cambiado
 hv_c1            equ HV+33
 hv_ch            equ HV+34
+hv_dark         equ HV+35               ; 1: la sala esta a oscuras (dark.asm): hr_put oscurece los atributos de lo que dibuja
 hv_drawn        equ HV+31               ; 0: la sala aun no se ha dibujado (se dibuja ya en su sitio: el salto de la camara, o gd_update si nadie la mueve)
 
 ; ---------------------------------------------------------------------
@@ -265,6 +266,12 @@ hs_l:           ld a,(hl)
 
 ; HR_COLBUF a la columna de pantalla A (0-31), al bufer de la derecha (32) o al de la izquierda ($FF)
 hr_put:         ld (hv_s),a
+                ld a,(hv_dark)
+                or a
+                jr z,hp_nd
+                ld a,(hv_s)
+                call OVL_DKMASK         ; los atributos de lo que queda fuera de la linterna, a 0
+hp_nd:          ld a,(hv_s)
                 cp 32
                 jr z,hp_r
                 cp $FF
@@ -608,6 +615,7 @@ hr_finish:      ld a,(hv_pend)
                 call hr_makecol
                 ld a,32
                 call hr_put
+                call hr_dk
                 jp hr_unmap
 hfn_r:          dec hl                  ; derecha
                 ld (hv_cam),hl
@@ -619,7 +627,13 @@ hfn_r:          dec hl                  ; derecha
                 call hr_makecol
                 ld a,$FF
                 call hr_put
+                call hr_dk
                 jp hr_unmap
+hr_dk:          ld a,(hv_dark)
+                or a
+                ret z
+                ld a,1
+                jp OVL_DARK             ; la linterna sigue a la camara (dark.asm)
 
 ; al FINAL de la vuelta del bucle principal: si la camara tiene que cruzar de columna, aqui se manda la orden del motor, se espera a que acabe (se ejecuta en
 ; la linea 254; la espera sustituye a la del VSYNC, que se haria igual) y se cierra el movimiento (fino a 0 o 7 y bufer de entrada) en seguida, con el haz
@@ -892,6 +906,7 @@ gj_ok:          ld (gf_cam),hl
 
 gd_sync:        defb 1
 gd_pending:     defb 0                  ; hay que volver a dibujar la sala
+gd_full:        defb 0                  ; 1: entera (cambio de luces); 0: solo los objetos que han cambiado
 vs_extra:       defb 0
 gf_flip:        ret
 
@@ -905,7 +920,12 @@ gd_update:      ld a,(gf_have)
                 ld a,(gd_pending)
                 or a
                 ret z
-                jp hr_objupd
+                ld a,(gd_full)
+                or a
+                jp z,hr_objupd
+                xor a
+                ld (gd_full),a
+                jp gf_draw_window       ; cambio de luces: todo
 
 ; camara logica (la de los scripts): los movimientos de gf_move_* no tocan el hardware
 gf_move_right:  ld hl,(gf_cam)

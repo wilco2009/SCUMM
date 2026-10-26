@@ -11,3 +11,4 @@ OVL_SND_EVENT   equ 21
 OVL_SND_TICK    equ 24
 OVL_DARK        equ 27
 OVL_HRUI        equ 30
+OVL_DKMASK      equ 33

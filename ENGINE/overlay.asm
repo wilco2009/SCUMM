@@ -17,6 +17,7 @@
                 jp snd_tick
                 jp dk_entry
                 jp hr_ui
+                jp dk_mask
 
 ov_init:        call sdx_ini
                 ld hl,NAMEOV            ; sin nombres cambiados

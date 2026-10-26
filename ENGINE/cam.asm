@@ -40,6 +40,7 @@ ho_lights:      ld a,(ARGS+4)           ; lights(a, b, c): c = 1 -> linterna de 
                 ld (fl_ys),a
 hl_r:           ld a,1
                 ld (gd_pending),a
+                ld (gd_full),a
                 ret
 ho_restart:     ld a,1
                 ld (rs_flag),a

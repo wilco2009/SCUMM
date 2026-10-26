@@ -293,8 +293,8 @@ static void load_roomdir() {
 static bool use_data = false;
 static std::vector<uint8_t> sn_scr, sn_own, sn_st, sn_room;      // las tablas tal como las dejo el cargador
 static void load_odir() {
-  for (int i = 0; i < 780 * 3; i++) wr(0xD000 + i, 0);
-  for (auto& kv : odir) { wr(0xD000 + 3 * kv.first, kv.second.page); wr16(0xD000 + 3 * kv.first + 1, kv.second.addr); }
+  for (int i = 0; i < 780 * 3; i++) wr(0x8B00 + i, 0);
+  for (auto& kv : odir) { wr(0x8B00 + 3 * kv.first, kv.second.page); wr16(0x8B00 + 3 * kv.first + 1, kv.second.addr); }
 }
 static void init_world() {
   if (use_data) {
