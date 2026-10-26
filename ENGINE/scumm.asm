@@ -899,34 +899,24 @@ wv_ok:          rrca
 ; ---------------------------------------------------------------------
 ;  Fuente: 46 glifos de la ROM (y tres propios) en los codigos 210-255, blanco sobre negro
 ; ---------------------------------------------------------------------
-init_font:      ld hl,font_src
+init_font:      ld hl,font_asc
                 ld de,TILES+GLYPH0*8
                 ld b,NGLYPH
 if_g:           push bc
                 push hl
                 ld a,(hl)
-                cp $80
-                jr nc,if_cus
+                sub 32                  ; font6.bin: 96 glifos de ASCII 32 en adelante, 8 lineas cada uno, el dibujo en los 6 bits de arriba
                 ld l,a
                 ld h,0
                 add hl,hl
                 add hl,hl
                 add hl,hl
-                ld bc,$1E00
+                ld bc,FONT6
                 add hl,bc
-                jr if_cp
-if_cus:         sub $80
-                ld l,a
-                ld h,0
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                ld bc,font_cus
-                add hl,bc
-if_cp:          ld b,8
+                ld b,8
 if_b:           ld a,(hl)
-                rrca                    ; las columnas 1-6 del glifo (la 0 y la 7 estan vacias): una fuente de 6 pixeles de ancho, 1 = tinta
-                and $3F
+                srl a                   ; a 6 bits por linea, 1 = tinta
+                srl a
                 ld (de),a
                 inc hl
                 inc de
@@ -1316,3 +1306,4 @@ ac_sp:          defb 0           ; fin del programa (el resto del codigo esta en
                 org $A000               ; la imagen del overlay se carga en el area del bitmap (aun vacia): $8700-$9AFF son variables
 OVERLAY_IMAGE:  incbin "overlay.bin"
 OVERLAY_END:
+FONT6:          incbin "font6.bin"      ; la fuente de 6 pixeles (EXAMPLES/EXPLORER/specfont6.bin); solo hace falta hasta que init_font la copia a TILES
