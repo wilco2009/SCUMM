@@ -245,7 +245,7 @@ co_no:          scf
 ; ---------------------------------------------------------------------
 ;  Un objeto (IX): sus mosaicos a los siguientes sprites (o, si es un rotulo ancho, al bitmap: sw_blit)
 ; ---------------------------------------------------------------------
-spr_obj:        ld a,(ix+O_VIEW)
+spr_obj2:       ld a,(ix+O_VIEW)
                 ld (hw_tag),a
                 ld a,(ix+O_LOOP)
                 ld (hw_tag+1),a
@@ -280,6 +280,44 @@ spr_obj:        ld a,(ix+O_VIEW)
                 ld de,41                ; 8 (barra de estado) - 1 + 32
                 add hl,de
                 ld (hw_top),hl          ; y del hardware de la primera linea de la celda (con signo)
+                ld a,(picvalid)
+                ld (hw_mk),a            ; con imagen, los pixeles tapados por el fondo se quitan de la mascara
+                ld a,$FF
+                ld (hw_gty),a
+                ld a,(ix+O_PRI)
+                ld (hw_pri),a
+                ld hl,(hw_x0)
+                ld de,32
+                or a
+                sbc hl,de
+                ld a,l
+                ld (hw_X0),a            ; x HiRes del borde izquierdo
+                ld e,a
+                ld d,0
+                ld a,(cv_w)
+                ld l,a
+                ld h,0
+                add hl,de
+                dec hl                  ; x del ultimo pixel
+                ld a,h
+                or a
+                jr z,hw_pl
+                ld l,255
+hw_pl:          ld h,0
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,hl
+                add hl,de
+                srl h
+                rr l
+                srl h
+                rr l
+                srl h
+                rr l
+                inc l
+                ld a,l
+                ld (hw_plim),a          ; hasta que pixel de AGI hay que decodificar la prioridad
                 xor a
                 ld (hw_i),a
 hw_tl:          ld a,(hw_i)
@@ -330,7 +368,15 @@ hw_xok:         ld hl,(hw_p)
                 ld (hw_sy),a
                 ld a,(hw_i)
                 ld (hw_tag+3),a
-                call spr_put
+                ld a,(hw_mk)
+                or a
+                jr z,hw_put
+                call hw_mask
+                jr z,hw_skip            ; el fondo lo tapa entero
+                ld a,(hw_i)
+                or $80                  ; etiqueta: mosaico con la mascara recortada
+                ld (hw_tag+3),a
+hw_put:         call spr_put
 hw_skip:        ld hl,(hw_p)
                 ld de,26
                 add hl,de
@@ -339,6 +385,303 @@ hw_skip:        ld hl,(hw_p)
                 inc (hl)
                 jr hw_tl
 hw_end:         jp unmap_win
+
+; ---------------------------------------------------------------------
+;  Prioridad frente al fondo: la mascara de cada fila de un mosaico se reduce a los pixeles cuyo pixel de AGI, (5 * x) >> 3, tiene en el plano de
+;  prioridad de los sprites (PG_PRI2, por el bloque 7) una prioridad <= la del objeto. Se hace por grupos de mosaicos de la misma fila (ty):
+;  para cada una de sus 8 lineas se decodifica la fila del plano una vez (PROW) y se calcula la mascara de todos sus mosaicos (MK).
+; ---------------------------------------------------------------------
+PROW            equ MSGBUF
+
+; Z si el mosaico hw_i se queda sin ningun pixel visible; si no, hw_mkp apunta a sus 8 mascaras
+hw_mask:        ld hl,(hw_p)
+                inc hl
+                ld a,(hl)
+                ld hl,hw_gty
+                cp (hl)
+                call nz,hw_group
+                ld a,(hw_i)
+                ld hl,hw_gs
+                sub (hl)
+                add a,a
+                add a,a
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,MK
+                add hl,de
+                ld (hw_mkp),hl
+                ld b,8
+                xor a
+hm_o:           or (hl)
+                inc hl
+                djnz hm_o
+                or a
+                ret
+
+; A = ty del mosaico hw_i: arma MK para todos los mosaicos de esa fila a partir de el
+hw_group:       ld (hw_gty),a
+                ld a,(hw_i)
+                ld (hw_gs),a
+                ld hl,(hw_p)
+                ld (hw_gp),hl
+                ld a,(hw_n)
+                ld b,a
+                ld a,(hw_i)
+                ld c,a
+                ld a,b
+                sub c
+                ld b,a                  ; mosaicos que quedan
+                ld c,0
+hg_c:           ld a,b
+                or a
+                jr z,hg_cd
+                inc hl
+                ld a,(hw_gty)
+                cp (hl)
+                dec hl
+                jr nz,hg_cd
+                inc c
+                ld a,c
+                cp 8
+                jr nc,hg_cd
+                ld de,26
+                add hl,de
+                dec b
+                jr hg_c
+hg_cd:          ld a,c
+                ld (hw_gn),a
+                ld a,(hw_gty)           ; py de la primera linea = top + ty*8 - 40
+                add a,a
+                add a,a
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,(hw_top)
+                add hl,de
+                ld de,40
+                or a
+                sbc hl,de
+                ld (hw_gb),hl
+                xor a
+                ld (hg_r),a
+hg_row:         ld a,(hg_r)
+                ld e,a
+                ld d,0
+                ld hl,(hw_gb)
+                add hl,de
+                ld a,h
+                or a
+                jr nz,hg_all            ; fuera de la imagen: sin prioridad
+                ld a,l
+                cp 168
+                jr nc,hg_all
+                ld (hg_py),a
+                ld a,PG_PRI2
+                call map7
+                ld a,(hg_py)
+                call pd_row
+                call map7_back
+                xor a
+                ld (hg_full),a
+                jr hg_t0
+hg_all:         ld a,1
+                ld (hg_full),a
+hg_t0:          ld hl,(hw_gp)
+                ld (hg_tp),hl
+                xor a
+                ld (hg_j),a
+hg_t:           ld a,(hg_j)
+                ld hl,hw_gn
+                cp (hl)
+                jr nc,hg_rn
+                ld a,(hg_full)
+                or a
+                ld c,$FF
+                jr nz,hg_m
+                ld hl,(hg_tp)           ; hx0 = X0 + tx * 8
+                ld a,(hl)
+                add a,a
+                add a,a
+                add a,a
+                ld l,a
+                ld h,0
+                jr nc,hg_x
+                inc h
+hg_x:           ld a,(hw_X0)
+                ld e,a
+                ld d,0
+                add hl,de
+                call hg_okb
+                ld c,a
+hg_m:           ld hl,(hg_tp)           ; mascara de la fila r
+                ld de,18
+                add hl,de
+                ld a,(hg_r)
+                ld e,a
+                ld d,0
+                add hl,de
+                ld a,(hl)
+                and c
+                ld c,a
+                ld a,(hg_j)             ; MK[j * 8 + r]
+                add a,a
+                add a,a
+                add a,a
+                ld hl,hg_r
+                add a,(hl)
+                ld e,a
+                ld d,0
+                ld hl,MK
+                add hl,de
+                ld (hl),c
+                ld hl,(hg_tp)
+                ld de,26
+                add hl,de
+                ld (hg_tp),hl
+                ld hl,hg_j
+                inc (hl)
+                jr hg_t
+hg_rn:          ld hl,hg_r
+                inc (hl)
+                ld a,(hl)
+                cp 8
+                jp c,hg_row
+                ret
+
+; HL = x HiRes del primer pixel -> A = pixeles visibles (bit 7 = el primero) segun PROW y hw_pri
+hg_okb:         ld b,8
+                ld c,0
+hk_l:           sla c
+                ld a,h
+                or a
+                jr nz,hk_v              ; x >= 256: fuera de la pantalla
+                push hl
+                ld d,0
+                ld e,l
+                add hl,hl
+                add hl,hl
+                add hl,de               ; 5 * x
+                srl h
+                rr l
+                srl h
+                rr l
+                srl h
+                rr l
+                ld de,PROW
+                add hl,de
+                ld a,(hl)
+                ld hl,hw_pri
+                cp (hl)
+                pop hl
+                jr c,hk_v
+                jr nz,hk_n              ; la del fondo es mayor
+hk_v:           inc c
+hk_n:           inc hl
+                djnz hk_l
+                ld a,c
+                ret
+
+; A = fila de la imagen, PG_PRI2 en el bloque 7 -> PROW (prioridad de los pixeles de AGI hasta hw_plim)
+pd_row:         ld l,a
+                ld h,0
+                add hl,hl
+                ld de,$E000
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld hl,$E000+336
+                add hl,de
+                ld de,PROW
+pd_l:           ld a,(hl)
+                inc hl
+                ld b,a
+                rrca
+                rrca
+                rrca
+                rrca
+                and 15
+                ld c,a
+                ld a,b
+                and 15
+                inc a
+                ld b,a
+                ld a,c
+pd_f:           ld (de),a
+                inc de
+                djnz pd_f
+                ld a,(hw_plim)
+                ld c,a
+                ld a,e
+                cp c
+                jr c,pd_l
+                ret
+
+; Objeto sin cambios desde el ciclo anterior (mismos datos y mismo primer sprite): se salta sus sprites; si no, se arma y se anota
+spr_obj:        ld a,(sk)
+                ld (hw_sk0),a
+                bit 1,(ix+O_SDR)
+                jr z,sob_go
+                push ix
+                pop hl
+                ld de,O_SVW
+                add hl,de
+                push ix
+                pop de
+                inc de
+                inc de
+                ld b,6
+sob_c:          ld a,(de)
+                cp (hl)
+                jr nz,sob_go
+                inc hl
+                inc de
+                djnz sob_c
+                ld a,(rn)
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,HWI
+                add hl,de
+                ld a,(sk)
+                cp (hl)
+                jr nz,sob_go
+                inc hl
+                ld a,(hl)
+                ld hl,sk
+                add a,(hl)
+                ld (hl),a
+                ret
+sob_go:         call spr_obj2
+                set 1,(ix+O_SDR)
+                push ix
+                pop hl
+                inc hl
+                inc hl
+                push ix
+                pop de
+                push hl
+                ld hl,O_SVW
+                add hl,de
+                ex de,hl
+                pop hl
+                ld bc,6
+                ldir
+                ld a,(rn)
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,HWI
+                add hl,de
+                ld a,(hw_sk0)
+                ld (hl),a
+                inc hl
+                ld c,a
+                ld a,(sk)
+                sub c
+                ld (hl),a
+                ret
 
 ; El mosaico en (hw_p) en el sprite sk, en (hw_sx, hw_sy), con la etiqueta hw_tag
 spr_put:        ld a,(sk)
@@ -363,7 +706,10 @@ hp_c:           ld a,(de)
                 xor a
                 jr hp_d1
 hp_dch:         ld a,1
-hp_d1:          ld (hw_dch),a
+hp_d1:          ld b,a
+                ld a,(hw_mk)            ; con prioridad la mascara depende de la posicion: siempre se reescribe
+                or b
+                ld (hw_dch),a
                 ld hl,(hw_sh)
                 ld a,(hl)
                 or a
@@ -398,6 +744,13 @@ hp_wr:          ld a,(sk)
                 inc hl
                 ld de,SPR_COL
                 ld bc,24
+                ldir
+                ld a,(hw_mk)
+                or a
+                jr z,hp_nd
+                ld hl,(hw_mkp)
+                ld de,SPR_COL+16
+                ld bc,8
                 ldir
 hp_nd:          ld a,(hw_pch)
                 or a
@@ -442,6 +795,24 @@ rpri:           defb 0
 rn:             defb 0
 hw_k:           defb 0
 hw_n:           defb 0
+hw_mk:          defb 0
+hw_gty:         defb 0
+hw_gs:          defb 0
+hw_gn:          defb 0
+hw_gp:          defw 0
+hw_gb:          defw 0
+hw_mkp:         defw 0
+hw_pri:         defb 0
+hw_X0:          defb 0
+hw_plim:        defb 0
+hw_sk0:         defb 0
+hg_r:           defb 0
+hg_py:          defb 0
+hg_full:        defb 0
+hg_tp:          defw 0
+hg_j:           defb 0
+MK:             defs 64
+HWI:            defs 64
 cv_n:           defb 0
 cv_w:           defb 0
 cv_h:           defb 0
