@@ -35,6 +35,27 @@ class Stop(Exception):
     pass
 
 
+def plot_hr(bm, at, y, x, c):
+    """Un pixel HiRes: cada celda de 8 pixeles solo tiene dos colores; si c no es ninguno, sustituye al mas parecido."""
+    import agi2hr
+    i = y * 32 + (x >> 3)
+    bit = 0x80 >> (x & 7)
+    paper, ink = at[i] >> 4, at[i] & 15
+    if c == ink:
+        bm[i] |= bit
+    elif c == paper:
+        bm[i] &= ~bit & 255
+    elif paper == ink:
+        at[i] = (paper << 4) | c
+        bm[i] |= bit
+    elif agi2hr.sdist(c, paper) < agi2hr.sdist(c, ink):
+        at[i] = (c << 4) | ink
+        bm[i] &= ~bit & 255
+    else:
+        at[i] = (paper << 4) | c
+        bm[i] |= bit
+
+
 class Obj:
     def __init__(self):
         self.anim = self.drawn = False
@@ -160,6 +181,63 @@ class Interp:
         o.cel = min(o.cel, len(cs) - 1)
         c = cs[o.cel]
         return c[0], c[1]
+
+    # ------------------------------------------------------------ sprites
+    def cel_pixels(self, o):
+        """(ancho, alto, transparente, filas de colores EGA ya espejadas) de la celda del objeto, o None si no existe."""
+        d = self.g.resource('VIEW', o.view)
+        if d is None or o.loop >= d[2]:
+            return None
+        lo = d[5 + 2 * o.loop] | (d[6 + 2 * o.loop] << 8)
+        if o.cel >= d[lo]:
+            return None
+        co = lo + (d[lo + 1 + 2 * o.cel] | (d[lo + 2 + 2 * o.cel] << 8))
+        w, h, tm = d[co], d[co + 1], d[co + 2]
+        trans = tm & 15
+        p = co + 3
+        rows = []
+        for _ in range(h):
+            row = []
+            while d[p]:
+                row.extend([d[p] >> 4] * (d[p] & 15))
+                p += 1
+            p += 1
+            row = (row + [trans] * w)[:w]
+            if (tm & 0x80) and ((tm >> 4) & 7) != o.loop:
+                row.reverse()
+            rows.append(row)
+        return w, h, trans, rows
+
+    def render(self):
+        """Pantalla HiRes 8x1 (bitmap y atributos de 168x32): la imagen con los objetos dibujados encima, por prioridad."""
+        import agi2hr
+        bm, at, _, _ = agi2hr.convert(self.pic)
+        bm = bytearray(bm)
+        at = bytearray(at)
+        pri2 = agi2hr.sprite_priority(self.pic.pri)
+        for p in range(16):
+            for n in sorted(self.objs):
+                o = self.objs[n]
+                if o.pri != p or not (o.anim and o.drawn):
+                    continue
+                c = self.cel_pixels(o)
+                if c is None:
+                    continue
+                w, h, trans, rows = c
+                top = o.y - h + 1
+                for r in range(h):
+                    py = top + r
+                    if not 0 <= py < 168:
+                        continue
+                    for i in range(w):
+                        px = o.x + i
+                        col = rows[r][i]
+                        if not 0 <= px < 160 or col == trans or pri2[py * 160 + px] > o.pri:
+                            continue
+                        ch = agi2hr.to_chroma(col)
+                        for hx in range((8 * px + 4) // 5, (8 * (px + 1) + 4) // 5):
+                            plot_hr(bm, at, py, hx, ch)
+        return bm, at
 
     def fmt(self, s, lognum):
         def rep(m):

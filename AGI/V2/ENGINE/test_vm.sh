@@ -9,12 +9,12 @@ SCRIPT=${3:-}
 E=../../../V2/ENGINE/test
 [ -d ../$G ] || { echo "sin datos de $G: prueba omitida"; exit 0; }
 python ../TOOLS/gen_agitab.py agivm.asm agiobj.asm agiin.asm agipic.asm agitab.inc
+python ../TOOLS/gen_sprtab.py sprtab.inc
 pasmo agivm.asm agivm.bin agivm.sym
 mkdir -p ../dump/$G
 python ../TOOLS/agi2log.py ../$G ../dump/$G/log > /dev/null
 python ../TOOLS/agi_vm.py ../$G --quiet --cycles $N --script "$SCRIPT" --listpics ../dump/$G/pics.txt > /dev/null
-NEED=""; for n in $(cat ../dump/$G/pics.txt); do f=$(printf "../dump/$G/log/PIC%03d.GFX" $n); [ -f "$f" ] || NEED="$NEED $n"; done
-[ -z "$NEED" ] || python ../TOOLS/agi2hr.py ../$G ../dump/$G/log $NEED > /dev/null
+python ../TOOLS/agi2hr.py ../$G ../dump/$G/log $(cat ../dump/$G/pics.txt) > /dev/null
 python ../TOOLS/mkevents.py ../dump/$G/log/EVENTS.BIN $N "$SCRIPT"
 $E/build/test_scumm.exe agivm.bin agivm.sym ../dump/$G/log $N ../dump/test_vm.bin
 python cmp_vm.py ../dump/test_vm.bin agivm.sym ../$G $N "$SCRIPT"

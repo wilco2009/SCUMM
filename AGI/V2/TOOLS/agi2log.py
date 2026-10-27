@@ -73,6 +73,11 @@ def main(argv):
         if not d:
             continue
         loops = ag.view_cells(d)[1]
+        if len(d) <= 8190:
+            with open(os.path.join(argv[2], 'VIEW%03d.GFX' % n), 'wb') as f:   # u16 tamano + el recurso tal cual (los sprites lo leen de aqui)
+                f.write(bytes((len(d) & 255, len(d) >> 8)) + bytes(d))
+        else:
+            print('VIEW %d: %d bytes, no cabe en una pagina' % (n, len(d)))
         off = 512 + len(blob)
         idx[2 * n] = off & 255
         idx[2 * n + 1] = off >> 8

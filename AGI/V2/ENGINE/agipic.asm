@@ -28,17 +28,23 @@ lp_o:           ld (fh),a
                 call f_read_n
                 ld a,(MSGBUF)
                 cp 'A'
-                jr nz,lp_bad
+                jp nz,lp_bad
                 ld a,(MSGBUF+3)
                 cp 'P'
-                jr nz,lp_bad
+                jp nz,lp_bad
                 ld hl,(MSGBUF+10)       ; bytes de prioridad
                 ld bc,PRI_MAX
                 or a
                 sbc hl,bc
-                jr nc,lp_bad
+                jp nc,lp_bad
                 ld hl,(MSGBUF+10)
                 ld (prisz),hl
+                ld hl,(MSGBUF+12)
+                ld (prisz2),hl
+                ld bc,PRI_MAX
+                or a
+                sbc hl,bc
+                jr nc,lp_bad
                 ld a,(fh)
                 ld hl,HR_BM+256
                 ld bc,PLANEB
@@ -53,10 +59,26 @@ lp_o:           ld (fh),a
                 ld hl,PRI_RLE
                 ld bc,(prisz)
                 call f_read_n
+                call pri_index
+                ld a,PG_PRI2
+                call map_page
+                ld a,(fh)
+                ld hl,PRI_RLE
+                ld bc,(prisz2)
+                call f_read_n
+                call pri_index
+                call spr_bg
+                ld a,(fh)
+                call f_close
+                ld a,1
+                ld (picvalid),a
+                ret
+; Con la pagina de prioridad mapeada y su RLE leido en PRI_RLE: el indice (desplazamiento de cada fila) en LWIN
+pri_index:
                 ld hl,PRI_RLE           ; indice: donde empieza cada fila
                 ld de,LWIN
                 ld b,168
-lp_row:         push hl
+pi_row:         push hl
                 push de
                 ld de,PRI_RLE
                 or a
@@ -70,20 +92,15 @@ lp_row:         push hl
                 ex de,hl                ; DE = indice siguiente
                 pop hl                  ; HL = lectura del RLE
                 ld c,0
-lp_run:         ld a,(hl)
+pi_run:         ld a,(hl)
                 inc hl
                 and 15
                 inc a
                 add a,c
                 ld c,a
                 cp 160
-                jr c,lp_run
-                djnz lp_row
-                call unmap_win
-                ld a,(fh)
-                call f_close
-                ld a,1
-                ld (picvalid),a
+                jr c,pi_run
+                djnz pi_row
                 ret
 lp_bad:         ld a,(fh)
                 call f_close
@@ -91,12 +108,12 @@ lp_bad:         ld a,(fh)
                 jp fatal
 
 ; A = numero -> "PICnnn.GFX" en nm3
-mk_nm3:         ld b,'0'-1
+mk_nm3:         ld hl,nm3+3
+mk_dig:         ld b,'0'-1
 m3_h:           inc b
                 sub 100
                 jr nc,m3_h
                 add a,100
-                ld hl,nm3+3
                 ld (hl),b
                 ld b,'0'-1
 m3_t:           inc b

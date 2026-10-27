@@ -9,8 +9,8 @@
 ;  Las logicas se leen de la SD como LOGnnn.AGL (convertidas por TOOLS/agi2log.py). El bytecode se ejecuta desde una ventana
 ;  en el bloque 4 ($8000), que se paginea a una de 8 paginas (16-23): una logica por pagina; la 0 se queda fija en la ranura 0.
 ;
-;  Memoria: $4200-  codigo   $6800 variables  $6900 banderas  $6A00 ranura de cada logica  $6B00 inventario  $6C00 duracion de sonidos
-;           $6E00 resumenes por ciclo   $7600 traza   $7F00 pila   $8000 ventana de la logica
+;  Memoria: $4200-  codigo   $6B00 variables  $6C00 banderas  $6D00 ranura de cada logica  $6E00 inventario  $6F00 teclas  $7100 controladores
+;           $7200 objetos  $7600 argumentos y cadenas  $7D60 fin de los datos   $8000 pila y ventana de la logica
 ; =====================================================================
 
                 org 16896
@@ -23,39 +23,39 @@ SLOW_FAST       equ $0207
 MAP_PORT        equ $E7
 CMD_64C         equ $1C
 
-VARS            equ $6800
-FLAGS           equ $6900
-LGSLOT          equ $6A00; logica -> ranura ($FF = no esta)
-INV             equ $6B00; sala de cada objeto del inventario (255 = lo lleva el ego)
+VARS            equ $6B00
+FLAGS           equ $6C00
+LGSLOT          equ $6D00; logica -> ranura ($FF = no esta)
+INV             equ $6E00; sala de cada objeto del inventario (255 = lo lleva el ego)
 SUMM            equ LWIN
 SUMMAX          equ 250
 TRACE           equ LWIN+$1800
 TRMAX           equ 680
-OBJ             equ $6F00
+OBJ             equ $7200
 NOBJ            equ 32
 VIEWPAGE        equ PG_VIEWS
 STACK           equ $8000
 LWIN            equ $8000
 TOKLIM          equ $EA                 ; parte baja del limite de TOKS (TOKS+90)
-KEYMAP          equ $6C00               ; por tecla ASCII: controlador y si esta puesto (2 bytes)
-CTL             equ $6E00               ; controladores activos en este ciclo
-STRS            equ $7310               ; 12 cadenas de 41 bytes
-MSGBUF          equ $7500
-TMPM            equ $7600
-WTEXT           equ $7700
-STMP            equ $77C0
-STMP2           equ $77F0
-PHR             equ $7820
-WBUF            equ $7850
-TOKS            equ $7890
-TOKP            equ $78F0
-INW             equ $7910
-KEYQ            equ $7930
-TQ              equ $7940
-EVBUF           equ $79F0
-SREC            equ $7A40
-TRREC           equ $7A50
-CLR_END         equ $7A60
+KEYMAP          equ $6F00               ; por tecla ASCII: controlador y si esta puesto (2 bytes)
+CTL             equ $7100               ; controladores activos en este ciclo
+STRS            equ $7610               ; 12 cadenas de 41 bytes
+MSGBUF          equ $7800
+TMPM            equ $7900
+WTEXT           equ $7A00
+STMP            equ $7AC0
+STMP2           equ $7AF0
+PHR             equ $7B20
+WBUF            equ $7B50
+TOKS            equ $7B90
+TOKP            equ $7BF0
+INW             equ $7C10
+KEYQ            equ $7C30
+TQ              equ $7C40
+EVBUF           equ $7CF0
+SREC            equ $7D40
+TRREC           equ $7D50
+CLR_END         equ $7D60
 PG_VIEWS        equ 24
 PG_WORDS        equ 25
 PG_SND          equ 26
@@ -66,7 +66,7 @@ MAXW            equ 6
 LPAGE0          equ 16
 NSLOTS          equ 8
 MAXDEPTH        equ 12
-ARGS            equ $7300; argumentos del comando o la condicion en curso
+ARGS            equ $7600; argumentos del comando o la condicion en curso
 
                 include "mcu.asm"
 
@@ -123,6 +123,7 @@ ml_run:         xor a
                 call do_new_room
                 jr ml_run
 ml_end:         call update_objects
+                call render
                 xor a
                 ld (inwvalid),a         ; la orden se acaba con el ciclo
                 ld (keyn),a
@@ -135,7 +136,15 @@ ml_end:         call update_objects
                 ld (VARS+4),a
                 ld (VARS+5),a
                 call tick_clock
-                call summary
+                ld hl,(ncyc)
+                ld a,h
+                or l
+                jr nz,ml_dbg
+                ld hl,(cyc)             ; ncyc = 0: modo real, sin resumenes ni limite de ciclos
+                inc hl
+                ld (cyc),hl
+                jp main_loop
+ml_dbg:         call summary
                 ld hl,(cyc)
                 inc hl
                 ld (cyc),hl
@@ -195,7 +204,7 @@ video_init:     ld a,85
                 ld (2093),a
                 xor a
                 ld (2090),a
-                ret
+                jp spr_init
 
 sc_map:         ld c,MAP_PORT
                 out (c),a
@@ -1492,6 +1501,7 @@ two_vars:       ld a,(ARGS+1)
                 include "agiobj.asm"
                 include "agiin.asm"
                 include "agipic.asm"
+                include "agispr.asm"
                 include "agitab.inc"
 
 nm:             defb "LOG000.AGL",0
@@ -1560,6 +1570,7 @@ pd_s:           defb 0
 ss_i:           defb 0
 picvalid:       defb 0
 prisz:          defw 0
+prisz2:         defw 0
 pr_has0:        defb 0
 pr_water:       defb 0
 pr_land:        defb 0

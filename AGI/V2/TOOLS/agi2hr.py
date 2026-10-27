@@ -12,10 +12,12 @@ Formato (little endian):
   +6    u16 ancho HiRes (256)
   +8    u8 lineas (168), u8 0
   +10   u16 tamano en bytes de la prioridad (RLE)
-  +12   hasta +255 a 0
+  +12   u16 tamano en bytes de la prioridad de los sprites (RLE, ver sprite_priority)
+  +14   hasta +255 a 0
   +256  bitmap: 168 lineas x 32 bytes (bit 7 = pixel de la izquierda, 1 = tinta)   -> va a $A000 tal cual
   +5632 atributos: 168 x 32 bytes (papel en el nibble alto, tinta en el bajo)      -> va a $C000 tal cual
   +11008 prioridad: por cada una de las 168 filas, runs de (prioridad << 4 | (longitud - 1)); cada fila suma 160 pixeles
+  +11008+n  prioridad de los sprites: el mismo formato, pero con las lineas de control (0-3) sustituidas por la primera prioridad >= 4 hacia abajo (4 si no hay)
 
 Uso:  agi2hr.py JUEGO SALIDA [--png] [n ...]
 """
@@ -45,6 +47,16 @@ def chroma_rgb(c):
 
 
 CHROMA = [chroma_rgb(c) for c in range(16)]
+def _lv(c):
+    br = c >> 3
+    return [(3 if br else 2) if (c >> bit) & 1 else (1 if br else 0) for bit in (1, 2, 0)]
+
+
+def sdist(a, b):
+    """Distancia entre dos codigos de Chroma con los canales en niveles 0-3 (cabe en un byte; es la tabla de los sprites del Z80)."""
+    return sum((x - y) ** 2 for x, y in zip(_lv(a), _lv(b)))
+
+
 DIST = [[sum((a - b) ** 2 for a, b in zip(CHROMA[i], CHROMA[j])) for j in range(16)] for i in range(16)]
 _cache = {}
 
@@ -119,6 +131,21 @@ def rle_priority(pri):
     return bytes(out)
 
 
+def sprite_priority(pri):
+    """Plano de prioridad contra el que se comparan los sprites: una linea de control (0-3) toma la primera prioridad >= 4 que
+    haya debajo (4 si no hay ninguna)."""
+    out = list(pri)
+    below = [4] * W
+    for y in range(H - 1, -1, -1):
+        for x in range(W):
+            v = out[y * W + x]
+            if v < 4:
+                v = below[x]
+                out[y * W + x] = v
+            below[x] = v
+    return out
+
+
 def unrle_priority(d):
     pri = []
     row = 0
@@ -136,13 +163,15 @@ def unrle_priority(d):
 def build(pic):
     bm, at, rec, bad = convert(pic)
     pr = rle_priority(pic.pri)
+    p2 = rle_priority(sprite_priority(pic.pri))
     hdr = bytearray(HDR)
     hdr[0:4] = MAGIC
     hdr[4] = 1
     struct.pack_into('<H', hdr, 6, HW)
     hdr[8] = H
     struct.pack_into('<H', hdr, 10, len(pr))
-    return bytes(hdr) + bytes(bm) + bytes(at) + pr, rec, bad
+    struct.pack_into('<H', hdr, 12, len(p2))
+    return bytes(hdr) + bytes(bm) + bytes(at) + pr + p2, rec, bad
 
 
 def read_back(data):
@@ -160,7 +189,9 @@ def read_back(data):
             for k in range(8):
                 line.append(a & 15 if (b >> (7 - k)) & 1 else a >> 4)
         rows.append(line)
-    return rows, unrle_priority(pr)
+    p2l = struct.unpack_from('<H', data, 12)[0]
+    p2 = data[HDR + 2 * PLANE + pl:HDR + 2 * PLANE + pl + p2l]
+    return rows, unrle_priority(pr), unrle_priority(p2)
 
 
 def main(argv):
@@ -185,8 +216,8 @@ def main(argv):
             print('PIC %d: error %s' % (k, e))
             continue
         data, rec, b = build(pic)
-        rows, pri = read_back(data)
-        assert rows == rec and pri == pic.pri, 'PIC %d: el fichero no reproduce la conversion' % k
+        rows, pri, pri2 = read_back(data)
+        assert rows == rec and pri == pic.pri and pri2 == sprite_priority(pic.pri), 'PIC %d: el fichero no reproduce la conversion' % k
         with open(os.path.join(out, 'PIC%03d.GFX' % k), 'wb') as f:
             f.write(data)
         if png:

@@ -56,7 +56,7 @@ def main(argv):
         print('resumen: %d ciclos iguales' % ncyc)
     if it.pic is not None and b('picvalid'):
         import agi2hr
-        bm, at, _, _ = agi2hr.convert(it.pic)
+        bm, at = it.render()
         PLANE = 168 * 32
         zb, za = mem[0xA100:0xA100 + PLANE], mem[0xC100:0xC100 + PLANE]
         nb = sum(1 for x, y in zip(zb, bm) if x != y)
