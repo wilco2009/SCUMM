@@ -8,6 +8,7 @@
 
 PG_PRI2         equ 30
 PG_OVB          equ 42
+PACE_V10        equ 0                   ; 1: cada ciclo dura v10 * 2,5 tramas (el ritmo del original, 10 ciclos/s); 0: solo se sincroniza con el VSYNC
 PG_PMX          equ 43
 PG_BGB          equ 31
 PG_BGA          equ 32
@@ -87,7 +88,13 @@ pace:           ld hl,(ncyc)
                 and $7E
                 rrca
                 ld c,a
-                ld a,(VARS+10)
+                ld a,PACE_V10
+                or a
+                jr nz,pc_v
+                ld c,0                  ; sin ritmo de AGI: solo se sincroniza con el VSYNC
+                ld a,1
+                jr pc_n
+pc_v:           ld a,(VARS+10)
                 ld l,a
                 ld h,0
                 ld d,h
