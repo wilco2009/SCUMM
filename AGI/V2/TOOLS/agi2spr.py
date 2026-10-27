@@ -9,7 +9,8 @@ ningun pixel opaco no se guardan. Los bucles espejados (bit 7 del byte de la cel
 Fichero Nvvvl.SPR (vvv = vista, l = bucle), little endian:
   +0   u16 tamano del resto
   +2   u8  numero de celdas
-  +3   u16 por celda: desplazamiento de su registro desde +2
+  +3   u8  maximo de mosaicos de una celda del bucle (los sprites que reserva un objeto)
+  +4   u16 por celda: desplazamiento de su registro desde +2
   registro de celda: u8 mosaicos, u8 ancho HiRes, u8 alto, u8 banderas (bit 0 = software), u16 huella de las mascaras, y por mosaico: u8 tx, u8 ty,
   8 bytes de color, 8 de dato y 8 de mascara (los 24 bytes van tal cual a 2105-2128: color, forma, mascara)
   Las celdas con mas de SW_TILES mosaicos en una fila (rotulos anchos) no caben en los sprites (12 por linea): las dibuja el Z80 en el bitmap, por celdas;
@@ -127,6 +128,12 @@ def meta(tiles):
     return (1 if per and max(per.values()) > SW_TILES else 0), h
 
 
+def loop_maxt(d, loop):
+    """Maximo de mosaicos de las celdas de un bucle."""
+    ncels = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)]
+    return max((len(cel_tiles(d, loop, c)[2]) for c in range(ncels)), default=0)
+
+
 def build_loop(d, loop):
     """Contenido de Nvvvl.SPR para el bucle `loop` de la vista d (sin el u16 del tamano)."""
     ncels = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)]
@@ -141,8 +148,9 @@ def build_loop(d, loop):
             r.extend(pix)
             r.extend(msk)
         recs.append(bytes(r))
-    out = bytearray((ncels,))
-    off = 1 + 2 * ncels
+    maxt = max((r[0] for r in recs), default=0)
+    out = bytearray((ncels, maxt))
+    off = 2 + 2 * ncels
     for r in recs:
         out.extend((off & 255, off >> 8))
         off += len(r)

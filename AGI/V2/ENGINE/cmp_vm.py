@@ -75,7 +75,7 @@ def main(argv):
     for k in range(64):
         e = spr[k * 32:(k + 1) * 32]
         on, x, y = e[0], e[1] | (e[2] << 8), e[3]
-        if k < len(exp):
+        if exp[k] is not None:
             sx, sy, col, pix, msk = exp[k]
             ok = on == 1 and x == sx and y == sy and list(e[4:12]) == col and list(e[12:20]) == pix and list(e[20:28]) == msk
             what = 'esperado (%d,%d)' % (sx, sy)
@@ -90,7 +90,7 @@ def main(argv):
         print('sprites: %d distintos de %d' % (nbad, 64))
         bad = 1
     else:
-        print('sprites: coinciden los %d activos (y el resto apagados)' % len(exp))
+        print('sprites: coinciden los %d activos (y el resto apagados)' % sum(1 for e in exp if e is not None))
     print('OK' if not bad and not errc else 'DIFERENCIAS')
     return 1 if bad or errc else 0
 

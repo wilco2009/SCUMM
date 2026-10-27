@@ -172,15 +172,18 @@ class Interp:
 
     # ------------------------------------------------------------ sprites (por hardware: ver agi2spr.py y ENGINE/agispr.asm)
     def hw_sprites(self):
-        """Los sprites del hardware que el Z80 tiene que dejar puestos: lista de (x, y, color[8], dato[8], mascara[8]) por indice (0 = el de abajo).
-        Los objetos con anim y drawn van de menor a mayor prioridad (a igual prioridad, por numero), cada uno con los mosaicos de su celda
-        (fila a fila); coordenadas del hardware (+32); un mosaico que cae entero fuera de la pantalla no ocupa sprite; como mucho 64.
+        """Los sprites del hardware que el Z80 tiene que dejar puestos: lista de 64 con (x, y, color[8], dato[8], mascara[8]) o None (apagado); el 0 es el de abajo.
+        Los objetos con anim y drawn van de menor a mayor prioridad (a igual prioridad, por numero). Cada uno reserva tantos sprites seguidos como el
+        mayor numero de mosaicos de una celda de su bucle (asi los demas no cambian de sprite cuando cambia su celda o los tapa el fondo) y el mosaico j de
+        su celda va al sprite reservado j. Coordenadas del hardware (+32); un mosaico que cae entero fuera de la pantalla, o que el fondo tapa entero, deja su
+        sprite apagado.
         Prioridad frente al fondo: un pixel del sprite solo se ve si la prioridad del objeto >= la del plano de prioridad de la imagen (agi2hr.sprite_priority) en
-        el pixel de AGI que ocupa ese pixel del HiRes ((5 * x) >> 3); se quita de la mascara. Un mosaico que se queda sin pixeles visibles no ocupa sprite."""
+        el pixel de AGI que ocupa ese pixel del HiRes ((5 * x) >> 3); se quita de la mascara."""
         import agi2spr
         import agi2hr
         pri2 = agi2hr.sprite_priority(self.pic.pri) if self.pic is not None else None
-        out = []
+        out = [None] * 64
+        k = 0
         for p in range(16):
             for n in sorted(self.objs):
                 o = self.objs[n]
@@ -202,10 +205,15 @@ class Interp:
                     continue
                 hrw, h, tiles = c
                 if agi2spr.meta(tiles)[0]:
-                    continue                # rotulo ancho: lo dibuja el Z80 en el bitmap (sw_objects)
+                    continue                # rotulo ancho: lo dibuja el Z80 en el bitmap (sw_blit)
+                start = k
+                k += agi2spr.loop_maxt(d, o.loop)
                 x0 = agi2spr.lo(o.x) + 32
                 top = 8 + o.y - h + 1 + 32
-                for tx, ty, col, pix, msk in tiles:
+                for j, (tx, ty, col, pix, msk) in enumerate(tiles):
+                    slot = start + j
+                    if slot >= 64:
+                        break
                     sx, sy = x0 + tx * 8, top + ty * 8
                     if sx <= 24 or sx >= 288 or sy <= 24 or sy >= 224:
                         continue
@@ -216,16 +224,14 @@ class Interp:
                             if not 0 <= py < 168:
                                 continue
                             ok = 0
-                            for k in range(8):
-                                hx = sx - 32 + k
+                            for kk in range(8):
+                                hx = sx - 32 + kk
                                 if hx < 0 or hx > 255 or pri2[py * 160 + ((5 * hx) >> 3)] <= o.pri:
-                                    ok |= 0x80 >> k
+                                    ok |= 0x80 >> kk
                             msk[r] &= ok
                         if not any(msk):
                             continue
-                    if len(out) >= 64:
-                        return out
-                    out.append((sx, sy, col, pix, msk))
+                    out[slot] = (sx, sy, col, pix, msk)
         return out
 
     def screen(self):

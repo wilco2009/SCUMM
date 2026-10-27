@@ -266,6 +266,8 @@ cel_open:       ld a,(ix+O_X)
                 cp $FF
                 jr z,co_no
                 call map_page
+                ld a,(LWIN+1)           ; mosaicos que reserva un objeto de este bucle
+                ld (cv_mt),a
                 ld a,(LWIN)             ; numero de celdas del bucle
                 ld b,a
                 ld a,(ix+O_CEL)
@@ -274,7 +276,7 @@ cel_open:       ld a,(ix+O_X)
                 ld l,a
                 ld h,0
                 add hl,hl
-                ld de,LWIN+1
+                ld de,LWIN+2
                 add hl,de
                 ld e,(hl)
                 inc hl
@@ -321,8 +323,7 @@ spr_obj2:       ld a,(ix+O_VIEW)
                 and 1
                 jp nz,hw_end            ; rotulo ancho: lo dibuja agisw.asm
                 ld a,(sk)
-                cp 64
-                jp nc,hw_end
+                ld (hw_base),a          ; este objeto reserva cv_mt sprites desde aqui
                 ld a,(cv_n)
                 ld (hw_n),a
                 ld a,(cv_h)
@@ -413,10 +414,12 @@ hw_pl:          ld h,0
 hw_tl:          ld a,(hw_i)
                 ld hl,hw_n
                 cp (hl)
-                jp nc,hw_end
-                ld a,(sk)
+                jp nc,hw_fin
+                ld hl,hw_base
+                add a,(hl)
+                ld (hw_slot),a          ; el mosaico j va al sprite reservado j
                 cp 64
-                jp nc,hw_end
+                jp nc,hw_skip
                 ld hl,(hw_p)
                 ld a,(hl)               ; tx
                 add a,a
@@ -472,7 +475,9 @@ hw_xok:         ld hl,(hw_p)
                 or $80                  ; etiqueta: mosaico con la mascara recortada
                 ld (hw_tag+3),a
 hw_put:         call spr_put
-hw_skip:        ld hl,(hw_p)
+                jr hw_nx
+hw_skip:        call hw_off1
+hw_nx:          ld hl,(hw_p)
                 ld de,26
                 add hl,de
                 ld (hw_p),hl
@@ -480,6 +485,51 @@ hw_skip:        ld hl,(hw_p)
                 inc (hl)
                 jp hw_tl
 hw_end:         jp unmap_win
+
+; Fin de los mosaicos de la celda: los sprites reservados que no usa se apagan y sk salta lo reservado
+hw_fin:         ld a,(hw_n)
+                ld (hw_i),a
+hf_l:           ld a,(hw_i)
+                ld hl,cv_mt
+                cp (hl)
+                jr nc,hf_d
+                ld hl,hw_base
+                add a,(hl)
+                ld (hw_slot),a
+                call hw_off1
+                ld hl,hw_i
+                inc (hl)
+                jr hf_l
+hf_d:           ld a,(hw_base)
+                ld hl,cv_mt
+                add a,(hl)
+                jr c,hf_c
+                cp 65
+                jr c,hf_s
+hf_c:           ld a,64
+hf_s:           ld (sk),a
+                jp unmap_win
+
+; Apaga el sprite hw_slot si esta encendido
+hw_off1:        ld a,(hw_slot)
+                cp 64
+                ret nc
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld de,SHD
+                add hl,de
+                ld a,(hl)
+                or a
+                ret z
+                ld (hl),0
+                ld a,(hw_slot)
+                ld (SPR_SEL),a
+                xor a
+                ld (SPR_ON),a
+                ret
 
 ; ---------------------------------------------------------------------
 ;  Prioridad frente al fondo: la mascara de cada fila de un mosaico se reduce a los pixeles cuyo pixel de AGI, (5 * x) >> 3, tiene en el plano de
@@ -863,7 +913,7 @@ sob_go:         call spr_obj2
                 ret
 
 ; El mosaico en (hw_p) en el sprite sk, en (hw_sx, hw_sy), con la etiqueta hw_tag
-spr_put:        ld a,(sk)
+spr_put:        ld a,(hw_slot)
                 ld l,a
                 ld h,0
                 add hl,hl
@@ -913,7 +963,7 @@ hp_d1:          ld b,a
                 jr hp_wr
 hp_pch:         ld a,1
                 ld (hw_pch),a
-hp_wr:          ld a,(sk)
+hp_wr:          ld a,(hw_slot)
                 ld (SPR_SEL),a
                 ld a,(hw_dch)
                 or a
@@ -956,9 +1006,7 @@ hp_ns:          ld hl,(hw_sh)
                 ld hl,hw_tag
                 ld bc,4
                 ldir
-hp_done:        ld hl,sk
-                inc (hl)
-                ret
+hp_done:        ret
 
 ; vistas en cache: vista y bucle de cada ranura
 vslot:          defb $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
@@ -1001,6 +1049,9 @@ hg_j:           defb 0
 MK:             defs 64
 HWI:            defs 64
 cv_n:           defb 0
+cv_mt:          defb 0
+hw_base:        defb 0
+hw_slot:        defb 0
 cv_w:           defb 0
 cv_h:           defb 0
 cv_fl:          defb 0
