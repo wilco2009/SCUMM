@@ -1018,8 +1018,11 @@ class Interp:
     def c_menu_input(self):
         """Modal como print: cada vuelta es un ciclo; las flechas (cambios de la direccion a 1, 3, 5, 7) mueven, ENTER elige (enciende el controlador del elemento si
         esta activado) y ESC cierra; la tecla no llega a la logica."""
-        if not self.menus:
-            return
+        if not self.menus or not self.flags[14]:
+            return                      # f14: los menus estan disponibles (el juego lo enciende al salir de la intro)
+        if self.keyq and self.keyq[-1] in self.keys:
+            self.keyq.pop()             # la tecla que lo abre (un controlador) no llega a have.key
+            self.vars[19] = 0
         sel = it = 0
         self.menu_ui = [sel, it]
         n0, v19 = len(self.keyq), self.vars[19]

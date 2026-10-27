@@ -386,7 +386,33 @@ h_enable_item:  ld hl,OVB_ENABLE
 h_disable_item: ld hl,OVB_DISABLE
                 jp call_b
 
-h_menu_input:   call OVL_SPRINIT        ; con el menu abierto los sprites se apagan
+h_menu_input:   ld a,(FLAGS+14)         ; f14: menus disponibles
+                or a
+                ret z
+                ld a,(keyn)             ; la tecla que lo abre (un controlador) no llega a have.key
+                or a
+                jr z,mi_nk
+                dec a
+                ld e,a
+                ld d,0
+                ld hl,KEYQ
+                add hl,de
+                ld a,(hl)
+                and 127
+                ld l,a
+                ld h,0
+                add hl,hl
+                ld de,KEYMAP
+                add hl,de
+                inc hl
+                ld a,(hl)
+                or a
+                jr z,mi_nk
+                ld hl,keyn
+                dec (hl)
+                xor a
+                ld (VARS+19),a
+mi_nk:          call OVL_SPRINIT        ; con el menu abierto los sprites se apagan
                 ld hl,OVB_MENUOPEN
                 call call_b
                 ld a,(mn_res)
