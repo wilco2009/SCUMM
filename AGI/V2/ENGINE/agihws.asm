@@ -44,7 +44,8 @@ si_h:           ld a,b
                 ret
 
 t_render:       call sw_scan
-                call sw_restore
+                call sw_close
+                call sw_comp
                 xor a
                 ld (sk),a
                 ld (rpri),a
@@ -254,7 +255,7 @@ spr_obj:        ld a,(ix+O_VIEW)
                 ret c
                 ld a,(cv_fl)
                 and 1
-                jp nz,sw_blit
+                jp nz,hw_end            ; rotulo ancho: lo dibuja agisw.asm
                 ld a,(sk)
                 cp 64
                 jp nc,hw_end

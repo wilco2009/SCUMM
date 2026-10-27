@@ -223,11 +223,11 @@ class Interp:
         return sb, sa
 
     def sw_blit(self, sb, sa):
-        """Los objetos con celdas anchas (mas de SW_TILES mosaicos en una fila) no van en sprites: se dibujan en el bitmap, de menor a mayor prioridad, por celdas de
-        8 pixeles con el borde izquierdo en la celda (lo(x) + 4) / 8. Una fila de mosaico cuyas 8 posiciones son opacas escribe el bitmap y el atributo de la
-        celda tal cual; una a medias parte de la celda de la imagen (con su texto) y pone solo sus pixeles, uno a uno."""
+        """Los objetos con celdas anchas (mas de SW_TILES mosaicos en una fila) no van en sprites: se dibujan en el bitmap, de menor a mayor prioridad, sobre la
+        imagen (con su texto). Su borde izquierdo esta en el pixel HiRes lo(x) = 8*cx0 + s; cada fila de cada mosaico (en orden) aporta a la celda cx0 + tx la parte
+        desplazada s a la derecha (A) y, si s > 0, a la siguiente la que se sale (B). Una parte con las 8 posiciones opacas escribe el bitmap y el atributo de la
+        celda tal cual; si no, pone sus pixeles uno a uno (agi_text.plot_hr) sobre lo que haya. (agisw.asm lo hace por lineas, con un bufer, sin borrar nada.)"""
         import agi2spr
-        bgb, bga = bytearray(sb), bytearray(sa)
         for p in range(16):
             for n in sorted(self.objs):
                 o = self.objs[n]
@@ -248,27 +248,31 @@ class Interp:
                 if c is None or not agi2spr.meta(c[2])[0]:
                     continue
                 hrw, h, tiles = c
-                cx0 = (agi2spr.lo(o.x) + 4) >> 3
+                x0 = agi2spr.lo(o.x)
+                cx0, s = x0 >> 3, x0 & 7
                 top = o.y - h + 9
                 for tx, ty, col, pix, msk in tiles:
-                    cell = cx0 + tx
-                    if cell > 31:
-                        continue
                     for r in range(8):
                         line = top + ty * 8 + r
                         m = msk[r]
                         if line < 8 or line > 175 or m == 0:
                             continue
-                        i = line * 32 + cell
                         ink, paper = col[r] >> 4, col[r] & 15
-                        if m == 255:
-                            sb[i] = pix[r]
-                            sa[i] = (paper << 4) | ink
+                        if s == 0:
+                            parts = [(cx0 + tx, m, pix[r])]
                         else:
-                            sb[i], sa[i] = bgb[i], bga[i]
-                            for bit in range(8):
-                                if m & (0x80 >> bit):
-                                    plot_hr(sb, sa, line, cell * 8 + bit, ink if pix[r] & (0x80 >> bit) else paper)
+                            parts = [(cx0 + tx, m >> s, pix[r] >> s), (cx0 + tx + 1, (m << (8 - s)) & 255, (pix[r] << (8 - s)) & 255)]
+                        for cell, pm, pp in parts:
+                            if pm == 0 or cell > 31:
+                                continue
+                            i = line * 32 + cell
+                            if pm == 255:
+                                sb[i] = pp
+                                sa[i] = (paper << 4) | ink
+                            else:
+                                for bit in range(8):
+                                    if pm & (0x80 >> bit):
+                                        plot_hr(sb, sa, line, cell * 8 + bit, ink if pp & (0x80 >> bit) else paper)
 
     def render(self):
         """Plano de 168x32: la imagen con el texto que se le ha escrito encima."""

@@ -325,6 +325,9 @@ t_srow:         ld l,a
                 ld de,HR_BM
                 add hl,de
                 ld (srow),hl
+                ld de,$2000
+                add hl,de
+                ld (sarow),hl
                 ret
 
 ; ---------------------------------------------------------------------
@@ -933,13 +936,13 @@ plot:           ld b,a
                 and 31
                 ld e,a
                 ld d,0
+                ld hl,(sarow)
+                add hl,de
+                push hl                 ; byte de atributos
                 ld hl,(srow)
                 add hl,de
                 ex de,hl                ; DE = byte del bitmap
-                ld a,d
-                add a,$20               ; los atributos estan $2000 mas arriba
-                ld h,a
-                ld l,e                  ; HL = byte de atributos
+                pop hl                  ; HL = byte de atributos
                 ld a,(hl)
                 ld b,a
                 and 15
@@ -1028,6 +1031,7 @@ pl_clr:         ld a,(pmk)
 masks:          defb 128,64,32,16,8,4,2,1
 sch:            defb 0
 srow:           defw 0
+sarow:          defw 0
 pk:             defb 0
 pp:             defb 0
 pmk:            defb 0
