@@ -48,29 +48,93 @@ t_render:       call sw_scan
                 call sw_comp
                 xor a
                 ld (sk),a
-                ld (rpri),a
-hq_p:           ld ix,OBJ
-                xor a
-                ld (rn),a
-hq_o:           ld a,(ix+O_F1)
+                ld hl,PCNT              ; objetos por prioridad (reparto por cubos): primero cuantos hay de cada una
+                ld de,PCNT+1
+                ld bc,15
+                ld (hl),0
+                ldir
+                ld ix,OBJ
+                ld b,NOBJ
+hq_c:           ld a,(ix+O_F1)
                 and 3
                 cp 3
-                jr nz,hq_n
-                ld a,(rpri)
-                cp (ix+O_PRI)
-                call z,spr_obj
-hq_n:           ld de,32
+                jr nz,hq_cn
+                ld a,(ix+O_PRI)
+                cp 16
+                jr nc,hq_cn
+                ld e,a
+                ld d,0
+                ld hl,PCNT
+                add hl,de
+                inc (hl)
+hq_cn:          ld de,32
+                add ix,de
+                djnz hq_c
+                ld hl,PCNT              ; donde empieza cada prioridad en ORD
+                ld b,16
+                xor a
+hq_s:           ld c,(hl)
+                ld (hl),a
+                add a,c
+                inc hl
+                djnz hq_s
+                ld (hq_cnt),a
+                ld ix,OBJ
+                xor a
+                ld (rn),a
+hq_p2:          ld a,(ix+O_F1)
+                and 3
+                cp 3
+                jr nz,hq_pn
+                ld a,(ix+O_PRI)
+                cp 16
+                jr nc,hq_pn
+                ld e,a
+                ld d,0
+                ld hl,PCNT
+                add hl,de
+                ld e,(hl)
+                inc (hl)
+                ld d,0
+                ld hl,ORD
+                add hl,de
+                ld a,(rn)
+                ld (hl),a
+hq_pn:          ld de,32
                 add ix,de
                 ld hl,rn
                 inc (hl)
                 ld a,(hl)
                 cp NOBJ
-                jr c,hq_o
-                ld hl,rpri
-                inc (hl)
+                jr c,hq_p2
+                xor a                   ; y ahora, en orden
+                ld (hq_k),a
+hq_it:          ld a,(hq_k)
+                ld hl,hq_cnt
+                cp (hl)
+                jr nc,hq_dn
+                ld e,a
+                ld d,0
+                ld hl,ORD
+                add hl,de
                 ld a,(hl)
-                cp 16
-                jr c,hq_p
+                ld (rn),a
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld de,OBJ
+                add hl,de
+                push hl
+                pop ix
+                call spr_obj
+                ld hl,hq_k
+                inc (hl)
+                jr hq_it
+hq_dn:
                 xor a
                 ld (sw_force),a
                 ld a,(sk)               ; apagar los que sobran
@@ -318,6 +382,32 @@ hw_pl:          ld h,0
                 inc l
                 ld a,l
                 ld (hw_plim),a          ; hasta que pixel de AGI hay que decodificar la prioridad
+                dec a
+                rrca
+                rrca
+                rrca
+                and 31
+                ld (hw_bx1),a           ; bloques de 8 pixeles de AGI que toca el objeto
+                ld a,(hw_X0)
+                ld l,a
+                ld h,0
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,hl
+                add hl,de
+                srl h
+                rr l
+                srl h
+                rr l
+                srl h
+                rr l
+                ld a,l
+                rrca
+                rrca
+                rrca
+                and 31
+                ld (hw_bx0),a
                 xor a
                 ld (hw_i),a
 hw_tl:          ld a,(hw_i)
@@ -368,11 +458,16 @@ hw_xok:         ld hl,(hw_p)
                 ld (hw_sy),a
                 ld a,(hw_i)
                 ld (hw_tag+3),a
+                xor a
+                ld (hw_mm),a
                 ld a,(hw_mk)
                 or a
                 jr z,hw_put
                 call hw_mask
                 jr z,hw_skip            ; el fondo lo tapa entero
+                ld a,(hw_mm)
+                or a
+                jr z,hw_put
                 ld a,(hw_i)
                 or $80                  ; etiqueta: mosaico con la mascara recortada
                 ld (hw_tag+3),a
@@ -383,7 +478,7 @@ hw_skip:        ld hl,(hw_p)
                 ld (hw_p),hl
                 ld hl,hw_i
                 inc (hl)
-                jr hw_tl
+                jp hw_tl
 hw_end:         jp unmap_win
 
 ; ---------------------------------------------------------------------
@@ -400,6 +495,18 @@ hw_mask:        ld hl,(hw_p)
                 ld hl,hw_gty
                 cp (hl)
                 call nz,hw_group
+                ld a,(hw_graw)
+                or a
+                jr z,hm_mk
+                ld hl,(hw_p)            ; el fondo no puede tapar nada: la mascara del propio mosaico
+                ld de,18
+                add hl,de
+                ld (hw_mkp),hl
+                xor a
+                ld (hw_mm),a
+                jr hm_ck
+hm_mk:          ld a,1
+                ld (hw_mm),a
                 ld a,(hw_i)
                 ld hl,hw_gs
                 sub (hl)
@@ -411,6 +518,7 @@ hw_mask:        ld hl,(hw_p)
                 ld hl,MK
                 add hl,de
                 ld (hw_mkp),hl
+hm_ck:          ld hl,(hw_mkp)
                 ld b,8
                 xor a
 hm_o:           or (hl)
@@ -463,7 +571,32 @@ hg_cd:          ld a,c
                 or a
                 sbc hl,de
                 ld (hw_gb),hl
-                xor a
+                xor a                   ; antes de armar nada: ¿alguna de las 8 filas puede tener el fondo por encima?
+                ld (hg_r),a
+hg_pre:         ld a,(hg_r)
+                ld e,a
+                ld d,0
+                ld hl,(hw_gb)
+                add hl,de
+                ld a,h
+                or a
+                jr nz,hg_pn
+                ld a,l
+                cp 168
+                jr nc,hg_pn
+                ld (hg_py),a
+                call hg_need
+                jr nz,hg_dec
+hg_pn:          ld hl,hg_r
+                inc (hl)
+                ld a,(hl)
+                cp 8
+                jr c,hg_pre
+                ld a,1
+                ld (hw_graw),a          ; ninguna: sin mascara que armar
+                ret
+hg_dec:         xor a
+                ld (hw_graw),a
                 ld (hg_r),a
 hg_row:         ld a,(hg_r)
                 ld e,a
@@ -477,6 +610,8 @@ hg_row:         ld a,(hg_r)
                 cp 168
                 jr nc,hg_all
                 ld (hg_py),a
+                call hg_need
+                jr z,hg_all             ; el fondo no puede taparlo en esta fila
                 ld a,PG_PRI2
                 call map7
                 ld a,(hg_py)
@@ -547,6 +682,50 @@ hg_rn:          ld hl,hg_r
                 ld a,(hl)
                 cp 8
                 jp c,hg_row
+                ret
+
+; NZ si en la fila hg_py algun bloque del objeto tiene un maximo de prioridad mayor que la del objeto (PG_PMX, por el bloque 7)
+hg_need:        ld a,PG_PMX
+                call map7
+                ld a,(hg_py)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                ld d,h
+                ld e,l                  ; 4 * py
+                add hl,hl
+                add hl,hl
+                add hl,de               ; 20 * py
+                ld a,(hw_bx0)
+                ld e,a
+                ld d,0
+                add hl,de
+                ld de,$E000
+                add hl,de
+                ld a,(hw_bx1)
+                ld b,a
+                ld a,(hw_bx0)
+                ld c,a
+                ld a,b
+                sub c
+                inc a
+                ld b,a                  ; bloques
+                ld a,(hw_pri)
+                ld c,a
+hn_l:           ld a,(hl)
+                cp c
+                jr c,hn_n
+                jr z,hn_n
+                ld a,1
+                jr hn_r
+hn_n:           inc hl
+                djnz hn_l
+                xor a
+hn_r:           push af
+                call map7_back
+                pop af
+                or a
                 ret
 
 ; HL = x HiRes del primer pixel -> A = pixeles visibles (bit 7 = el primero) segun PROW y hw_pri
@@ -707,7 +886,7 @@ hp_c:           ld a,(de)
                 jr hp_d1
 hp_dch:         ld a,1
 hp_d1:          ld b,a
-                ld a,(hw_mk)            ; con prioridad la mascara depende de la posicion: siempre se reescribe
+                ld a,(hw_mm)            ; con la mascara recortada depende de la posicion: siempre se reescribe
                 or b
                 ld (hw_dch),a
                 ld hl,(hw_sh)
@@ -745,7 +924,7 @@ hp_wr:          ld a,(sk)
                 ld de,SPR_COL
                 ld bc,24
                 ldir
-                ld a,(hw_mk)
+                ld a,(hw_mm)
                 or a
                 jr z,hp_nd
                 ld hl,(hw_mkp)
@@ -795,6 +974,14 @@ rpri:           defb 0
 rn:             defb 0
 hw_k:           defb 0
 hw_n:           defb 0
+hq_cnt:         defb 0
+hq_k:           defb 0
+hw_mm:          defb 0
+hw_graw:        defb 0
+PCNT:           defs 16
+ORD:            defs NOBJ
+hw_bx0:         defb 0
+hw_bx1:         defb 0
 hw_mk:          defb 0
 hw_gty:         defb 0
 hw_gs:          defb 0

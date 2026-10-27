@@ -13,10 +13,12 @@ Formato (little endian):
   +8    u8 lineas (168), u8 0
   +10   u16 tamano en bytes de la prioridad (RLE)
   +12   u16 tamano en bytes de la prioridad de los sprites (RLE, ver sprite_priority)
-  +14   hasta +255 a 0
+  +14   u16 tamano del plano de maximos (168 x 20 bytes, ver pmax_plane)
+  +16   hasta +255 a 0
   +256  bitmap: 168 lineas x 32 bytes (bit 7 = pixel de la izquierda, 1 = tinta)   -> va a $A000 tal cual
   +5632 atributos: 168 x 32 bytes (papel en el nibble alto, tinta en el bajo)      -> va a $C000 tal cual
   +11008 prioridad: por cada una de las 168 filas, runs de (prioridad << 4 | (longitud - 1)); cada fila suma 160 pixeles
+  +11008+n+m  maximos por bloques de 8 pixeles de AGI de la prioridad de los sprites (para saltarse la mascara)
   +11008+n  prioridad de los sprites: el mismo formato, pero con las lineas de control (0-3) sustituidas por la primera prioridad >= 4 hacia abajo (4 si no hay)
 
 Uso:  agi2hr.py JUEGO SALIDA [--png] [n ...]
@@ -146,6 +148,17 @@ def sprite_priority(pri):
     return out
 
 
+def pmax_plane(pri2):
+    """Maxima de la prioridad de los sprites por bloques de 8 pixeles de AGI de ancho (20 por fila): 168 x 20 bytes. Sirve para saltarse la mascara de un sprite
+    en las zonas donde el fondo no puede taparlo."""
+    out = bytearray()
+    for y in range(H):
+        row = pri2[y * W:(y + 1) * W]
+        for b in range(W // 8):
+            out.append(max(row[b * 8:b * 8 + 8]))
+    return bytes(out)
+
+
 def unrle_priority(d):
     pri = []
     row = 0
@@ -164,6 +177,7 @@ def build(pic):
     bm, at, rec, bad = convert(pic)
     pr = rle_priority(pic.pri)
     p2 = rle_priority(sprite_priority(pic.pri))
+    pm = pmax_plane(sprite_priority(pic.pri))
     hdr = bytearray(HDR)
     hdr[0:4] = MAGIC
     hdr[4] = 1
@@ -171,7 +185,8 @@ def build(pic):
     hdr[8] = H
     struct.pack_into('<H', hdr, 10, len(pr))
     struct.pack_into('<H', hdr, 12, len(p2))
-    return bytes(hdr) + bytes(bm) + bytes(at) + pr + p2, rec, bad
+    struct.pack_into('<H', hdr, 14, len(pm))
+    return bytes(hdr) + bytes(bm) + bytes(at) + pr + p2 + pm, rec, bad
 
 
 def read_back(data):

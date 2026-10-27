@@ -8,6 +8,7 @@
 
 PG_PRI2         equ 30
 PG_OVB          equ 42
+PG_PMX          equ 43
 PG_BGB          equ 31
 PG_BGA          equ 32
 PG_VC0          equ 33

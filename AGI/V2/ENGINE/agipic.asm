@@ -44,7 +44,7 @@ lp_o:           ld (fh),a
                 ld bc,PRI_MAX
                 or a
                 sbc hl,bc
-                jr nc,lp_bad
+                jp nc,lp_bad
                 ld a,(fh)
                 ld hl,HR_BM+256
                 ld bc,PLANEB
@@ -67,6 +67,12 @@ lp_o:           ld (fh),a
                 ld bc,(prisz2)
                 call f_read_n
                 call pri_index
+                ld a,PG_PMX             ; maximos de la prioridad por bloques (para los sprites)
+                call map_page
+                ld a,(fh)
+                ld hl,LWIN
+                ld bc,168*20
+                call f_read_n
                 call unmap_win
                 call OVL_BGSAVE
                 ld a,(fh)
