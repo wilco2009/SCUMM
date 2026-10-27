@@ -68,7 +68,29 @@ def main(argv):
                 len(db), len(da), [(i // 32, i % 32) for i in (db + da)[:8]]))
             bad = 1
         else:
-            print('pantalla: coincide (192 lineas, con texto y sprites)')
+            print('pantalla: coincide (192 lineas, con texto)')
+    spr = dump[2 * 65536:2 * 65536 + 64 * 32]
+    exp = it.hw_sprites()
+    nbad = 0
+    for k in range(64):
+        e = spr[k * 32:(k + 1) * 32]
+        on, x, y = e[0], e[1] | (e[2] << 8), e[3]
+        if k < len(exp):
+            sx, sy, col, pix, msk = exp[k]
+            ok = on == 1 and x == sx and y == sy and list(e[4:12]) == col and list(e[12:20]) == pix and list(e[20:28]) == msk
+            what = 'esperado (%d,%d)' % (sx, sy)
+        else:
+            ok = on == 0
+            what = 'esperado apagado'
+        if not ok:
+            nbad += 1
+            if nbad <= 3:
+                print('sprite %d: Z80 on=%d x=%d y=%d, %s' % (k, on, x, y, what))
+    if nbad:
+        print('sprites: %d distintos de %d' % (nbad, 64))
+        bad = 1
+    else:
+        print('sprites: coinciden los %d activos (y el resto apagados)' % len(exp))
     print('OK' if not bad and not errc else 'DIFERENCIAS')
     return 1 if bad or errc else 0
 

@@ -91,6 +91,7 @@ class Interp:
         self.status_on = False
         self.st_last = None
         self.pic_ops = []
+        self.spr_big = {}
         self.ext_bm = bytearray(192 * 32)
         self.ext_at = bytearray(192 * 32)
         self.newroom = None
@@ -169,34 +170,47 @@ class Interp:
         c = cs[o.cel]
         return c[0], c[1]
 
-    # ------------------------------------------------------------ sprites
-    def cel_pixels(self, o):
-        """(ancho, alto, transparente, filas de colores EGA ya espejadas) de la celda del objeto, o None si no existe."""
-        d = self.g.resource('VIEW', o.view)
-        if d is None or o.loop >= d[2]:
-            return None
-        lo = d[5 + 2 * o.loop] | (d[6 + 2 * o.loop] << 8)
-        if o.cel >= d[lo]:
-            return None
-        co = lo + (d[lo + 1 + 2 * o.cel] | (d[lo + 2 + 2 * o.cel] << 8))
-        w, h, tm = d[co], d[co + 1], d[co + 2]
-        trans = tm & 15
-        p = co + 3
-        rows = []
-        for _ in range(h):
-            row = []
-            while d[p]:
-                row.extend([d[p] >> 4] * (d[p] & 15))
-                p += 1
-            p += 1
-            row = (row + [trans] * w)[:w]
-            if (tm & 0x80) and ((tm >> 4) & 7) != o.loop:
-                row.reverse()
-            rows.append(row)
-        return w, h, trans, rows
+    # ------------------------------------------------------------ sprites (por hardware: ver agi2spr.py y ENGINE/agispr.asm)
+    def hw_sprites(self):
+        """Los sprites del hardware que el Z80 tiene que dejar puestos: lista de (x, y, color[8], dato[8], mascara[8]) por indice (0 = el de abajo).
+        Los objetos con anim y drawn van de menor a mayor prioridad (a igual prioridad, por numero), cada uno con los mosaicos de su celda
+        (fila a fila); coordenadas del hardware (+32); un mosaico que cae entero fuera de la pantalla no ocupa sprite; como mucho 64."""
+        import agi2spr
+        out = []
+        for p in range(16):
+            for n in sorted(self.objs):
+                o = self.objs[n]
+                if o.pri != p or not (o.anim and o.drawn) or o.x >= 160:
+                    continue
+                d = self.g.resource('VIEW', o.view)
+                if d is None:
+                    continue
+                key = (o.view, o.loop)
+                if key not in self.spr_big:
+                    try:
+                        self.spr_big[key] = o.loop < d[2] and len(agi2spr.build_loop(d, o.loop)) > 8190
+                    except (IndexError, ValueError):
+                        self.spr_big[key] = True
+                if self.spr_big[key]:
+                    continue
+                c = agi2spr.cel_tiles(d, o.loop, o.cel)
+                if c is None:
+                    continue
+                hrw, h, tiles = c
+                x0 = agi2spr.lo(o.x) + 32
+                top = 8 + o.y - h + 1 + 32
+                for tx, ty, col, pix, msk in tiles:
+                    sx, sy = x0 + tx * 8, top + ty * 8
+                    if sx <= 24 or sx >= 288 or sy <= 24 or sy >= 224:
+                        continue
+                    if len(out) >= 64:
+                        return out
+                    out.append((sx, sy, col, pix, msk))
+        return out
 
     def screen(self):
-        """Pantalla completa (bitmap y atributos de 192x32): el pie y la barra de estado persistentes, y en medio la imagen con su texto y los sprites."""
+        """Pantalla completa (bitmap y atributos de 192x32): el pie y la barra de estado persistentes, y en medio la imagen con su texto. Los sprites
+        no estan en ella (son del hardware: hw_sprites)."""
         bm, at = self.render()
         sb = bytearray(self.ext_bm)
         sa = bytearray(self.ext_at)
@@ -205,7 +219,7 @@ class Interp:
         return sb, sa
 
     def render(self):
-        """Pantalla HiRes 8x1 (bitmap y atributos de 168x32): la imagen con los objetos dibujados encima, por prioridad."""
+        """Plano de 168x32: la imagen con el texto que se le ha escrito encima."""
         import agi2hr
         if self.pic is None:
             bm = bytearray(168 * 32)
@@ -219,31 +233,6 @@ class Interp:
                 agi_text.put_line(bm, at, 8, *op[1:])
             else:
                 agi_text.fill_row(bm, at, 8, op[1], op[2])
-        if self.pic is None:
-            return bm, at
-        pri2 = agi2hr.sprite_priority(self.pic.pri)
-        for p in range(16):
-            for n in sorted(self.objs):
-                o = self.objs[n]
-                if o.pri != p or not (o.anim and o.drawn):
-                    continue
-                c = self.cel_pixels(o)
-                if c is None:
-                    continue
-                w, h, trans, rows = c
-                top = o.y - h + 1
-                for r in range(h):
-                    py = top + r
-                    if not 0 <= py < 168:
-                        continue
-                    for i in range(w):
-                        px = o.x + i
-                        col = rows[r][i]
-                        if not 0 <= px < 160 or col == trans or pri2[py * 160 + px] > o.pri:
-                            continue
-                        ch = agi2hr.to_chroma(col)
-                        for hx in range((8 * px + 4) // 5, (8 * (px + 1) + 4) // 5):
-                            plot_hr(bm, at, py, hx, ch)
         return bm, at
 
     def fmt(self, s, lognum):

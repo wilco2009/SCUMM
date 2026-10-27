@@ -18,6 +18,7 @@ mkdir -p ../dump/$G
 python ../TOOLS/agi2log.py ../$G ../dump/$G/log > /dev/null
 python ../TOOLS/agi_vm.py ../$G --quiet --cycles $N --script "$SCRIPT" --listpics ../dump/$G/pics.txt > /dev/null
 python ../TOOLS/agi2hr.py ../$G ../dump/$G/log $(cat ../dump/$G/pics.txt) > /dev/null
+python ../TOOLS/agi2spr.py ../$G ../dump/$G/log > /dev/null
 python ../TOOLS/mkovl.py agitxt.bin ../dump/$G/log/TEXT.OVL
 # con ZX81_MATRIX (teclas del ZX81 para el arnes) el Z80 no recibe eventos del guion: los genera su teclado; el modelo si
 EVS="$SCRIPT"; [ -z "$ZX81_MATRIX" ] || EVS=""

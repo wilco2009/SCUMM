@@ -23,6 +23,8 @@
                 jp t_kdeliv             ; OVL_KDELIV
                 jp t_accept             ; OVL_ACCEPT
                 jp t_prevent            ; OVL_PREVENT
+                jp t_render             ; OVL_RENDER
+                jp t_sinit              ; OVL_SPRINIT
 
 TXT             equ TMPM
 
@@ -143,10 +145,6 @@ draw_line:      ld a,(dl_col)
                 sub (hl)
                 inc a
                 ld (dl_nb),a
-                call dl_setpic
-                ld a,(dl_pic)
-                or a
-                call nz,dl_prot
                 xor a
                 ld (dl_k),a
 dl_kl:          call t_kpoll
@@ -313,10 +311,7 @@ dl_next:        ld hl,dl_j
                 ld a,(hl)
                 cp 8
                 jp nz,dl_kl
-                ld a,(dl_pic)
-                or a
-                ret z
-                jp rect_to_bg
+                ret
 
 ; A = linea de pantalla -> srow = direccion del bitmap de su primera celda
 t_srow:         ld l,a
@@ -329,110 +324,6 @@ t_srow:         ld l,a
                 ld de,HR_BM
                 add hl,de
                 ld (srow),hl
-                ret
-
-; Con dl_row y dl_ca/dl_nb: dl_pic = 1 si la fila es de la imagen (1-21) y ya hay imagen; entonces dl_rect = su rectangulo de celdas
-dl_setpic:      xor a
-                ld (dl_pic),a
-                ld a,(picvalid)
-                or a
-                ret z
-                ld a,(dl_row)
-                or a
-                ret z
-                cp 22
-                ret nc
-                ld a,1
-                ld (dl_pic),a
-                ld a,(dl_row)
-                dec a
-                add a,a
-                add a,a
-                add a,a
-                ld (dl_rect+2),a
-                add a,7
-                ld (dl_rect+3),a
-                ld a,(dl_ca)
-                ld (dl_rect),a
-                ld a,(dl_nb)
-                ld (dl_rect+1),a
-                ret
-
-; Los sprites que tocan dl_rect se marcan para redibujar, y su zona vuelve a la imagen limpia
-dl_prot:        ld hl,RECT
-                ld ix,OBJ
-                ld b,NOBJ
-pr_l:           push bc
-                push hl
-                ld de,dl_rect
-                call rect_int
-                pop hl
-                jr nc,pr_n
-                set 1,(ix+O_SDR)
-pr_n:           pop bc
-                ld de,4
-                add hl,de
-                ld de,32
-                add ix,de
-                djnz pr_l
-                ld hl,dl_rect
-                jp restore_rect
-
-; dl_rect de la pantalla a la copia de fondo
-rect_to_bg:     ld a,PG_BGB
-                ld de,HR_BM+256
-                call rb_plane
-                ld a,PG_BGA
-                ld de,HR_ATT+256
-                call rb_plane
-                jp unmap_win
-
-rb_plane:       push de
-                call map_page
-                ld a,(dl_rect+2)
-                ld l,a
-                ld h,0
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                ld a,(dl_rect)
-                ld e,a
-                ld d,0
-                add hl,de               ; desplazamiento
-                ld d,h
-                ld e,l
-                ld hl,LWIN
-                add hl,de
-                ex de,hl                ; DE = destino en la copia, HL = desplazamiento
-                pop bc
-                add hl,bc               ; HL = origen en pantalla
-                ld a,(dl_rect+3)
-                ld b,a
-                ld a,(dl_rect+2)
-                ld c,a
-                ld a,b
-                sub c
-                inc a
-                ld (rrows),a
-rb_r:           push hl
-                push de
-                ld a,(dl_rect+1)
-                ld c,a
-                ld b,0
-                ldir
-                pop de
-                pop hl
-                ld bc,32
-                add hl,bc
-                ex de,hl
-                add hl,bc
-                ex de,hl
-                ld a,(rrows)
-                dec a
-                ld (rrows),a
-                jr nz,rb_r
                 ret
 
 ; ---------------------------------------------------------------------
@@ -467,14 +358,6 @@ fill_row:       call t_chroma
                 or c
                 ld (cl_attr),a
                 xor a
-                ld (dl_ca),a
-                ld a,32
-                ld (dl_nb),a
-                call dl_setpic
-                ld a,(dl_pic)
-                or a
-                call nz,dl_prot
-                xor a
                 ld (dl_k),a
 fr_k:           ld a,(dl_row)
                 add a,a
@@ -504,10 +387,7 @@ fr_a:           ld (hl),a
                 ld a,(hl)
                 cp 8
                 jr nz,fr_k
-                ld a,(dl_pic)
-                or a
-                ret z
-                jp rect_to_bg
+                ret
 
 ; ---------------------------------------------------------------------
 ;  Barra de estado
@@ -1029,9 +909,126 @@ dl_m:           defb 0
 dl_b:           defb 0
 dl_hx:          defb 0
 dl_bm:          defb 0
-dl_pic:         defb 0
-dl_rect:        defs 4
 LB:             defs 68
+
+
+; A = pixel HiRes (0-255), sch = color, srow = direccion del bitmap de la fila
+plot:           ld b,a
+                and 7
+                ld e,a
+                ld d,0
+                ld hl,masks
+                add hl,de
+                ld a,(hl)
+                ld (pmk),a
+                ld a,b
+                rrca
+                rrca
+                rrca
+                and 31
+                ld e,a
+                ld d,0
+                ld hl,(srow)
+                add hl,de
+                ex de,hl                ; DE = byte del bitmap
+                ld a,d
+                add a,$20               ; los atributos estan $2000 mas arriba
+                ld h,a
+                ld l,e                  ; HL = byte de atributos
+                ld a,(hl)
+                ld b,a
+                and 15
+                ld (pk),a
+                ld a,b
+                rrca
+                rrca
+                rrca
+                rrca
+                and 15
+                ld (pp),a
+                ld a,(sch)
+                ld b,a                  ; B = color nuevo
+                ld a,(pk)
+                ld c,a
+                ld a,(pp)
+                cp c
+                jr nz,pl_two
+                ld a,c                  ; celda de un solo color: sus bits estan a 0 y se quedan asi si el color es el mismo
+                cp b
+                jr z,pl_clr
+                jr pl_ri
+pl_two:         ld a,(pk)
+                cp b
+                jr z,pl_set
+                ld a,(pp)
+                cp b
+                jr z,pl_clr
+                push hl
+                push de
+                ld a,b
+                rlca
+                rlca
+                rlca
+                rlca
+                ld e,a
+                ld d,0
+                ld hl,sdist_tab
+                add hl,de
+                push hl
+                ld a,(pp)
+                ld e,a
+                add hl,de
+                ld c,(hl)               ; distancia al papel
+                pop hl
+                ld a,(pk)
+                ld e,a
+                add hl,de
+                ld a,(hl)               ; distancia a la tinta
+                cp c
+                pop de
+                pop hl
+                jr z,pl_ri
+                jr c,pl_ri
+                ld a,b                  ; el papel esta mas lejos que la tinta: sustituye al papel
+                rlca
+                rlca
+                rlca
+                rlca
+                ld c,a
+                ld a,(pk)
+                or c
+                ld (hl),a
+                jr pl_clr
+pl_ri:          ld a,(pp)
+                rlca
+                rlca
+                rlca
+                rlca
+                or b
+                ld (hl),a
+pl_set:         ld a,(pmk)
+                ld c,a
+                ld a,(de)
+                or c
+                ld (de),a
+                ret
+pl_clr:         ld a,(pmk)
+                cpl
+                ld c,a
+                ld a,(de)
+                and c
+                ld (de),a
+                ret
+
+masks:          defb 128,64,32,16,8,4,2,1
+sch:            defb 0
+srow:           defw 0
+pk:             defb 0
+pp:             defb 0
+pmk:            defb 0
+
+                include "sprtab.inc"
+                include "agihws.asm"
 
 FONT:
                 include "font6.inc"

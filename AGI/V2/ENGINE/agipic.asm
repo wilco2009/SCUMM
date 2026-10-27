@@ -67,7 +67,7 @@ lp_o:           ld (fh),a
                 ld bc,(prisz2)
                 call f_read_n
                 call pri_index
-                call spr_bg
+                call unmap_win
                 ld a,(fh)
                 call f_close
                 ld a,1

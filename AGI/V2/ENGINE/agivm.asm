@@ -74,6 +74,8 @@ OVL_KPOLL       equ $2015
 OVL_KDELIV      equ $2018
 OVL_ACCEPT      equ $201B
 OVL_PREVENT     equ $201E
+OVL_RENDER      equ $2021
+OVL_SPRINIT     equ $2024
 MAXW            equ 6
 LPAGE0          equ 16
 NSLOTS          equ 8
@@ -171,7 +173,15 @@ ml_dbg:         call summary
                 sbc hl,de               ; ncyc - ciclo
                 jp nc,main_loop
 
-finish:         ld a,PG_DBG             ; deja a la vista el resumen y la traza
+finish:         ld a,(errc)
+                cp 14                   ; 14 = no se pudo cargar el overlay
+                jr z,fn_ns
+                ld hl,(ncyc)            ; en las pruebas (ncyc > 0) los sprites se quedan para compararlos
+                ld a,h
+                or l
+                call z,OVL_SPRINIT      ; apaga los sprites al volver a BASIC
+fn_ns:
+                ld a,PG_DBG             ; deja a la vista el resumen y la traza
                 call map_page
                 ld bc,$7FEF
                 ld a,$0C
@@ -218,7 +228,7 @@ video_init:     ld a,85
                 ld (2093),a
                 xor a
                 ld (2090),a
-                jp spr_init
+                ret
 
 sc_map:         ld c,MAP_PORT
                 out (c),a
