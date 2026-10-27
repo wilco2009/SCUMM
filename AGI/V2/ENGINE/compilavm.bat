@@ -20,7 +20,7 @@ pasmo agitxt.asm agitxt.bin agitxt.sym || goto error
 set T=..\dump\%G%\log
 python -I ..\TOOLS\agi2log.py ..\%G% %T% || goto error
 python -I ..\TOOLS\agi2hr.py ..\%G% %T% || goto error
-python -I ..\TOOLSgi2spr.py ..\%G% %T% || goto error
+python -I ..\TOOLS\agi2spr.py ..\%G% %T% || goto error
 python -I ..\TOOLS\mkovl.py agitxt.bin %T%\TEXT.OVL || goto error
 python -I ..\TOOLS\mkevents.py %T%\EVENTS.BIN 0 "" || goto error
 set S=%BASE%\AGI\V2
