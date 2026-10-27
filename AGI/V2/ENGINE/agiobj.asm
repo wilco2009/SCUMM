@@ -412,6 +412,7 @@ ap_got:         push ix
                 ld (ix+O_Y),a
                 ld a,(ARGS+5)
                 ld (ix+O_PRI),a
+                call OVL_ADDPIC         ; lo que tapa a los sprites
                 ld a,(ARGS+6)
                 cp 2
                 ret nc                  ; solo los margenes 0 y 1
@@ -443,6 +444,7 @@ ap_got:         push ix
 ; draw.pic: los objetos fijos y los margenes de add.to.pic se van con la imagen
 clr_static:     xor a
                 ld (mg_n),a
+                call OVL_SPCLR
                 ld ix,OBJ
                 ld de,32
                 ld b,NOBJ

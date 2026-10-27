@@ -76,6 +76,8 @@ class Interp:
         self.pics = {}
         self.pic = None
         self.margins = []
+        self.spans = []                 # add.to.pic: (fila 0 de la celda, prioridad, [(ax0, ax1) por fila])
+        self.span_rows = 0
         self.pics_used = set()
         self.use_pic = os.environ.get('AGI_NOPIC') != '1'     # AGI_NOPIC=1: sin el plano de prioridad (lo que modela el Z80 por etapas)
         self.inv = [r for _, r, _ in ag.objects(path)]
@@ -192,6 +194,14 @@ class Interp:
         import agi2spr
         import agi2hr
         pri2 = agi2hr.sprite_priority(self.pic.pri) if self.pic is not None else None
+        if pri2 is not None:
+            for row0, pri, pairs in self.spans:
+                for i, (a0, a1) in enumerate(pairs):
+                    row = row0 + i
+                    if 0 <= row < 168 and a0 <= a1:
+                        for ax in range(a0, a1 + 1):
+                            if pri2[row * 160 + ax] < pri:
+                                pri2[row * 160 + ax] = pri
         out = [None] * 64
         k = 0
         if self.box is not None:
@@ -216,10 +226,10 @@ class Interp:
                 if c is None:
                     continue
                 hrw, h, tiles = c
-                if agi2spr.meta(tiles)[0] or o.static and len(tiles) > 16:
-                    continue                # rotulo ancho: lo dibuja el Z80 en el bitmap (sw_blit)
+                if agi2spr.meta(tiles)[0] or o.static:
+                    continue                # rotulo ancho o objeto fijo: lo dibuja el Z80 en el bitmap (sw_blit)
                 start = k
-                k += len(tiles) if o.static else agi2spr.loop_maxt(d, o.loop)
+                k += agi2spr.loop_maxt(d, o.loop)
                 x0 = agi2spr.lo(o.x) + 32
                 top = 8 + o.y - h + 1 + 32
                 for j, (tx, ty, col, pix, msk) in enumerate(tiles):
@@ -283,7 +293,7 @@ class Interp:
                 if self.spr_big[key]:
                     continue
                 c = agi2spr.cel_tiles(d, o.loop, o.cel)
-                if c is None or not (agi2spr.meta(c[2])[0] or o.static and len(c[2]) > 16):
+                if c is None or not (agi2spr.meta(c[2])[0] or o.static):
                     continue
                 hrw, h, tiles = c
                 x0 = agi2spr.lo(o.x)
@@ -575,6 +585,8 @@ class Interp:
     def do_new_room(self, n):
         v = self.vars
         old = v[0]
+        self.spans = []
+        self.span_rows = 0
         for k, o in self.objs.items():
             if k != EGO:
                 o.anim = o.drawn = False
@@ -614,6 +626,8 @@ class Interp:
         self.pic = ag.Picture(d)
         self.pic_ops = []
         self.margins = []
+        self.spans = []
+        self.span_rows = 0
         for o in self.objs.values():
             if o.static:
                 o.anim = o.drawn = o.static = False
@@ -628,8 +642,40 @@ class Interp:
         o.upd = o.cycling = o.mon = False
         o.step = o.stime = o.scount = o.ctime = o.ccount = 0
         o.view, o.loop, o.cel, o.x, o.y, o.pri = view, loop, cel, x, y, pri
+        self.add_spans(o)
         if margin < 2 and len(self.margins) < 8:
             self.margins.append((x, y, self.cell(o)[0], margin))
+
+    def add_spans(self, o):
+        """Lo que un objeto fijo tapa a los sprites: por cada fila de la celda, el rango de pixeles de AGI (5 * x // 8 del HiRes) del primer al ultimo pixel opaco."""
+        import agi2spr
+        d = self.g.resource('VIEW', o.view)
+        c = agi2spr.cel_tiles(d, o.loop, o.cel) if d is not None else None
+        if c is None or len(self.spans) >= 8:
+            return
+        h, tiles = c[1], c[2]
+        ex_min = [255] * 128
+        ex_max = [0] * 128
+        x0 = agi2spr.lo(o.x)
+        for tx, ty, col, pix, msk in tiles:
+            for r in range(8):
+                m, row = msk[r], ty * 8 + r
+                if not m or row >= 128:
+                    continue
+                f = next(i for i in range(8) if m & (0x80 >> i))
+                l = max(i for i in range(8) if m & (0x80 >> i))
+                bx = x0 + tx * 8
+                ex_min[row] = min(ex_min[row], min(255, (5 * (bx + f)) >> 3))
+                ex_max[row] = max(ex_max[row], min(255, (5 * (bx + l)) >> 3))
+        n = min(h, 128)
+        if self.span_rows + n > 512:
+            return
+        pairs = []
+        for i in range(n):
+            a0, a1 = ex_min[i], min(ex_max[i], 159)
+            pairs.append((255, 0) if a0 > 159 else (a0, a1))
+        self.span_rows += n
+        self.spans.append((o.y - h + 1, o.pri, pairs))
 
     def c_add_to_pic_v(self, *a): self.c_add_to_pic(*[self.vars[i] for i in a])
 

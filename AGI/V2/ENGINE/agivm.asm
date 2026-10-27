@@ -71,6 +71,8 @@ OVL_RENDER      equ $200C
 OVL_SPRINIT     equ $200F
 OVL_BGSAVE      equ $2012
 OVL_FORCE       equ $2015
+OVL_ADDPIC      equ $2018
+OVL_SPCLR       equ $201B
 OVB_DISPLAY     equ $2000               ; overlay B (texto): se mapea con call_b
 OVB_DISPLAY_V   equ $2003
 OVB_CLEAR       equ $2006
@@ -805,7 +807,8 @@ ts_end:         pop de
 ; ---------------------------------------------------------------------
 ;  Sala nueva, reloj, resumen, sonidos
 ; ---------------------------------------------------------------------
-do_new_room:    ld a,(VARS+0)
+do_new_room:    call OVL_SPCLR
+                ld a,(VARS+0)
                 ld (VARS+1),a
                 ld ix,OBJ+32            ; todos menos el ego dejan de estar animados y dibujados
                 ld de,32

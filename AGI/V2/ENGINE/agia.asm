@@ -14,6 +14,8 @@
                 jp t_sinit              ; OVL_SPRINIT
                 jp t_bgsave             ; OVL_BGSAVE
                 jp t_force              ; OVL_FORCE
+                jp t_addpic             ; OVL_ADDPIC
+                jp t_spclr              ; OVL_SPCLR
 
 ; ---------------------------------------------------------------------
 ;  Teclado del ZX81

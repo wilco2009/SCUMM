@@ -338,12 +338,8 @@ cel_open:       ld a,(ix+O_X)
                 ld (cv_hh),a
                 inc hl
                 ld (cv_p),hl
-                bit 2,(ix+O_F2)         ; objeto fijo (add.to.pic): reserva solo los mosaicos de su celda y, si son muchos, va al bitmap
+                bit 2,(ix+O_F2)         ; objeto fijo (add.to.pic): se pinta contra el fondo, como un rotulo
                 jr z,co_ns
-                ld a,(cv_n)
-                ld (cv_mt),a
-                cp 17
-                jr c,co_ns
                 ld hl,cv_fl
                 set 0,(hl)
 co_ns:          or a
@@ -710,6 +706,7 @@ hg_row:         ld a,(hg_r)
                 call map7
                 ld a,(hg_py)
                 call pd_row
+                call pd_patch
                 call map7_back
                 xor a
                 ld (hg_full),a
@@ -1114,3 +1111,415 @@ hw_dch:         defb 0
 hw_pch:         defb 0
 hw_tag:         defs 4
 SHD:            defs 8*64
+
+; ---------------------------------------------------------------------
+;  Objetos fijos de add.to.pic: se pintan en el bitmap (cel_open los marca como rotulos); aqui, lo que tapan a los sprites. Por cada fila de la celda se guarda el
+;  rango de pixeles de AGI [ax0, ax1] del primer al ultimo pixel opaco (ax = 5 * x / 8 del HiRes); pd_patch lo pone en PROW (el maximo con lo que hubiera) y
+;  t_addpic sube PG_PMX. SPH: cabeceras de 8 bytes (fila de la imagen de la fila 0 de la celda, word con signo; filas; prioridad; puntero a los pares; 2 libres);
+;  SPP: un par (ax0, ax1) por fila, vacio = (255, 0). Se vacian con draw.pic y new.room.
+; ---------------------------------------------------------------------
+SP_MAX          equ 8
+SP_ROWS         equ 512
+
+t_spclr:        xor a
+                ld (sp_n),a
+                ld hl,0
+                ld (sp_u),hl
+                ret
+
+; HL = pixel HiRes -> A = pixel de AGI (5 * x / 8, a 255 como mucho)
+hx2ax:          ld d,h
+                ld e,l
+                add hl,hl
+                add hl,hl
+                add hl,de
+                srl h
+                rr l
+                srl h
+                rr l
+                srl h
+                rr l
+                ld a,h
+                or a
+                ld a,l
+                ret z
+                ld a,255
+                ret
+
+; A = desplazamiento (0-7) desde el borde izquierdo del mosaico -> A = pixel de AGI
+ap_ax:          ld e,a
+                ld d,0
+                ld hl,(ap_bx)
+                add hl,de
+                jp hx2ax
+
+; IX = el objeto fijo recien puesto: sus rangos por fila
+t_addpic:       ld a,(sp_n)
+                cp SP_MAX
+                ret nc
+                call cel_open
+                ret c
+                ld hl,ex_min
+                ld de,ex_min+1
+                ld bc,127
+                ld (hl),255
+                ldir
+                ld hl,ex_max
+                ld de,ex_max+1
+                ld bc,127
+                ld (hl),0
+                ldir
+                ld a,(cv_h)
+                ld (ap_h),a
+                ld a,(ix+O_X)
+                call lo16
+                ld (ap_x0),hl
+                ld a,(cv_n)
+                or a
+                jp z,ap_done
+                ld b,a
+                ld hl,(cv_p)
+ap_t:           push bc
+                ld (ap_tp),hl
+                ld a,(hl)               ; tx
+                add a,a
+                add a,a
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,(ap_x0)
+                add hl,de
+                ld (ap_bx),hl
+                ld hl,(ap_tp)
+                inc hl
+                ld a,(hl)               ; ty
+                add a,a
+                add a,a
+                add a,a
+                ld (ap_ty8),a
+                xor a
+                ld (ap_r),a
+                ld hl,(ap_tp)
+                ld de,18                ; tx, ty, colores (8) y pixeles (8): sigue la mascara
+                add hl,de
+ap_r1:          ld a,(hl)
+                or a
+                jp z,ap_rn
+                ld (ap_m),a
+                ld a,(ap_ty8)
+                ld b,a
+                ld a,(ap_r)
+                add a,b
+                cp 128
+                jp nc,ap_rn
+                ld (ap_row),a
+                ld a,(ap_m)
+                ld e,0
+ap_f1:          add a,a
+                jr c,ap_f2
+                inc e
+                jr ap_f1
+ap_f2:          ld a,(ap_m)
+                ld d,7
+ap_l1:          rrca
+                jr c,ap_l2
+                dec d
+                jr ap_l1
+ap_l2:          ld a,d
+                ld (ap_l),a
+                ld a,e
+                call ap_ax              ; A = pixel de AGI del primero
+                ld c,a
+                ld a,(ap_row)
+                ld e,a
+                ld d,0
+                ld hl,ex_min
+                add hl,de
+                ld a,c
+                cp (hl)
+                jr nc,ap_m1
+                ld (hl),a
+ap_m1:          ld a,(ap_l)
+                call ap_ax              ; A = pixel de AGI del ultimo
+                ld c,a
+                ld a,(ap_row)
+                ld e,a
+                ld d,0
+                ld hl,ex_max
+                add hl,de
+                ld a,c
+                cp (hl)
+                jr c,ap_rn2
+                ld (hl),a
+ap_rn2:         ld hl,(ap_tp)           ; la mascara de la fila siguiente
+                ld de,18
+                add hl,de
+                ld a,(ap_r)
+                ld e,a
+                ld d,0
+                add hl,de
+ap_rn:          ld a,(ap_r)
+                inc a
+                ld (ap_r),a
+                cp 8
+                jr z,ap_tn
+                ld hl,(ap_tp)
+                ld de,18
+                add hl,de
+                ld e,a
+                ld d,0
+                add hl,de
+                jp ap_r1
+ap_tn:          ld hl,(ap_tp)
+                ld de,26
+                add hl,de
+                pop bc
+                dec b
+                jp nz,ap_t
+                jp ap_done
+ap_done:        call unmap_win
+                ld a,(ap_h)
+                cp 129
+                jr c,ap_n1
+                ld a,128
+ap_n1:          ld (ap_n),a             ; filas
+                ld hl,(sp_u)
+                ld e,a
+                ld d,0
+                add hl,de
+                ld de,SP_ROWS+1
+                or a
+                sbc hl,de
+                ret nc                  ; no caben
+                ld a,(sp_n)             ; cabecera
+                add a,a
+                add a,a
+                add a,a
+                ld l,a
+                ld h,0
+                ld de,SPH
+                add hl,de
+                push hl
+                pop iy
+                ld a,(ix+O_Y)           ; fila 0 de la celda = y - h + 1
+                ld l,a
+                ld h,0
+                ld a,(ap_h)
+                ld e,a
+                ld d,0
+                or a
+                sbc hl,de
+                inc hl
+                ld (iy+0),l
+                ld (iy+1),h
+                ld (ap_r0),hl
+                ld a,(ap_n)
+                ld (iy+2),a
+                ld a,(ix+O_PRI)
+                ld (iy+3),a
+                ld hl,(sp_u)
+                add hl,hl
+                ld de,SPP
+                add hl,de
+                ld (iy+4),l
+                ld (iy+5),h
+                ex de,hl                ; DE = pares de esta celda
+                ld hl,ex_min
+                ld bc,ex_max
+                ld a,(ap_n)
+                ld (ap_k),a
+                ld hl,0
+                ld (ap_i),hl
+ap_p:           ld hl,(ap_i)            ; fila de la celda
+                ld bc,ex_min
+                add hl,bc
+                ld a,(hl)               ; ax0
+                ld hl,(ap_i)
+                ld bc,ex_max
+                add hl,bc
+                ld c,(hl)               ; ax1
+                cp 160
+                jr c,ap_p1
+                ld a,255                ; vacio
+                ld c,0
+ap_p1:          ld b,a
+                ld a,c
+                cp 160
+                jr c,ap_p2
+                ld a,159
+ap_p2:          ld c,a
+                ld a,b
+                ld (de),a
+                inc de
+                ld a,c
+                ld (de),a
+                inc de
+                ld hl,(ap_i)
+                inc hl
+                ld (ap_i),hl
+                ld a,(ap_k)
+                dec a
+                ld (ap_k),a
+                jr nz,ap_p
+                ld a,(ap_n)             ; las filas ocupadas y la cabecera
+                ld e,a
+                ld d,0
+                ld hl,(sp_u)
+                add hl,de
+                ld (sp_u),hl
+                ld hl,sp_n
+                inc (hl)
+                ; sube PG_PMX: por cada fila con rango, los bloques de 8 pixeles que toca
+                ld l,(iy+4)
+                ld h,(iy+5)
+                ld (ap_pp),hl
+                ld a,PG_PMX
+                call map7
+                xor a
+                ld (ap_i),a
+ap_x:           ld hl,(ap_r0)
+                ld a,(ap_i)
+                ld e,a
+                ld d,0
+                add hl,de               ; fila de la imagen
+                ld a,h
+                or a
+                jr nz,ap_xn
+                ld a,l
+                cp 168
+                jr nc,ap_xn
+                ld hl,(ap_pp)
+                ld a,(hl)               ; ax0
+                inc hl
+                ld c,(hl)               ; ax1
+                cp c
+                jr z,ap_x1
+                jr nc,ap_xn             ; vacio (255, 0)
+ap_x1:          ld b,a
+                ld a,(ap_r0)
+                ld l,a
+                ld a,(ap_i)
+                add a,l
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,hl
+                add hl,de               ; 20 * fila
+                ld de,$E000
+                add hl,de
+                ld a,b
+                rrca
+                rrca
+                rrca
+                and 31
+                ld e,a                  ; bloque del primero
+                ld a,c
+                rrca
+                rrca
+                rrca
+                and 31
+                sub e
+                inc a
+                ld b,a                  ; bloques
+                ld d,0
+                add hl,de
+                ld a,(ix+O_PRI)
+                ld c,a
+ap_xb:          ld a,(hl)
+                cp c
+                jr nc,ap_xk
+                ld (hl),c
+ap_xk:          inc hl
+                djnz ap_xb
+ap_xn:          ld hl,(ap_pp)
+                inc hl
+                inc hl
+                ld (ap_pp),hl
+                ld a,(ap_i)
+                inc a
+                ld (ap_i),a
+                ld hl,ap_n
+                cp (hl)
+                jr nz,ap_x
+                jp map7_back
+
+; Los rangos de los objetos fijos en la fila hg_py -> PROW (el maximo con lo que hubiera)
+pd_patch:       ld a,(sp_n)
+                or a
+                ret z
+                push iy
+                ld b,a
+                ld iy,SPH
+ps_l:           push bc
+                ld a,(hg_py)
+                ld l,a
+                ld h,0
+                ld e,(iy+0)
+                ld d,(iy+1)
+                or a
+                sbc hl,de               ; fila - fila 0 de la celda
+                bit 7,h
+                jr nz,ps_n
+                ld a,h
+                or a
+                jr nz,ps_n
+                ld a,l
+                cp (iy+2)
+                jr nc,ps_n
+                ld l,a
+                ld h,0
+                add hl,hl
+                ld e,(iy+4)
+                ld d,(iy+5)
+                add hl,de
+                ld a,(hl)               ; ax0
+                inc hl
+                ld c,a
+                ld a,(hl)               ; ax1
+                cp c
+                jr c,ps_n               ; vacio
+                sub c
+                inc a
+                ld b,a
+                ld e,c
+                ld d,0
+                ld hl,PROW
+                add hl,de
+                ld d,(iy+3)             ; prioridad
+ps_f:           ld a,(hl)
+                cp d
+                jr nc,ps_k
+                ld (hl),d
+ps_k:           inc hl
+                djnz ps_f
+ps_n:           pop bc
+                ld de,8
+                add iy,de
+                djnz ps_l
+                pop iy
+                ret
+
+sp_n:           defb 0
+sp_u:           defw 0
+ap_h:           defb 0
+ap_n:           defb 0
+ap_k:           defb 0
+ap_m:           defb 0
+ap_l:           defb 0
+ap_r:           defb 0
+ap_row:         defb 0
+ap_ty8:         defb 0
+ap_i:           defw 0
+ap_x0:          defw 0
+ap_bx:          defw 0
+ap_tp:          defw 0
+ap_r0:          defw 0
+ap_pp:          defw 0
+ex_min:         defs 128
+ex_max:         defs 128
+SPH:            defs 8*SP_MAX
+SPP:            defs 2*SP_ROWS
