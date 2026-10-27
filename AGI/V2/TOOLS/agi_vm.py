@@ -983,7 +983,7 @@ class Interp:
                 c = pri[y * ag.W + x + i]
                 if c == 0 and not o.ign_blocks:
                     return False
-                if c == 1 and not o.ign_blocks and o is self.objs.get(EGO) and False:
+                if c == 1 and not o.ign_blocks and o is self.objs.get(EGO):
                     return False
                 if c == 3:
                     water += 1

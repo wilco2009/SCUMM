@@ -136,6 +136,7 @@ m3_t:           inc b
 ; Mira la linea ny entre nx y nx+ow-1 de la prioridad: pr_has0 (hay un 0), pr_water (pixeles con 3), pr_land (los demas), pr_sig (hay un 2)
 pri_probe:      xor a
                 ld (pr_has0),a
+                ld (pr_has1),a
                 ld (pr_water),a
                 ld (pr_land),a
                 ld (pr_sig),a
@@ -196,6 +197,10 @@ pp_hi:          sub d
                 inc a
                 ld (pr_has0),a
 pp_a:           ld a,c
+                cp 1
+                jr nz,pp_b
+                ld (pr_has1),a
+pp_b:           ld a,c
                 cp 3
                 jr nz,pp_land
                 ld a,(pr_water)
@@ -225,7 +230,15 @@ pic_check:      ld a,(picvalid)
                 jr z,pk_1
                 bit 0,(ix+O_F2)
                 jr z,pk_no              ; un 0 bloquea salvo a quien ignora bloques
-pk_1:           ld a,(ix+O_WATER)
+pk_1:           ld a,(curk)             ; un 1 bloquea al ego que no ignora bloques
+                or a
+                jr nz,pk_1b
+                ld a,(pr_has1)
+                or a
+                jr z,pk_1b
+                bit 0,(ix+O_F2)
+                jr z,pk_no
+pk_1b:          ld a,(ix+O_WATER)
                 cp 2
                 jr nz,pk_2
                 ld a,(pr_water)         ; solo tierra: nada de agua

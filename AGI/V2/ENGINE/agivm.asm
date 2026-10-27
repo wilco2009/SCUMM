@@ -1609,6 +1609,7 @@ picvalid:       defb 0
 prisz:          defw 0
 prisz2:         defw 0
 pr_has0:        defb 0
+pr_has1:        defb 0
 pr_water:       defb 0
 pr_land:        defb 0
 pr_sig:         defb 0
