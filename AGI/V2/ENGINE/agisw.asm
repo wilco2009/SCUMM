@@ -23,17 +23,6 @@ O_SY            equ 28
 O_SPR           equ 29
 O_SHL           equ 30
 O_SHH           equ 31
-PG_BGB          equ 31
-PG_BGA          equ 32
-
-; A = pagina -> bloque 7 ($E000); map7_back lo devuelve a su pagina
-map7:           ld b,a
-                ld c,MAP_PORT
-                ld a,7
-                out (c),a
-                ret
-map7_back:      ld a,7
-                jr map7
 
 ; La imagen que acaba de dibujarse (en la pantalla) pasa a las paginas de fondo; ningun rotulo esta puesto
 t_bgsave:       ld a,PG_BGB
@@ -968,65 +957,6 @@ spp_n:          ld hl,sp_hx
                 jr nz,spp_l
                 ret
 
-; Texto escrito sobre la imagen (filas 1-21): dl_row, dl_ca, dl_nb pasan de la pantalla a la copia de fondo y los rotulos se recomponen
-text_bg:        ld a,(picvalid)
-                or a
-                ret z
-                ld a,(dl_row)
-                or a
-                ret z
-                cp 22
-                ret nc
-                ld a,1
-                ld (sw_force),a
-                ld a,PG_BGB
-                ld de,HR_BM
-                call sqt_plane
-                ld a,PG_BGA
-                ld de,HR_ATT
-                call sqt_plane
-                jp map7_back
-sqt_plane:      ld (sqt_base),de
-                call map7
-                ld a,(dl_row)
-                add a,a
-                add a,a
-                add a,a
-                ld (sqt_l),a
-                ld a,8
-                ld (sqt_n),a
-sqt_row:        ld a,(sqt_l)
-                ld l,a
-                ld h,0
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                ld a,(dl_ca)
-                ld e,a
-                ld d,0
-                add hl,de
-                push hl
-                ld de,(sqt_base)
-                add hl,de               ; origen: la pantalla
-                ex (sp),hl              ; HL = desplazamiento
-                ld de,$DF00
-                add hl,de               ; destino: la copia
-                ex de,hl
-                pop hl
-                ld a,(dl_nb)
-                ld c,a
-                ld b,0
-                ldir
-                ld hl,sqt_l
-                inc (hl)
-                ld hl,sqt_n
-                dec (hl)
-                jr nz,sqt_row
-                ret
-
-sw_force:       defb 0
 sqs_n:          defb 0
 sqs_r:          defw 0
 sg_s:           defb 0
@@ -1069,9 +999,6 @@ sp_p:           defb 0
 sp_col:         defb 0
 sp_hx:          defb 0
 sp_bm:          defb 0
-sqt_base:       defw 0
-sqt_l:          defb 0
-sqt_n:          defb 0
 SWL:            defs NOBJ
 LBBM:           defs 32
 LBAT:           defs 32

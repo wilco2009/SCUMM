@@ -13,13 +13,15 @@ python ../TOOLS/gen_sprtab.py sprtab.inc
 pasmo agivm.asm agivm.bin agivm.sym
 python ../TOOLS/gen_font.py font6.inc
 cp agivm.sym agires.inc
-pasmo agitxt.asm agitxt.bin agitxt.sym
+pasmo agia.asm agia.bin agia.sym
+pasmo agib.asm agib.bin agib.sym
 mkdir -p ../dump/$G
 python ../TOOLS/agi2log.py ../$G ../dump/$G/log > /dev/null
 python ../TOOLS/agi_vm.py ../$G --quiet --cycles $N --script "$SCRIPT" --listpics ../dump/$G/pics.txt > /dev/null
 python ../TOOLS/agi2hr.py ../$G ../dump/$G/log $(cat ../dump/$G/pics.txt) > /dev/null
 python ../TOOLS/agi2spr.py ../$G ../dump/$G/log > /dev/null
-python ../TOOLS/mkovl.py agitxt.bin ../dump/$G/log/TEXT.OVL
+python ../TOOLS/mkovl.py agia.bin ../dump/$G/log/OVERA.OVL
+python ../TOOLS/mkovl.py agib.bin ../dump/$G/log/OVERB.OVL
 # con ZX81_MATRIX (teclas del ZX81 para el arnes) el Z80 no recibe eventos del guion: los genera su teclado; el modelo si
 EVS="$SCRIPT"; [ -z "$ZX81_MATRIX" ] || EVS=""
 python ../TOOLS/mkevents.py ../dump/$G/log/EVENTS.BIN $N "$EVS"

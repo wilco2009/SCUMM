@@ -63,20 +63,21 @@ PG_EVT          equ 27
 PG_DBG          equ 28
 PG_PRI          equ 29
 PG_OVL          equ 41
-OVL_DISPLAY     equ $2000
-OVL_DISPLAY_V   equ $2003
-OVL_CLEAR       equ $2006
-OVL_STATUS      equ $2009
-OVL_SON         equ $200C
-OVL_SOFF        equ $200F
-OVL_ATTR        equ $2012
-OVL_KPOLL       equ $2015
-OVL_KDELIV      equ $2018
-OVL_ACCEPT      equ $201B
-OVL_PREVENT     equ $201E
-OVL_RENDER      equ $2021
-OVL_SPRINIT     equ $2024
-OVL_BGSAVE      equ $2027
+OVL_KPOLL       equ $2000               ; overlay A (teclado, sprites, rotulos): siempre en el bloque 1
+OVL_KDELIV      equ $2003
+OVL_ACCEPT      equ $2006
+OVL_PREVENT     equ $2009
+OVL_RENDER      equ $200C
+OVL_SPRINIT     equ $200F
+OVL_BGSAVE      equ $2012
+OVB_DISPLAY     equ $2000               ; overlay B (texto): se mapea con call_b
+OVB_DISPLAY_V   equ $2003
+OVB_CLEAR       equ $2006
+OVB_STATUS      equ $2009
+OVB_SON         equ $200C
+OVB_SOFF        equ $200F
+OVB_ATTR        equ $2012
+OVB_PROMPT      equ $2015
 MAXW            equ 6
 LPAGE0          equ 16
 NSLOTS          equ 8
@@ -120,6 +121,7 @@ main_loop:      ld hl,CTL
                 ld (hl),0
                 ldir
                 call OVL_KDELIV
+                call kb_prompt
                 call do_events
                 ld a,(pctl)
                 or a
@@ -140,7 +142,8 @@ ml_run:         xor a
                 call do_new_room
                 jr ml_run
 ml_end:         call update_objects
-                call OVL_STATUS
+                ld hl,OVB_STATUS
+                call call_b
                 call render
                 xor a
                 ld (inwvalid),a         ; la orden se acaba con el ciclo
@@ -180,7 +183,10 @@ finish:         ld a,(errc)
                 ld hl,(ncyc)            ; en las pruebas (ncyc > 0) los sprites se quedan para compararlos
                 ld a,h
                 or l
-                call z,OVL_SPRINIT      ; apaga los sprites al volver a BASIC
+                jr nz,fn_ns
+                call OVL_SPRINIT        ; apaga los sprites al volver a BASIC
+                ld a,85                 ; y el doble buffer
+                ld (2057),a
 fn_ns:
                 ld a,PG_DBG             ; deja a la vista el resumen y la traza
                 call map_page

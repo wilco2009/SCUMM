@@ -269,12 +269,18 @@ h_set_string:   ld a,(ARGS)
                 jp build_str
 
 ; texto: el codigo esta en el overlay (agitxt.asm, bloque 1)
-h_display:      jp OVL_DISPLAY
-h_display_v:    jp OVL_DISPLAY_V
-h_clear_lines:  jp OVL_CLEAR
-h_set_text_attribute: jp OVL_ATTR
-h_status_line_on: jp OVL_SON
-h_status_line_off: jp OVL_SOFF
+h_display:      ld hl,OVB_DISPLAY
+                jp call_b
+h_display_v:    ld hl,OVB_DISPLAY_V
+                jp call_b
+h_clear_lines:  ld hl,OVB_CLEAR
+                jp call_b
+h_set_text_attribute: ld hl,OVB_ATTR
+                jp call_b
+h_status_line_on: ld hl,OVB_SON
+                jp call_b
+h_status_line_off: ld hl,OVB_SOFF
+                jp call_b
 h_accept_input: jp OVL_ACCEPT
 h_prevent_input: jp OVL_PREVENT
 
