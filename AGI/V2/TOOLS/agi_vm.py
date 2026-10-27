@@ -95,6 +95,10 @@ class Interp:
         self.noop = {}
         self.dirhold = 0
         self.seed = random.Random(1)
+        self.lfsr = 0xACE1                # igual que el Z80: LFSR de 16 bits (Galois)
+        self.trace = None                 # lista de (logica, pc) de cada paso; None = sin traza
+        self.summ = []                    # por ciclo: (ciclo, pasos, suma de variables, suma de banderas, sala)
+        self.nsteps = 0
         self.out = []
         v = self.vars
         v[8] = 255
@@ -277,6 +281,9 @@ class Interp:
         try:
             while p < end and not self.exit_all and not self.stop:
                 op = code[p]
+                self.nsteps += 1
+                if self.trace is not None and len(self.trace) < 100000:
+                    self.trace.append((n, p))
                 if op == 0xFF:
                     q = p + 1
                     res = True
@@ -370,8 +377,17 @@ class Interp:
     def c_reset_v(self, v): self.flags[self.vars[v]] = 0
     def c_toggle_v(self, v): self.flags[self.vars[v]] ^= 1
 
+    def rand8(self):
+        for _ in range(8):
+            lsb = self.lfsr & 1
+            self.lfsr >>= 1
+            if lsb:
+                self.lfsr ^= 0xB400
+        return self.lfsr & 255
+
     def c_random(self, lo, hi, v):
-        self.vars[v] = lo + self.seed.randrange(hi - lo + 1) if hi >= lo else lo
+        n = hi - lo + 1
+        self.vars[v] = lo + (self.rand8() % n if n > 0 else 0)
 
     # ------------------------------------------------------------ logicas y salas
     def c_new_room(self, n):
@@ -662,11 +678,11 @@ class Interp:
     def c_accept_input(self): self.accept = True
     def c_set_key(self, a, s, c): self.keys[a if a else (s << 8)] = c
     def c_set_menu_item(self, m, c): pass
-    def sound_cycles(self, n):
-        """Duracion de la pista 0 de un sonido en ciclos del interprete (duraciones en 1/60 s)."""
+    def sound_ticks(self, n):
+        """Duracion de la pista 0 de un sonido en 1/60 s."""
         d = self.g.resource('SND', n)
         if not d:
-            return 2
+            return 0
         p = d[0] | (d[1] << 8)
         t = 0
         while p + 5 <= len(d):
@@ -675,8 +691,13 @@ class Interp:
                 break
             t += dur
             p += 5
-        cps = 20 / max(1, self.vars[10])
-        return max(2, int(t / 60 * cps + 0.5))
+        return min(t, 0xFFFF)
+
+    def sound_cycles(self, n):
+        """Ciclos del interprete que dura: t/60 s a 20/v10 ciclos por segundo, redondeado (aritmetica entera, como el Z80)."""
+        t = self.sound_ticks(n)
+        v10 = max(1, self.vars[10])
+        return max(2, (2 * t + 3 * v10) // (6 * v10))
 
     def c_sound(self, n, f):
         self.flags[f] = 0
@@ -921,6 +942,8 @@ class Interp:
         self.keyq = []
         v[2] = v[3] = v[4] = v[5] = 0
         self.tick_clock()
+        self.summ.append((self.cycle, self.nsteps, sum(v) & 0xFFFF, sum(i for i in range(256) if self.flags[i]) & 0xFFFF, v[0]))
+        self.nsteps = 0
 
     def play(self, cycles, script):
         ev = {}
@@ -955,7 +978,18 @@ def main(argv):
         if a == '--script':
             script = argv[i + 1]
     it = Interp(argv[1], quiet)
+    tr = None
+    for i, a in enumerate(argv):
+        if a == '--trace':
+            tr = argv[i + 1]
+            it.trace = []
     it.play(cycles, parse_script(script))
+    if tr:
+        with open(tr, 'w') as f:
+            for n, p in it.trace:
+                f.write('T %d %d\n' % (n, p))
+            for c in it.summ:
+                f.write('C %d %d %d %d %d\n' % c)
     ego = it.obj(EGO)
     print('fin: sala %d, ciclo %d, ego en %d,%d, v0..v9 = %s' % (it.vars[0], it.cycle, ego.x, ego.y, it.vars[:10]))
     if it.noop:

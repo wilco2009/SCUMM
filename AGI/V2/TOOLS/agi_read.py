@@ -84,7 +84,10 @@ class Game:
         if e is None:
             return None
         v, off = e
-        d = self.vol(v)
+        try:
+            d = self.vol(v)
+        except FileNotFoundError:
+            return None
         if d[off:off + 2] != b'\x12\x34':
             raise ValueError('%s %d: cabecera erronea en VOL.%d+%X' % (t, n, v, off))
         ln = d[off + 3] | (d[off + 4] << 8)
