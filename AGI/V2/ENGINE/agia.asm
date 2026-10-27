@@ -13,6 +13,7 @@
                 jp t_render             ; OVL_RENDER
                 jp t_sinit              ; OVL_SPRINIT
                 jp t_bgsave             ; OVL_BGSAVE
+                jp t_force              ; OVL_FORCE
 
 ; ---------------------------------------------------------------------
 ;  Teclado del ZX81
@@ -351,4 +352,16 @@ PQ:             defs 2*PQ_MAX
 
 
                 include "agihws.asm"
+
+; Tras una ventana de mensaje: todos los objetos se vuelven a armar (sprites) y los rotulos se recomponen
+t_force:        ld ix,OBJ
+                ld de,32
+                ld b,NOBJ
+tfo_l:          res 1,(ix+O_SDR)
+                add ix,de
+                djnz tfo_l
+                ld a,1
+                ld (sw_force),a
+                ret
+
                 include "agisw.asm"

@@ -34,8 +34,8 @@ def main(argv):
     print('Z80: error %d, %d ciclos resumidos, %d pasos trazados' % (errc, nsum, trc))
     it = agi_vm.Interp(argv[3], True)
     it.trace = []
-    ncyc = min(int(argv[4]), nsum)
-    it.play(ncyc, agi_vm.parse_script(argv[5]) if len(argv) > 5 else [])
+    it.play(int(argv[4]), agi_vm.parse_script(argv[5]) if len(argv) > 5 else [])   # los mismos ciclos que el Z80 (una ventana de mensaje abierta gasta ciclos sin resumen)
+    ncyc = min(nsum, len(it.summ))
     bad = 0
     for i in range(min(trc, len(it.trace))):
         lg, pc = mem[TRACE + 3 * i], mem[TRACE + 3 * i + 1] | (mem[TRACE + 3 * i + 2] << 8)

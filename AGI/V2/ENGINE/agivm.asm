@@ -70,6 +70,7 @@ OVL_PREVENT     equ $2009
 OVL_RENDER      equ $200C
 OVL_SPRINIT     equ $200F
 OVL_BGSAVE      equ $2012
+OVL_FORCE       equ $2015
 OVB_DISPLAY     equ $2000               ; overlay B (texto): se mapea con call_b
 OVB_DISPLAY_V   equ $2003
 OVB_CLEAR       equ $2006
@@ -78,6 +79,8 @@ OVB_SON         equ $200C
 OVB_SOFF        equ $200F
 OVB_ATTR        equ $2012
 OVB_PROMPT      equ $2015
+OVB_PRINT       equ $2018
+OVB_BOXCLOSE    equ $201B
 MAXW            equ 6
 LPAGE0          equ 16
 NSLOTS          equ 8
@@ -142,7 +145,11 @@ ml_run:         xor a
                 jr z,ml_end
                 call do_new_room
                 jr ml_run
-ml_end:         call update_objects
+ml_end:         xor a                   ; los codigos de borde se ponen a 0 antes de mover los objetos (el movimiento los pone y la logica del ciclo siguiente los ve)
+                ld (VARS+2),a
+                ld (VARS+4),a
+                ld (VARS+5),a
+                call update_objects
                 ld hl,OVB_STATUS
                 call call_b
                 call pace
@@ -154,9 +161,6 @@ ml_end:         call update_objects
                 ld (FLAGS+4),a
                 ld (FLAGS+5),a
                 ld (FLAGS+6),a
-                ld (VARS+2),a
-                ld (VARS+4),a
-                ld (VARS+5),a
                 call tick_clock
                 ld hl,(ncyc)
                 ld a,h

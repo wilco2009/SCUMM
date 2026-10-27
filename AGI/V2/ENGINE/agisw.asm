@@ -420,12 +420,18 @@ sc_yn:          ld hl,sqs_n
                 ld a,(sc_yv)
                 or a
                 ret z
-                xor a                   ; los que se recomponen, por prioridad
-                ld (sc_pri),a
-sc_p:           ld ix,OBJ
-                xor a
+                xor a                   ; los que se recomponen, en el orden de ORD (prioridad, y, numero)
+                ld (sc_k),a
+sc_o:           ld a,(sc_k)
+                ld hl,hq_cnt
+                cp (hl)
+                jr nc,sc_ld
+                ld e,a
+                ld d,0
+                ld hl,ORD
+                add hl,de
+                ld a,(hl)
                 ld (sqs_n),a
-sc_o:           ld a,(sqs_n)
                 call swr_ptr
                 ld de,8
                 add hl,de
@@ -436,9 +442,6 @@ sc_o:           ld a,(sqs_n)
                 ld a,(hl)
                 or a
                 jr z,sc_on
-                ld a,(sc_pri)
-                cp (ix+O_PRI)
-                jr nz,sc_on
                 ld a,(sc_nl)
                 ld e,a
                 ld d,0
@@ -448,18 +451,10 @@ sc_o:           ld a,(sqs_n)
                 ld (hl),a
                 ld hl,sc_nl
                 inc (hl)
-sc_on:          ld de,32
-                add ix,de
-                ld hl,sqs_n
+sc_on:          ld hl,sc_k
                 inc (hl)
-                ld a,(hl)
-                cp NOBJ
-                jr c,sc_o
-                ld hl,sc_pri
-                inc (hl)
-                ld a,(hl)
-                cp 16
-                jr c,sc_p
+                jr sc_o
+sc_ld:
                 ld a,(sc_ymin)          ; linea a linea
                 ld (sw_y),a
 sc_l:           call t_kpoll

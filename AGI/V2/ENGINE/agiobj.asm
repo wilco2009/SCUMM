@@ -257,7 +257,13 @@ h_get_posn:     call argobj
 h_set_view:     call argobj
                 ld a,(ARGS+1)
 sv_set:         ld (ix+O_VIEW),a
-                xor a
+                ld c,a
+                ld a,(ARGS)
+                or a
+                jr nz,sv_nv
+                ld a,c                  ; v16 = la vista del ego
+                ld (VARS+16),a
+sv_nv:          xor a
                 ld (ix+O_LOOP),a
                 ld (ix+O_CEL),a
                 jp obj_cell

@@ -43,70 +43,12 @@ si_h:           ld a,b
                 jr c,si_h
                 ret
 
-t_render:       call sw_scan
+t_render:       call sort_objs
+                call sw_scan
                 call sw_close
                 call sw_comp
                 xor a
                 ld (sk),a
-                ld hl,PCNT              ; objetos por prioridad (reparto por cubos): primero cuantos hay de cada una
-                ld de,PCNT+1
-                ld bc,15
-                ld (hl),0
-                ldir
-                ld ix,OBJ
-                ld b,NOBJ
-hq_c:           ld a,(ix+O_F1)
-                and 3
-                cp 3
-                jr nz,hq_cn
-                ld a,(ix+O_PRI)
-                cp 16
-                jr nc,hq_cn
-                ld e,a
-                ld d,0
-                ld hl,PCNT
-                add hl,de
-                inc (hl)
-hq_cn:          ld de,32
-                add ix,de
-                djnz hq_c
-                ld hl,PCNT              ; donde empieza cada prioridad en ORD
-                ld b,16
-                xor a
-hq_s:           ld c,(hl)
-                ld (hl),a
-                add a,c
-                inc hl
-                djnz hq_s
-                ld (hq_cnt),a
-                ld ix,OBJ
-                xor a
-                ld (rn),a
-hq_p2:          ld a,(ix+O_F1)
-                and 3
-                cp 3
-                jr nz,hq_pn
-                ld a,(ix+O_PRI)
-                cp 16
-                jr nc,hq_pn
-                ld e,a
-                ld d,0
-                ld hl,PCNT
-                add hl,de
-                ld e,(hl)
-                inc (hl)
-                ld d,0
-                ld hl,ORD
-                add hl,de
-                ld a,(rn)
-                ld (hl),a
-hq_pn:          ld de,32
-                add ix,de
-                ld hl,rn
-                inc (hl)
-                ld a,(hl)
-                cp NOBJ
-                jr c,hq_p2
                 xor a                   ; y ahora, en orden
                 ld (hq_k),a
 hq_it:          ld a,(hq_k)
@@ -159,6 +101,97 @@ hq_off:         cp 64
 hq_nx:          ld a,(hw_k)
                 inc a
                 jr hq_off
+
+; Los objetos con anim y drawn (prioridad < 16) en ORD, por (prioridad, y, numero): a igual prioridad se pinta despues (encima) el de y mayor, y a igual y el de
+; numero mayor; hq_cnt = cuantos. Ordenacion por insercion con claves de 16 bits (prioridad * 256 + y).
+sort_objs:      xor a
+                ld (hq_cnt),a
+                ld (rn),a
+                ld ix,OBJ
+od_l:           ld a,(ix+O_F1)
+                and 3
+                cp 3
+                jr nz,od_n
+                ld a,(ix+O_PRI)
+                cp 16
+                jr nc,od_n
+                ld h,a
+                ld l,(ix+O_Y)
+                ld (od_key),hl
+                ld a,(hq_cnt)
+                ld (od_i),a
+od_s:           ld a,(od_i)
+                or a
+                jr z,od_p
+                dec a
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,KEY
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)               ; DE = clave del anterior
+                ld hl,(od_key)
+                or a
+                sbc hl,de
+                jr nc,od_p              ; la nuestra no es menor: va aqui
+                ld a,(od_i)             ; si es menor, el anterior sube un hueco
+                dec a
+                ld c,a
+                ld l,a
+                ld h,0
+                ld de,ORD
+                add hl,de
+                ld a,(hl)
+                inc hl
+                ld (hl),a
+                ld a,c
+                add a,a
+                ld l,a
+                ld h,0
+                ld de,KEY
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                inc hl
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                ld hl,od_i
+                dec (hl)
+                jr od_s
+od_p:           ld a,(od_i)
+                ld e,a
+                ld d,0
+                ld hl,ORD
+                add hl,de
+                ld a,(rn)
+                ld (hl),a
+                ld a,(od_i)
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,KEY
+                add hl,de
+                ld de,(od_key)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                ld hl,hq_cnt
+                inc (hl)
+od_n:           ld de,32
+                add ix,de
+                ld hl,rn
+                inc (hl)
+                ld a,(hl)
+                cp NOBJ
+                jp c,od_l
+                ret
+od_key:         defw 0
+od_i:           defb 0
+KEY:            defs 2*NOBJ
 
 ; ---------------------------------------------------------------------
 ;  Vistas: A = vista, B = bucle -> A = pagina de la cache donde esta su N%03d%d.SPR, o $FF si no hay

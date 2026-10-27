@@ -92,6 +92,9 @@ class Interp:
         self.st_last = None
         self.pic_ops = []
         self.spr_big = {}
+        self.box = None
+        self.ev = {}
+        self.max_cycles = 0
         self.ext_bm = bytearray(192 * 32)
         self.ext_at = bytearray(192 * 32)
         self.newroom = None
@@ -171,6 +174,11 @@ class Interp:
         return c[0], c[1]
 
     # ------------------------------------------------------------ sprites (por hardware: ver agi2spr.py y ENGINE/agispr.asm)
+    def draw_order(self):
+        """Numeros de los objetos con anim y drawn (prioridad < 16) en el orden en que se pintan, de abajo a arriba: por prioridad, a igual prioridad por y (el de
+        mas abajo en la pantalla tapa al de mas arriba) y a igual y por numero."""
+        return [n for p, y, n in sorted((o.pri, o.y, n) for n, o in self.objs.items() if o.anim and o.drawn and o.pri < 16)]
+
     def hw_sprites(self):
         """Los sprites del hardware que el Z80 tiene que dejar puestos: lista de 64 con (x, y, color[8], dato[8], mascara[8]) o None (apagado); el 0 es el de abajo.
         Los objetos con anim y drawn van de menor a mayor prioridad (a igual prioridad, por numero). Cada uno reserva tantos sprites seguidos como el
@@ -184,10 +192,12 @@ class Interp:
         pri2 = agi2hr.sprite_priority(self.pic.pri) if self.pic is not None else None
         out = [None] * 64
         k = 0
-        for p in range(16):
-            for n in sorted(self.objs):
+        if self.box is not None:
+            return out                  # con una ventana abierta los sprites se apagan
+        for n in self.draw_order():
+            if True:
                 o = self.objs[n]
-                if o.pri != p or not (o.anim and o.drawn) or o.x >= 160:
+                if o.x >= 160:
                     continue
                 d = self.g.resource('VIEW', o.view)
                 if d is None:
@@ -244,6 +254,8 @@ class Interp:
         sa[256:256 + 168 * 32] = at
         if self.pic is not None:
             self.sw_blit(sb, sa)
+        if self.box is not None:
+            agi_text.draw_box(sb, sa, self.box[0], self.box[1])
         return sb, sa
 
     def sw_blit(self, sb, sa):
@@ -252,10 +264,10 @@ class Interp:
         desplazada s a la derecha (A) y, si s > 0, a la siguiente la que se sale (B). Una parte con las 8 posiciones opacas escribe el bitmap y el atributo de la
         celda tal cual; si no, pone sus pixeles uno a uno (agi_text.plot_hr) sobre lo que haya. (agisw.asm lo hace por lineas, con un bufer, sin borrar nada.)"""
         import agi2spr
-        for p in range(16):
-            for n in sorted(self.objs):
+        for n in self.draw_order():
+            if True:
                 o = self.objs[n]
-                if o.pri != p or not (o.anim and o.drawn) or o.x >= 160:
+                if o.x >= 160:
                     continue
                 d = self.g.resource('VIEW', o.view)
                 if d is None:
@@ -659,6 +671,8 @@ class Interp:
     def c_set_view(self, n, view):
         o = self.obj(n)
         o.view = view
+        if n == EGO:
+            self.vars[16] = view            # v16 = la vista del ego (la logica 0 la vuelve a poner con set.view.v en cada sala nueva)
         self.loops(view)
         o.loop = o.cel = 0 if not o.drawn else min(o.loop, 0)
         self.cell(o)
@@ -810,10 +824,29 @@ class Interp:
     def c_get_room_v(self, i, v): self.vars[v] = self.inv[self.vars[i]]
 
     # ------------------------------------------------------------ texto y cadenas
-    def c_print(self, m): self.log('print: ' + self.msg(m).replace('\n', ' / '))
+    def c_print(self, m): self.do_print(self.msg(m)[:250], None, None, 0)
     def c_print_v(self, v): self.c_print(self.vars[v])
-    def c_print_at(self, m, r, c, w): self.c_print(m)
-    def c_print_at_v(self, vm, r, c, w): self.c_print(self.vars[vm])
+    def c_print_at(self, m, r, c, w): self.do_print(self.msg(m)[:250], r, c, w)
+    def c_print_at_v(self, vm, vr, vc, vw): self.c_print_at(self.vars[vm], self.vars[vr], self.vars[vc], self.vars[vw])
+
+    def do_print(self, s, row, col, w):
+        """Ventana de mensaje: se dibuja y el interprete espera una tecla (un evento `key`); cada vuelta de la espera es un ciclo (con sus eventos). La tecla que la
+        cierra no llega a la logica (v19 y la cola de teclas quedan como estaban). Si se acaban los ciclos con la ventana abierta, se queda en la pantalla."""
+        width = w if 1 <= w <= 36 else 30
+        lines = agi_text.wrap(s, width)
+        self.log('print: ' + ' / '.join(lines))
+        self.box = (lines, agi_text.box_geom(lines, row, col))
+        n, v19 = len(self.keyq), self.vars[19]
+        while True:
+            self.cycle += 1
+            if self.cycle > self.max_cycles:
+                raise Stop('fin de los ciclos con una ventana abierta')
+            self.apply_events(self.ev.get(self.cycle, []))
+            if len(self.keyq) > n:
+                break
+        del self.keyq[n:]
+        self.vars[19] = v19
+        self.box = None
     def c_display(self, r, c, m):
         s = self.msg(m)[:250]
         self.log('display %d,%d: %s' % (r, c, s))
@@ -1137,9 +1170,8 @@ class Interp:
                         v[13] = 0
                         v[14] += 1
 
-    def interpret_cycle(self, events):
+    def apply_events(self, events):
         v = self.vars
-        self.ctl = set()
         for kind, val in events:
             if kind == 'text':
                 self.input = self.parse(val)
@@ -1159,6 +1191,11 @@ class Interp:
                 self.ctl.add(int(val))
             elif kind == 'dir':
                 self.dirhold = int(val)
+
+    def interpret_cycle(self, events):
+        v = self.vars
+        self.ctl = set()
+        self.apply_events(events)
         if self.pcontrol:
             v[6] = self.dirhold
         for t, f in list(self.sound_flags):
@@ -1174,12 +1211,12 @@ class Interp:
                 self.do_new_room(self.newroom)
                 continue
             break
+        v[2] = v[4] = v[5] = 0          # los codigos de borde se ponen a 0 antes de mover los objetos: el movimiento los pone y la logica del ciclo siguiente los ve
         self.update_objects()
         self.status_tick()
         self.flags[2] = self.flags[4] = self.flags[5] = self.flags[6] = 0
         self.input = None
         self.keyq = []
-        v[2] = v[4] = v[5] = 0
         self.tick_clock()
         self.summ.append((self.cycle, self.nsteps, sum(v) & 0xFFFF, sum(i for i in range(256) if self.flags[i]) & 0xFFFF, v[0], self.objsum(), self.strsum(), self.miscsum()))
         self.nsteps = 0
@@ -1189,7 +1226,11 @@ class Interp:
         for item in script:
             c, k, val = item.split(':', 2)
             ev.setdefault(int(c), []).append((k, val))
-        for self.cycle in range(1, cycles + 1):
+        self.ev = ev
+        self.max_cycles = cycles
+        self.cycle = 0
+        while self.cycle < cycles:
+            self.cycle += 1
             try:
                 self.interpret_cycle(ev.get(self.cycle, []))
             except Stop as e:

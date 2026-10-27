@@ -281,6 +281,97 @@ h_status_line_on: ld hl,OVB_SON
                 jp call_b
 h_status_line_off: ld hl,OVB_SOFF
                 jp call_b
+; print: ventana de mensaje (overlay B) y espera de una tecla
+h_print:        ld a,(ARGS)
+                ld (pr_msg),a
+                ld a,255
+                ld (pr_row),a
+                xor a
+                ld (pr_w),a
+                jr pr_go
+h_print_v:      ld a,(ARGS)
+                call getv
+                ld (pr_msg),a
+                ld a,255
+                ld (pr_row),a
+                xor a
+                ld (pr_w),a
+                jr pr_go
+h_print_at:     ld a,(ARGS)
+                ld (pr_msg),a
+                ld a,(ARGS+1)
+                ld (pr_row),a
+                ld a,(ARGS+2)
+                ld (pr_col),a
+                ld a,(ARGS+3)
+                ld (pr_w),a
+                jr pr_go
+h_print_at_v:   ld a,(ARGS)
+                call getv
+                ld (pr_msg),a
+                ld a,(ARGS+1)
+                call getv
+                ld (pr_row),a
+                ld a,(ARGS+2)
+                call getv
+                ld (pr_col),a
+                ld a,(ARGS+3)
+                call getv
+                ld (pr_w),a
+pr_go:          call OVL_SPRINIT        ; con la ventana abierta los sprites se apagan
+                ld hl,OVB_PRINT
+                call call_b
+                call pr_wait
+                ld a,(stopf)
+                or a
+                ret nz                  ; se acabaron los ciclos (pruebas): la ventana se queda
+                ld hl,OVB_BOXCLOSE
+                call call_b
+                jp OVL_FORCE
+
+; Espera una tecla: cada vuelta es un ciclo (con sus eventos y las teclas del ZX81); la tecla no llega a la logica
+pr_wait:        ld a,(keyn)
+                ld (pw_k),a
+                ld a,(VARS+19)
+                ld (pw_v),a
+pw_l:           ld hl,(cyc)
+                inc hl
+                ld (cyc),hl
+                ld de,(ncyc)
+                ld a,d
+                or e
+                jr z,pw_run             ; modo real: sin limite
+                ld a,e
+                sub l
+                ld a,d
+                sbc a,h
+                jr nc,pw_run
+                ld a,1                  ; pruebas: se acabaron los ciclos
+                ld (stopf),a
+                ret
+pw_run:         call OVL_KDELIV
+                call do_events
+                ld a,(keyn)
+                ld hl,pw_k
+                cp (hl)
+                jr nz,pw_d
+                ld hl,(ncyc)
+                ld a,h
+                or l
+                call z,wait_frame
+                jr pw_l
+pw_d:           ld a,(pw_k)
+                ld (keyn),a
+                ld a,(pw_v)
+                ld (VARS+19),a
+                ret
+pr_msg:         defb 0
+pr_row:         defb 0
+pr_col:         defb 0
+pr_w:           defb 0
+pw_k:           defb 0
+pw_v:           defb 0
+
 h_accept_input: jp OVL_ACCEPT
 h_prevent_input: jp OVL_PREVENT
 

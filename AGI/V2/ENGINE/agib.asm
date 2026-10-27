@@ -18,6 +18,8 @@
                 jp t_status_off         ; OVB_SOFF
                 jp t_set_attr           ; OVB_ATTR
                 jp t_prompt             ; OVB_PROMPT
+                jp t_print              ; OVB_PRINT
+                jp t_boxclose           ; OVB_BOXCLOSE
 
 TXT             equ TMPM
 
@@ -116,6 +118,7 @@ draw_line:      ld a,(dl_col)
                 add a,b
                 add a,a
                 ld (dl_x0),a            ; x0 = col * 6
+draw_line_px:   ld a,(dl_x0)            ; (entrada con x0 en pixeles: las ventanas)
                 rrca
                 rrca
                 rrca
@@ -524,7 +527,10 @@ t_prompt:       ld a,23
 s_prompt:       defb "> ",0
 
 ; Texto escrito sobre la imagen (filas 1-21): dl_row, dl_ca, dl_nb pasan de la pantalla a la copia de fondo y los rotulos se recomponen
-text_bg:        ld a,(picvalid)
+text_bg:        ld a,(dl_nobg)
+                or a
+                ret nz
+                ld a,(picvalid)
                 or a
                 ret z
                 ld a,(dl_row)
@@ -617,6 +623,431 @@ dl_b:           defb 0
 dl_hx:          defb 0
 dl_bm:          defb 0
 LB:             defs 68
+
+; ---------------------------------------------------------------------
+;  Ventanas de mensaje (print): el nucleo pone pr_msg, pr_row (255 = centrada), pr_col y pr_w y llama a t_print (dibuja) y, despues de esperar una tecla,
+;  a t_boxclose (devuelve la imagen limpia). Mismo resultado que agi_text.wrap / box_geom / draw_box: lineas de como mucho pr_w caracteres (30 si 0 o mas de 36),
+;  una celda de relleno a cada lado y una fila arriba y otra abajo, blanco con letras negras y un marco rojo de un pixel.
+; ---------------------------------------------------------------------
+t_print:        ld a,(pr_msg)
+                ld b,a
+                ld a,(curlg)
+                ld (bs_lg),a
+                ld de,TXT
+                ld c,250
+                call build_str
+                ld a,(pr_w)
+                or a
+                jr z,tp_w30
+                cp 37
+                jr c,tp_w
+tp_w30:         ld a,30
+tp_w:           ld (wr_w),a
+                call wrap
+                ld a,(wr_n)             ; la linea mas larga
+                ld b,a
+                ld hl,LN
+                ld c,0
+tp_m:           ld a,(hl)
+                cp c
+                jr c,tp_mn
+                ld c,a
+tp_mn:          ld de,40
+                add hl,de
+                djnz tp_m
+                ld a,c                  ; celdas de ancho = (6 * largo + 7) / 8 + 2
+                add a,a
+                ld b,a
+                add a,a
+                add a,b
+                add a,7
+                rrca
+                rrca
+                rrca
+                and 31
+                add a,2
+                ld (pr_bw),a
+                ld a,(wr_n)
+                add a,2
+                ld (pr_nr),a
+                ld b,a
+                ld a,(pr_row)
+                cp 255
+                jr nz,tp_at
+                ld a,21                 ; centrada: fila = 1 + (21 - filas) / 2, celda = (32 - ancho) / 2
+                sub b
+                srl a
+                inc a
+                ld (pr_top),a
+                ld a,(pr_bw)
+                ld b,a
+                ld a,32
+                sub b
+                srl a
+                ld (pr_cxl),a
+                jr tp_dr
+tp_at:          or a                    ; print.at: fila entre 1 y 22 - filas, celda = col * 6 / 8 sin salirse
+                jr nz,tp_r1
+                ld a,1
+tp_r1:          ld c,a
+                ld a,22
+                sub b
+                ld d,a
+                ld a,c
+                cp d
+                jr c,tp_r2
+                ld a,d
+tp_r2:          ld (pr_top),a
+                ld a,(pr_col)
+                ld c,a
+                add a,a
+                add a,c
+                add a,a
+                rrca
+                rrca
+                rrca
+                and 31
+                ld c,a
+                ld a,(pr_bw)
+                ld b,a
+                ld a,32
+                sub b
+                ld d,a
+                ld a,c
+                cp d
+                jr c,tp_c2
+                ld a,d
+tp_c2:          ld (pr_cxl),a
+tp_dr:          ld a,1                  ; lo que se escribe aqui no pasa a la copia de fondo
+                ld (dl_nobg),a
+                ld a,(pr_top)
+                add a,a
+                add a,a
+                add a,a
+                ld (pr_l0),a
+                ld a,(pr_nr)
+                add a,a
+                add a,a
+                add a,a
+                ld (pr_ln),a
+                ld (pr_k),a
+                ld a,(pr_l0)
+                ld (pr_l),a
+tp_f:           ld a,(pr_l)             ; relleno: bitmap 0, atributos papel blanco y tinta roja
+                call pr_addr
+                ld de,HR_BM
+                add hl,de
+                ld a,(pr_bw)
+                ld b,a
+                xor a
+tp_fb:          ld (hl),a
+                inc hl
+                djnz tp_fb
+                ld a,(pr_l)
+                call pr_addr
+                ld de,HR_ATT
+                add hl,de
+                ld a,(pr_bw)
+                ld b,a
+                ld a,$F2
+tp_fa:          ld (hl),a
+                inc hl
+                djnz tp_fa
+                ld hl,pr_l
+                inc (hl)
+                ld hl,pr_k
+                dec (hl)
+                jr nz,tp_f
+                xor a                   ; el texto
+                ld (pr_i),a
+tp_t:           ld a,(pr_i)
+                ld hl,wr_n
+                cp (hl)
+                jr nc,tp_bd
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,hl
+                add hl,de               ; 40 * i
+                ld de,LN
+                add hl,de
+                ld a,(hl)
+                or a
+                jr z,tp_tn
+                ld (dl_n),a
+                inc hl
+                ld (dl_ptr),hl
+                ld a,(pr_top)
+                inc a
+                ld hl,pr_i
+                add a,(hl)
+                ld (dl_row),a
+                ld a,(pr_cxl)
+                inc a
+                add a,a
+                add a,a
+                add a,a
+                ld (dl_x0),a
+                xor a
+                call t_chroma
+                ld (dl_fg),a
+                ld a,15
+                call t_chroma
+                ld (dl_bg),a
+                call draw_line_px
+tp_tn:          ld hl,pr_i
+                inc (hl)
+                jr tp_t
+tp_bd:          ld a,(pr_l0)            ; marco: linea de arriba y de abajo enteras
+                call pr_addr
+                ld de,HR_BM
+                add hl,de
+                call pr_ff
+                ld a,(pr_l0)
+                ld hl,pr_ln
+                add a,(hl)
+                dec a
+                call pr_addr
+                ld de,HR_BM
+                add hl,de
+                call pr_ff
+                ld a,(pr_ln)            ; y el pixel de la izquierda y el de la derecha de cada linea
+                ld (pr_k),a
+                ld a,(pr_l0)
+                ld (pr_l),a
+tp_s:           ld a,(pr_l)
+                call pr_addr
+                ld de,HR_BM
+                add hl,de
+                set 7,(hl)
+                ld a,(pr_bw)
+                dec a
+                ld e,a
+                ld d,0
+                add hl,de
+                set 0,(hl)
+                ld hl,pr_l
+                inc (hl)
+                ld hl,pr_k
+                dec (hl)
+                jr nz,tp_s
+                xor a
+                ld (dl_nobg),a
+                ret
+
+; A = linea de pantalla -> HL = linea * 32 + pr_cxl
+pr_addr:        ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld a,(pr_cxl)
+                ld e,a
+                ld d,0
+                add hl,de
+                ret
+
+; HL = byte del bitmap -> pr_bw bytes a 255
+pr_ff:          ld a,(pr_bw)
+                ld b,a
+                ld a,255
+pf_l:           ld (hl),a
+                inc hl
+                djnz pf_l
+                ret
+
+; La imagen limpia (copia de fondo) en el rectangulo de la ventana
+t_boxclose:     ld a,(picvalid)
+                or a
+                ret z
+                ld a,PG_BGB
+                ld de,HR_BM
+                call bc_plane
+                ld a,PG_BGA
+                ld de,HR_ATT
+                call bc_plane
+                jp map7_back
+bc_plane:       ld (bc_base),de
+                call map7
+                ld a,(pr_l0)
+                ld (pr_l),a
+                ld a,(pr_ln)
+                ld (pr_k),a
+bc_row:         ld a,(pr_l)
+                call pr_addr
+                push hl
+                ld de,$DF00
+                add hl,de               ; origen: la copia de fondo
+                ex (sp),hl              ; HL = desplazamiento
+                ld de,(bc_base)
+                add hl,de               ; destino: la pantalla
+                ex de,hl
+                pop hl
+                ld a,(pr_bw)
+                ld c,a
+                ld b,0
+                ldir
+                ld hl,pr_l
+                inc (hl)
+                ld hl,pr_k
+                dec (hl)
+                jr nz,bc_row
+                ret
+
+; ---------------------------------------------------------------------
+;  Reparto del mensaje (TXT) en lineas de wr_w caracteres, en LN (40 bytes por linea: largo y caracteres) y su numero en wr_n
+; ---------------------------------------------------------------------
+wrap:           ld hl,LN
+                ld (wr_lp),hl
+                xor a
+                ld (wr_len),a
+                ld (wr_n),a
+                ld hl,TXT
+wr_nx:          ld a,(hl)
+                or a
+                jp z,wr_end
+                cp 10
+                jr nz,wr_nn
+                inc hl
+                push hl
+                call wr_flush
+                pop hl
+                jr wr_nx
+wr_nn:          cp 33
+                jr c,wr_sk
+                cp 128
+                jr c,wr_tok
+wr_sk:          inc hl
+                jr wr_nx
+wr_tok:         ld (wr_tp),hl
+                ld b,0
+wr_c:           ld a,(hl)
+                cp 33
+                jr c,wr_te
+                cp 128
+                jr nc,wr_te
+                inc hl
+                inc b
+                jr wr_c
+wr_te:          ld (wr_np),hl
+                ld a,b
+                ld (wr_tl),a
+wr_big:         ld a,(wr_w)             ; una palabra mas larga que la linea se parte en trozos
+                ld hl,wr_tl
+                cp (hl)
+                jr nc,wr_fit
+                ld a,(wr_len)
+                or a
+                call nz,wr_flush
+                ld a,(wr_w)
+                ld b,a
+                call wr_copy
+                call wr_flush
+                ld a,(wr_w)
+                ld c,a
+                ld b,0
+                ld hl,(wr_tp)
+                add hl,bc
+                ld (wr_tp),hl
+                ld hl,wr_tl
+                ld a,(hl)
+                sub c
+                ld (hl),a
+                jr wr_big
+wr_fit:         ld a,(wr_tl)
+                or a
+                jr z,wr_af
+                ld a,(wr_len)
+                or a
+                jr z,wr_put
+                ld hl,wr_tl
+                add a,(hl)
+                inc a                   ; largo + 1 + palabra
+                ld hl,wr_w
+                cp (hl)
+                jr c,wr_add
+                jr z,wr_add
+                call wr_flush
+                jr wr_put
+wr_add:         ld a,' '
+                call wr_ch
+wr_put:         ld a,(wr_tl)
+                ld b,a
+                call wr_copy
+wr_af:          ld hl,(wr_np)
+                jp wr_nx
+wr_end:         jp wr_flush
+
+; B caracteres a partir de wr_tp al final de la linea
+wr_copy:        ld hl,(wr_tp)
+wc_l:           ld a,b
+                or a
+                ret z
+                ld a,(hl)
+                inc hl
+                push hl
+                push bc
+                call wr_ch
+                pop bc
+                pop hl
+                dec b
+                jr wc_l
+
+; A = caracter al final de la linea actual
+wr_ch:          ld c,a
+                ld hl,(wr_lp)
+                ld a,(wr_len)
+                inc a
+                ld e,a
+                ld d,0
+                add hl,de
+                ld (hl),c
+                ld hl,wr_len
+                inc (hl)
+                ret
+
+; cierra la linea actual (como mucho 19)
+wr_flush:       ld a,(wr_n)
+                cp 19
+                jr nc,wf_z
+                ld hl,(wr_lp)
+                ld a,(wr_len)
+                ld (hl),a
+                ld de,40
+                add hl,de
+                ld (wr_lp),hl
+                ld hl,wr_n
+                inc (hl)
+wf_z:           xor a
+                ld (wr_len),a
+                ret
+
+dl_nobg:        defb 0
+wr_w:           defb 0
+wr_n:           defb 0
+wr_len:         defb 0
+wr_lp:          defw 0
+wr_tp:          defw 0
+wr_np:          defw 0
+wr_tl:          defb 0
+pr_bw:          defb 0
+pr_nr:          defb 0
+pr_top:         defb 0
+pr_cxl:         defb 0
+pr_l0:          defb 0
+pr_ln:          defb 0
+pr_l:           defb 0
+pr_k:           defb 0
+pr_i:           defb 0
+bc_base:        defw 0
+LN:             defs 40*20
 
 tb_base:       defw 0
 tb_l:           defb 0
