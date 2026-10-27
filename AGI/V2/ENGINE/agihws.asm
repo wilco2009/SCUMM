@@ -117,7 +117,10 @@ od_l:           ld a,(ix+O_F1)
                 jr nc,od_n
                 ld h,a
                 ld l,(ix+O_Y)
-                ld (od_key),hl
+                bit 2,(ix+O_F2)         ; los fijos van antes que los demas de su prioridad
+                jr z,od_y
+                ld l,0
+od_y:           ld (od_key),hl
                 ld a,(hq_cnt)
                 ld (od_i),a
 od_s:           ld a,(od_i)
@@ -335,7 +338,15 @@ cel_open:       ld a,(ix+O_X)
                 ld (cv_hh),a
                 inc hl
                 ld (cv_p),hl
-                or a
+                bit 2,(ix+O_F2)         ; objeto fijo (add.to.pic): reserva solo los mosaicos de su celda y, si son muchos, va al bitmap
+                jr z,co_ns
+                ld a,(cv_n)
+                ld (cv_mt),a
+                cp 17
+                jr c,co_ns
+                ld hl,cv_fl
+                set 0,(hl)
+co_ns:          or a
                 ret
 co_bad:         call unmap_win
 co_no:          scf

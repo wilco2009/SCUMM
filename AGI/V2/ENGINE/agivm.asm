@@ -1610,6 +1610,8 @@ prisz:          defw 0
 prisz2:         defw 0
 pr_has0:        defb 0
 pr_has1:        defb 0
+mg_n:           defb 0
+mg_tab:         defs 32
 pr_water:       defb 0
 pr_land:        defb 0
 pr_sig:         defb 0

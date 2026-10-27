@@ -13,7 +13,8 @@ PLANEB          equ 168*32
 PRI_RLE         equ LWIN+336            ; el RLE empieza tras el indice de 168 filas (u16)
 PRI_MAX         equ 7800
 
-h_draw_pic:     ld a,(ARGS)
+h_draw_pic:     call clr_static
+                ld a,(ARGS)
                 call getv
                 call mk_nm3
                 ld hl,nm3
@@ -220,11 +221,46 @@ pp_nx:          ld a,e
                 jr pp_l
 pp_end:         jp unmap_win
 
+; Margenes de add.to.pic (x, y, ancho, 0 o 1) que cruzan la fila ny entre nx y nx+ow-1: encienden pr_has0 / pr_has1
+mg_probe:       ld a,(mg_n)
+                or a
+                ret z
+                ld b,a
+                ld iy,mg_tab
+mg_l:           ld a,(ny)
+                cp (iy+1)
+                jr nz,mg_n2
+                ld a,(nx)
+                ld c,a                  ; C = nx
+                ld a,(ow)
+                add a,c
+                ld d,a                  ; D = nx + ow
+                ld a,(iy+0)
+                ld e,a                  ; E = mx
+                add a,(iy+2)            ; mx + mw
+                cp c
+                jr z,mg_n2
+                jr c,mg_n2              ; mx + mw <= nx
+                ld a,e
+                cp d
+                jr nc,mg_n2             ; mx >= nx + ow
+                ld a,1
+                bit 0,(iy+3)
+                jr nz,mg_1
+                ld (pr_has0),a
+                jr mg_n2
+mg_1:           ld (pr_has1),a
+mg_n2:          ld de,4
+                add iy,de
+                djnz mg_l
+                ret
+
 ; Parte de can_be_here que mira la imagen -> A = 0 si el sitio no vale
 pic_check:      ld a,(picvalid)
                 or a
                 jr z,pk_ok
                 call pri_probe
+                call mg_probe
                 ld a,(pr_has0)
                 or a
                 jr z,pk_1

@@ -369,6 +369,92 @@ h_ignore_blocks: call argobj
 h_observe_blocks: call argobj
                 res 0,(ix+O_F2)
                 ret
+; add.to.pic(vista, bucle, celda, x, y, prioridad, margen): un objeto fijo (O_F2 bit 2: no se mueve, no se cicla, no choca ni bloquea) en el ultimo hueco
+; libre de 31 a 24; desaparece con draw.pic o new.room. Un margen 0 o 1 pone una linea de control bajo la celda (can_be_here la mira: mg_probe).
+h_add_to_pic_v: ld hl,ARGS
+                ld b,7
+atv_l:          ld a,(hl)
+                push hl
+                push bc
+                call getv
+                pop bc
+                pop hl
+                ld (hl),a
+                inc hl
+                djnz atv_l
+h_add_to_pic:   ld ix,OBJ+31*32
+                ld b,8
+ap_f:           bit 0,(ix+O_F1)
+                jr z,ap_got
+                ld de,-32
+                add ix,de
+                djnz ap_f
+                ret
+ap_got:         push ix
+                pop hl
+                ld d,h
+                ld e,l
+                inc de
+                ld (hl),0
+                ld bc,31
+                ldir
+                ld (ix+O_F1),%10100011  ; anim, drawn, prioridad fija, ignora el horizonte
+                ld (ix+O_F2),7          ; ignora bloques y objetos; fijo
+                ld a,(ARGS)
+                ld (ix+O_VIEW),a
+                ld a,(ARGS+1)
+                ld (ix+O_LOOP),a
+                ld a,(ARGS+2)
+                ld (ix+O_CEL),a
+                ld a,(ARGS+3)
+                ld (ix+O_X),a
+                ld a,(ARGS+4)
+                ld (ix+O_Y),a
+                ld a,(ARGS+5)
+                ld (ix+O_PRI),a
+                ld a,(ARGS+6)
+                cp 2
+                ret nc                  ; solo los margenes 0 y 1
+                ld a,(mg_n)
+                cp 8
+                ret nc
+                call obj_cell           ; D = ancho
+                ld a,(mg_n)
+                add a,a
+                add a,a
+                ld l,a
+                ld h,0
+                ld bc,mg_tab
+                add hl,bc
+                ld a,(ix+O_X)
+                ld (hl),a
+                inc hl
+                ld a,(ix+O_Y)
+                ld (hl),a
+                inc hl
+                ld (hl),d
+                inc hl
+                ld a,(ARGS+6)
+                ld (hl),a
+                ld hl,mg_n
+                inc (hl)
+                ret
+
+; draw.pic: los objetos fijos y los margenes de add.to.pic se van con la imagen
+clr_static:     xor a
+                ld (mg_n),a
+                ld ix,OBJ
+                ld de,32
+                ld b,NOBJ
+cst_l:           bit 2,(ix+O_F2)
+                jr z,cst_n
+                res 0,(ix+O_F1)
+                res 1,(ix+O_F1)
+                res 2,(ix+O_F2)
+cst_n:           add ix,de
+                djnz cst_l
+                ret
+
 h_block:        ld hl,ARGS
                 ld de,blk
                 ld bc,4

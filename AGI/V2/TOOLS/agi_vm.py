@@ -60,6 +60,7 @@ class Obj:
         self.mstep = 0
         self.mflag = 0
         self.wander = 0
+        self.static = False             # add.to.pic: objeto fijo
 
 
 class Interp:
@@ -74,6 +75,7 @@ class Interp:
         self.views = {}
         self.pics = {}
         self.pic = None
+        self.margins = []
         self.pics_used = set()
         self.use_pic = os.environ.get('AGI_NOPIC') != '1'     # AGI_NOPIC=1: sin el plano de prioridad (lo que modela el Z80 por etapas)
         self.inv = [r for _, r, _ in ag.objects(path)]
@@ -177,7 +179,7 @@ class Interp:
     def draw_order(self):
         """Numeros de los objetos con anim y drawn (prioridad < 16) en el orden en que se pintan, de abajo a arriba: por prioridad, a igual prioridad por y (el de
         mas abajo en la pantalla tapa al de mas arriba) y a igual y por numero."""
-        return [n for p, y, n in sorted((o.pri, o.y, n) for n, o in self.objs.items() if o.anim and o.drawn and o.pri < 16)]
+        return [n for p, y, n in sorted((o.pri, 0 if o.static else o.y, n) for n, o in self.objs.items() if o.anim and o.drawn and o.pri < 16)]
 
     def hw_sprites(self):
         """Los sprites del hardware que el Z80 tiene que dejar puestos: lista de 64 con (x, y, color[8], dato[8], mascara[8]) o None (apagado); el 0 es el de abajo.
@@ -214,10 +216,10 @@ class Interp:
                 if c is None:
                     continue
                 hrw, h, tiles = c
-                if agi2spr.meta(tiles)[0]:
+                if agi2spr.meta(tiles)[0] or o.static and len(tiles) > 16:
                     continue                # rotulo ancho: lo dibuja el Z80 en el bitmap (sw_blit)
                 start = k
-                k += agi2spr.loop_maxt(d, o.loop)
+                k += len(tiles) if o.static else agi2spr.loop_maxt(d, o.loop)
                 x0 = agi2spr.lo(o.x) + 32
                 top = 8 + o.y - h + 1 + 32
                 for j, (tx, ty, col, pix, msk) in enumerate(tiles):
@@ -281,7 +283,7 @@ class Interp:
                 if self.spr_big[key]:
                     continue
                 c = agi2spr.cel_tiles(d, o.loop, o.cel)
-                if c is None or not agi2spr.meta(c[2])[0]:
+                if c is None or not (agi2spr.meta(c[2])[0] or o.static and len(c[2]) > 16):
                     continue
                 hrw, h, tiles = c
                 x0 = agi2spr.lo(o.x)
@@ -611,6 +613,25 @@ class Interp:
             raise Stop('imagen %d inexistente' % n)
         self.pic = ag.Picture(d)
         self.pic_ops = []
+        self.margins = []
+        for o in self.objs.values():
+            if o.static:
+                o.anim = o.drawn = o.static = False
+
+    def c_add_to_pic(self, view, loop, cel, x, y, pri, margin):
+        """Un objeto fijo en el ultimo hueco libre de 31 a 24 (no se mueve, no se cicla, no choca ni bloquea); un margen 0 o 1 pone una linea de control bajo la celda."""
+        slot = next((k for k in range(31, 23, -1) if not (k in self.objs and self.objs[k].anim)), None)
+        if slot is None:
+            return
+        o = self.objs[slot] = Obj()
+        o.anim = o.drawn = o.fixpri = o.ign_horizon = o.ign_blocks = o.ign_objs = o.static = True
+        o.upd = o.cycling = o.mon = False
+        o.step = o.stime = o.scount = o.ctime = o.ccount = 0
+        o.view, o.loop, o.cel, o.x, o.y, o.pri = view, loop, cel, x, y, pri
+        if margin < 2 and len(self.margins) < 8:
+            self.margins.append((x, y, self.cell(o)[0], margin))
+
+    def c_add_to_pic_v(self, *a): self.c_add_to_pic(*[self.vars[i] for i in a])
 
     def c_overlay_pic(self, v):
         d = self.g.resource('PIC', self.vars[v])
@@ -629,6 +650,7 @@ class Interp:
             o.step = o.stime = o.scount = o.ctime = o.ccount = 1
             o.ctype = 0
             o.water = 0
+            o.static = False
 
     def c_unanimate_all(self):
         for o in self.objs.values():
@@ -991,6 +1013,12 @@ class Interp:
                     land += 1
                 if c == 2:
                     sig = True
+            for mx, my, mw, mc in self.margins:
+                if y == my and x < mx + mw and mx < x + w:
+                    if mc == 0 and not o.ign_blocks:
+                        return False
+                    if mc == 1 and not o.ign_blocks and o is self.objs.get(EGO):
+                        return False
             if o.water == 2 and water:
                 return False
             if o.water == 1 and land:
@@ -1133,7 +1161,7 @@ class Interp:
     def objbytes(self, o):
         b = lambda x: 1 if x else 0
         f1 = b(o.anim) | b(o.drawn) << 1 | b(o.upd) << 2 | b(o.cycling) << 3 | b(o.mon) << 4 | b(o.fixpri) << 5 | b(o.fixloop) << 6 | b(o.ign_horizon) << 7
-        f2 = b(o.ign_blocks) | b(o.ign_objs) << 1
+        f2 = b(o.ign_blocks) | b(o.ign_objs) << 1 | b(o.static) << 2
         return [f1, f2, o.view, o.loop, o.cel, o.x & 255, o.y & 255, o.pri & 255, o.ctype, o.ctime & 255, o.ccount & 255, o.cflag,
                 o.motion, o.step & 255, o.stime & 255, o.scount & 255, o.dir, o.water, o.tx & 255, o.ty & 255, o.mstep & 255, o.mflag,
                 o.wander & 255]
