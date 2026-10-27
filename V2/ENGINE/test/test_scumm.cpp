@@ -215,7 +215,7 @@ static bool mat_key(const std::string& k, int& row, int& bit) {
   return false;
 }
 static bool finished = false;
-static uint16_t main_loop_addr = 0;
+static uint16_t main_loop_addr = 0, wait_frame_addr = 0;   // wait_frame: la espera de una trama de agivm (en una ventana de mensaje) cuenta como fotograma
 // ---- TS_PROF=desde-hasta (fotogramas): cuenta T-estados por rutina (el simbolo anterior) y por vuelta del bucle principal
 #include <map>
 #include <algorithm>
@@ -307,7 +307,7 @@ int main(int argc, char** argv) {
   { FILE* s = fopen(argv[2], "r"); char line[256];
     while (s && fgets(line, sizeof line, s)) {
       char name[128]; unsigned v;
-      if (sscanf(line, "%127s EQU %xH", name, &v) == 2) { if (!strcmp(name, "main_loop")) main_loop_addr = v; if (v >= 0x4200 && v < 0x8000) syms.push_back({v, name}); }
+      if (sscanf(line, "%127s EQU %xH", name, &v) == 2) { if (!strcmp(name, "main_loop")) main_loop_addr = v; if (!strcmp(name, "wait_frame")) wait_frame_addr = v; if (v >= 0x4200 && v < 0x8000) syms.push_back({v, name}); }
     }
     if (s) fclose(s); }
   sd_dir = argv[3];
@@ -354,7 +354,7 @@ int main(int argc, char** argv) {
   wr(0xCFF8, 0xE0); wr(0xCFF9, 0xFF);
   z80.pc.w = 0x4212; z80.halted = 0; z80.iff1 = z80.iff2 = 0;
   if (const char* os = getenv("TS_OSYM")) { FILE* q = fopen(os, "r"); char line[256];
-    while (q && fgets(line, sizeof line, q)) { char name[128]; unsigned v; if (sscanf(line, "%127s EQU %xH", name, &v) == 2 && v < 0x2000) syms.push_back({v, std::string("ovl:") + name}); }
+    while (q && fgets(line, sizeof line, q)) { char name[128]; unsigned v; if (sscanf(line, "%127s EQU %xH", name, &v) == 2 && v < 0x4200) syms.push_back({v, std::string("ovl:") + name}); }
     if (q) fclose(q); }
   if (const char* pf = getenv("TS_PROF")) sscanf(pf, "%d-%d", &prof_lo, &prof_hi);
   if (const char* w = getenv("TS_WATCH")) { unsigned lo = 0, hi = 0, fr = 0; sscanf(w, "%x-%x,%u", &lo, &hi, &fr); w_lo = lo; w_hi = hi; w_from = fr; }
@@ -362,7 +362,7 @@ int main(int argc, char** argv) {
   size_t ki = 0;
   static int hist[256]; static int hi = 0;           // ultimos PC, para ver como se escapa el programa
   while (!finished) {
-    if (z80.pc.w == main_loop_addr) {
+    if (z80.pc.w == main_loop_addr || (wait_frame_addr && z80.pc.w == wait_frame_addr)) {
       motor_tick(true);
       if (prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi) { prof_loops.push_back(prof_work); }
       prof_work = 0; prof_n = frames_done;
