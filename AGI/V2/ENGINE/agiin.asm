@@ -372,6 +372,102 @@ pr_w:           defb 0
 pw_k:           defb 0
 pw_v:           defb 0
 
+; ---------------------------------------------------------------------
+;  Menus: set.menu / set.menu.item / enable.item / disable.item guardan en el overlay B (agib.asm); menu.input es modal como print: cada vuelta es un ciclo, las
+;  flechas (cambios de dirhold a 1, 3, 5, 7) mueven, ENTER elige (enciende el controlador del elemento) y ESC cierra; la tecla no llega a la logica.
+; ---------------------------------------------------------------------
+h_set_menu:     ld hl,OVB_SETMENU
+                jp call_b
+h_set_menu_item: ld hl,OVB_SETITEM
+                jp call_b
+h_submit_menu:  ret
+h_enable_item:  ld hl,OVB_ENABLE
+                jp call_b
+h_disable_item: ld hl,OVB_DISABLE
+                jp call_b
+
+h_menu_input:   call OVL_SPRINIT        ; con el menu abierto los sprites se apagan
+                ld hl,OVB_MENUOPEN
+                call call_b
+                ld a,(mn_res)
+                cp 254
+                jp z,OVL_FORCE          ; no hay menus
+                ld a,(keyn)
+                ld (mi_k),a
+                ld a,(VARS+19)
+                ld (mi_v),a
+                ld a,(dirhold)
+                ld (mi_d),a
+mi_l:           ld hl,(cyc)
+                inc hl
+                ld (cyc),hl
+                ld de,(ncyc)
+                ld a,d
+                or e
+                jr z,mi_run             ; modo real: sin limite
+                ld a,e
+                sub l
+                ld a,d
+                sbc a,h
+                jr nc,mi_run
+                ld a,1                  ; pruebas: se acabaron los ciclos, el menu se queda
+                ld (stopf),a
+                ret
+mi_run:         call OVL_KDELIV
+                call do_events
+                ld a,(dirhold)
+                ld hl,mi_d
+                cp (hl)
+                jr z,mi_nd
+                ld (hl),a
+                or a
+                jr z,mi_nd
+                ld (mn_dir),a
+                ld hl,OVB_MENUNAV
+                call call_b
+mi_nd:          ld a,(keyn)
+                ld hl,mi_k
+                cp (hl)
+                jr z,mi_idle
+                ld e,(hl)
+                ld d,0
+                ld hl,KEYQ
+                add hl,de
+                ld c,(hl)               ; la primera tecla nueva
+                ld a,(mi_k)
+                ld (keyn),a             ; se tira
+                ld a,c
+                cp 27
+                jr z,mi_end
+                cp 13
+                jr nz,mi_idle
+                ld hl,OVB_MENUSEL
+                call call_b
+                ld a,(mn_res)
+                cp 255
+                jr z,mi_idle            ; elemento desactivado
+                ld l,a
+                ld h,CTL>>8
+                ld (hl),1
+                jr mi_end
+mi_idle:        ld hl,(ncyc)
+                ld a,h
+                or l
+                call z,wait_frame
+                jp mi_l
+mi_end:         ld a,(mi_k)
+                ld (keyn),a
+                ld a,(mi_v)
+                ld (VARS+19),a
+                ld hl,OVB_MENUCLOSE
+                call call_b
+                jp OVL_FORCE
+mn_res:         defb 0
+mn_dir:         defb 0
+mi_k:           defb 0
+mi_v:           defb 0
+mi_d:           defb 0
+
 h_accept_input: jp OVL_ACCEPT
 h_prevent_input: jp OVL_PREVENT
 

@@ -83,6 +83,14 @@ OVB_ATTR        equ $2012
 OVB_PROMPT      equ $2015
 OVB_PRINT       equ $2018
 OVB_BOXCLOSE    equ $201B
+OVB_SETMENU     equ $201E
+OVB_SETITEM     equ $2021
+OVB_ENABLE      equ $2024
+OVB_DISABLE     equ $2027
+OVB_MENUOPEN    equ $202A
+OVB_MENUNAV     equ $202D
+OVB_MENUSEL     equ $2030
+OVB_MENUCLOSE   equ $2033
 MAXW            equ 6
 LPAGE0          equ 16
 NSLOTS          equ 8

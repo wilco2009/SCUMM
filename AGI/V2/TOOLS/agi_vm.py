@@ -75,6 +75,8 @@ class Interp:
         self.views = {}
         self.pics = {}
         self.pic = None
+        self.menus = []                 # [titulo, [[texto, controlador, activado]]]
+        self.menu_ui = None
         self.margins = []
         self.spans = []                 # add.to.pic: (fila 0 de la celda, prioridad, [(ax0, ax1) por fila])
         self.span_rows = 0
@@ -204,8 +206,8 @@ class Interp:
                                 pri2[row * 160 + ax] = pri
         out = [None] * 64
         k = 0
-        if self.box is not None:
-            return out                  # con una ventana abierta los sprites se apagan
+        if self.box is not None or self.menu_ui is not None:
+            return out                  # con una ventana o un menu abiertos los sprites se apagan
         for n in self.draw_order():
             if True:
                 o = self.objs[n]
@@ -268,6 +270,8 @@ class Interp:
             self.sw_blit(sb, sa)
         if self.box is not None:
             agi_text.draw_box(sb, sa, self.box[0], self.box[1])
+        if self.menu_ui is not None:
+            self.draw_menu(sb, sa)
         return sb, sa
 
     def sw_blit(self, sb, sa):
@@ -988,7 +992,99 @@ class Interp:
     def c_prevent_input(self): self.accept = False
     def c_accept_input(self): self.accept = True
     def c_set_key(self, a, s, c): self.keys[a if a else (s << 8)] = c
-    def c_set_menu_item(self, m, c): pass
+    # ------------------------------------------------------------ menus
+    def c_set_menu(self, m):
+        if len(self.menus) < 8:
+            self.menus.append([self.msg(m)[:36], []])
+
+    def c_set_menu_item(self, m, c):
+        if self.menus and sum(len(x[1]) for x in self.menus) < 48:
+            self.menus[-1][1].append([self.msg(m)[:36], c, True])
+
+    def c_submit_menu(self): pass
+
+    def c_enable_item(self, c):
+        for t, items in self.menus:
+            for it in items:
+                if it[1] == c:
+                    it[2] = True
+
+    def c_disable_item(self, c):
+        for t, items in self.menus:
+            for it in items:
+                if it[1] == c:
+                    it[2] = False
+
+    def c_menu_input(self):
+        """Modal como print: cada vuelta es un ciclo; las flechas (cambios de la direccion a 1, 3, 5, 7) mueven, ENTER elige (enciende el controlador del elemento si
+        esta activado) y ESC cierra; la tecla no llega a la logica."""
+        if not self.menus:
+            return
+        sel = it = 0
+        self.menu_ui = [sel, it]
+        n0, v19 = len(self.keyq), self.vars[19]
+        prev = self.dirhold
+        done = False
+        while not done:
+            self.cycle += 1
+            if self.cycle > self.max_cycles:
+                raise Stop('fin de los ciclos con un menu abierto')
+            self.apply_events(self.ev.get(self.cycle, []))
+            d = self.dirhold
+            if d != prev:
+                prev = d
+                cnt = len(self.menus[sel][1])
+                if d == 7:
+                    sel, it = (sel - 1) % len(self.menus), 0
+                elif d == 3:
+                    sel, it = (sel + 1) % len(self.menus), 0
+                elif d == 5 and cnt:
+                    it = (it + 1) % cnt
+                elif d == 1 and cnt:
+                    it = (it - 1) % cnt
+                self.menu_ui = [sel, it]
+            if len(self.keyq) > n0:
+                k = self.keyq[n0]
+                del self.keyq[n0:]
+                if k == 27:
+                    done = True
+                elif k == 13 and self.menus[sel][1] and self.menus[sel][1][it][2]:
+                    self.ctl.add(self.menus[sel][1][it][1])
+                    done = True
+        del self.keyq[n0:]
+        self.vars[19] = v19
+        self.menu_ui = None
+        self.st_last = None
+
+    def draw_menu(self, sb, sa):
+        import agi2hr
+        sel, it = self.menu_ui
+        agi_text.fill_row(sb, sa, 0, 0, 15)
+        col = 0
+        cols = []
+        for i, (t, items) in enumerate(self.menus):
+            txt = ' ' + t + ' '
+            fg, bg = (15, 0) if i == sel else (0, 15)
+            agi_text.put_line(sb, sa, 0, 0, col, txt, fg, bg)
+            cols.append(col)
+            col += len(txt)
+        items = self.menus[sel][1]
+        if not items:
+            return
+        mx = max(len(x[0]) for x in items)
+        bw = (6 * (mx + 2) + 7) >> 3
+        cxl = min((cols[sel] * 6) >> 3, 32 - bw)
+        for i, (t, c, en) in enumerate(items):
+            on = i == it
+            fg = (15 if on else 0) if en else 8
+            bg = 0 if on else 15
+            fgc, bgc = agi2hr.to_chroma(fg), agi2hr.to_chroma(bg)
+            for k in range(8):
+                for cell in range(cxl, cxl + bw):
+                    sb[((1 + i) * 8 + k) * 32 + cell] = 0
+                    sa[((1 + i) * 8 + k) * 32 + cell] = (bgc << 4) | fgc
+            agi_text.put_line(sb, sa, 0, 1 + i, 0, ' ' + t.ljust(mx) + ' ', fg, bg, x0=8 * cxl)
+
     def sound_ticks(self, n):
         """Duracion de la pista 0 de un sonido en 1/60 s."""
         try:

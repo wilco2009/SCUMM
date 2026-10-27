@@ -20,6 +20,14 @@
                 jp t_prompt             ; OVB_PROMPT
                 jp t_print              ; OVB_PRINT
                 jp t_boxclose           ; OVB_BOXCLOSE
+                jp t_setmenu            ; OVB_SETMENU
+                jp t_setitem            ; OVB_SETITEM
+                jp t_enable             ; OVB_ENABLE
+                jp t_disable            ; OVB_DISABLE
+                jp t_menuopen           ; OVB_MENUOPEN
+                jp t_menunav            ; OVB_MENUNAV
+                jp t_menusel            ; OVB_MENUSEL
+                jp t_menuclose          ; OVB_MENUCLOSE
 
 TXT             equ TMPM
 
@@ -1052,6 +1060,586 @@ LN:             defs 40*20
 tb_base:       defw 0
 tb_l:           defb 0
 tb_n:           defb 0
+
+; ---------------------------------------------------------------------
+;  Menus. Los textos (36 caracteres como mucho) se copian a la reserva mp_pool al hacer set.menu / set.menu.item: mn_tab (titulo, primer elemento, cuantos) e it_tab
+;  (texto, controlador, activado). menu.input (nucleo) los abre con la barra en la fila 0 (blanco, el titulo elegido en inverso) y, bajo el titulo, una lista de
+;  elementos en las filas 1... (el elegido en inverso, los desactivados en gris), alineada a la celda del titulo sin salirse; al cerrar se devuelve la imagen limpia
+;  (t_boxclose) y la barra de estado. Mismo resultado que Interp.draw_menu() de TOOLS/agi_vm.py.
+; ---------------------------------------------------------------------
+MN_MAX          equ 8
+IT_MAX          equ 48
+MP_SIZE         equ 1100
+MP_LIM          equ mp_pool+MP_SIZE-40
+
+; mensaje ARGS[0] -> a la reserva (mp_last = donde queda); C si no cabe
+mp_text:        ld hl,(mp_free)
+                ld de,MP_LIM
+                or a
+                sbc hl,de
+                jr c,mt_ok
+                scf
+                ret
+mt_ok:          ld a,(ARGS)
+                ld b,a
+                ld a,(curlg)
+                ld (bs_lg),a
+                ld de,TXT
+                ld c,250
+                call build_str
+                ld hl,(mp_free)
+                ld (mp_last),hl
+                ld de,TXT
+                ld b,36
+mt_l:           ld a,(de)
+                or a
+                jr z,mt_z
+                ld (hl),a
+                inc hl
+                inc de
+                djnz mt_l
+mt_z:           ld (hl),0
+                inc hl
+                ld (mp_free),hl
+                or a
+                ret
+
+; A = numero de menu -> HL = su entrada de mn_tab
+mn_pa:          ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                ld de,mn_tab
+                add hl,de
+                ret
+
+; HL = cadena -> A = largo (HL se conserva)
+mp_len:         push hl
+                ld b,0
+ml_l:           ld a,(hl)
+                or a
+                jr z,ml_d
+                inc hl
+                inc b
+                jr ml_l
+ml_d:           pop hl
+                ld a,b
+                ret
+
+t_setmenu:      ld a,(mn_n)
+                cp MN_MAX
+                ret nc
+                call mp_text
+                ret c
+                ld a,(mn_n)
+                call mn_pa
+                ld de,(mp_last)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                ld a,(it_n)
+                ld (hl),a
+                inc hl
+                ld (hl),0
+                ld hl,mn_n
+                inc (hl)
+                ret
+
+t_setitem:      ld a,(mn_n)
+                or a
+                ret z
+                ld a,(it_n)
+                cp IT_MAX
+                ret nc
+                call mp_text
+                ret c
+                ld a,(it_n)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                ld de,it_tab
+                add hl,de
+                ld de,(mp_last)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                ld a,(ARGS+1)
+                ld (hl),a
+                inc hl
+                ld (hl),1
+                ld hl,it_n
+                inc (hl)
+                ld a,(mn_n)
+                dec a
+                call mn_pa
+                inc hl
+                inc hl
+                inc hl
+                inc (hl)
+                ret
+
+t_enable:       ld a,1
+                jr en_go
+t_disable:      xor a
+en_go:          ld (en_v),a
+                ld a,(it_n)
+                or a
+                ret z
+                ld b,a
+                ld hl,it_tab+2
+                ld a,(ARGS)
+                ld c,a
+en_l:           ld a,(hl)
+                cp c
+                jr nz,en_n
+                inc hl
+                ld a,(en_v)
+                ld (hl),a
+                dec hl
+en_n:           inc hl
+                inc hl
+                inc hl
+                inc hl
+                djnz en_l
+                ret
+
+; Columna del titulo elegido (m_col), elementos (m_first, m_cnt), el texto mas largo (m_max), m_w = ancho en caracteres y el rectangulo de la lista (pr_*)
+mn_geom:        xor a
+                ld (m_col),a
+                ld a,(m_sel)
+                or a
+                jr z,mg_c0
+                ld b,a
+                ld hl,mn_tab
+mg_cl:          push bc
+                push hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ex de,hl
+                call mp_len
+                add a,2
+                ld hl,m_col
+                add a,(hl)
+                ld (hl),a
+                pop hl
+                inc hl
+                inc hl
+                inc hl
+                inc hl
+                pop bc
+                djnz mg_cl
+mg_c0:          ld a,(m_sel)
+                call mn_pa
+                inc hl
+                inc hl
+                ld a,(hl)
+                ld (m_first),a
+                inc hl
+                ld a,(hl)
+                ld (m_cnt),a
+                xor a
+                ld (m_max),a
+                ld a,(m_cnt)
+                or a
+                jr z,mg_n0
+                ld b,a
+                ld a,(m_first)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                ld de,it_tab
+                add hl,de
+mg_ml:          push bc
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                inc hl
+                inc hl
+                inc hl                  ; siguiente elemento
+                push hl
+                ex de,hl
+                call mp_len
+                ld hl,m_max
+                cp (hl)
+                jr c,mg_mn
+                ld (hl),a
+mg_mn:          pop hl
+                pop bc
+                djnz mg_ml
+mg_n0:          ld a,(m_max)
+                add a,2
+                ld (m_w),a
+                ld b,a
+                add a,a
+                add a,b
+                add a,a                 ; 6 * ancho
+                add a,7
+                rrca
+                rrca
+                rrca
+                and 31
+                ld (pr_bw),a
+                ld a,(m_col)
+                ld c,a
+                add a,a
+                add a,c
+                add a,a
+                rrca
+                rrca
+                rrca
+                and 31
+                ld c,a                  ; celda del titulo
+                ld a,32
+                ld hl,pr_bw
+                sub (hl)
+                ld d,a
+                ld a,c
+                cp d
+                jr c,mg_x
+                ld a,d
+mg_x:           ld (pr_cxl),a
+                ld a,1
+                ld (pr_top),a
+                ld a,8
+                ld (pr_l0),a
+                ld a,(m_cnt)
+                add a,a
+                add a,a
+                add a,a
+                ld (pr_ln),a
+                ret
+
+; La barra de la fila 0
+mn_bar:         ld a,1
+                ld (dl_nobg),a
+                xor a
+                ld (dl_row),a
+                ld a,15
+                call fill_row
+                xor a
+                ld (m_j),a
+                ld (m_c2),a
+mb_l:           ld a,(m_j)
+                ld hl,mn_n
+                cp (hl)
+                jr nc,mb_e
+                call mn_pa
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld hl,TXT
+                ld (hl),' '
+                inc hl
+                ld c,0
+mb_cp:          ld a,(de)
+                or a
+                jr z,mb_z
+                ld (hl),a
+                inc hl
+                inc de
+                inc c
+                jr mb_cp
+mb_z:           ld (hl),' '
+                ld a,c
+                add a,2
+                ld (dl_n),a
+                ld a,(m_j)
+                ld hl,m_sel
+                cp (hl)
+                ld b,0
+                ld c,15
+                jr nz,mb_ns
+                ld b,15
+                ld c,0
+mb_ns:          ld a,b
+                call t_chroma
+                ld (dl_fg),a
+                ld a,c
+                call t_chroma
+                ld (dl_bg),a
+                ld hl,TXT
+                ld (dl_ptr),hl
+                xor a
+                ld (dl_row),a
+                ld a,(m_c2)
+                ld (dl_col),a
+                call draw_line
+                ld a,(dl_n)
+                ld hl,m_c2
+                add a,(hl)
+                ld (hl),a
+                ld hl,m_j
+                inc (hl)
+                jr mb_l
+mb_e:           xor a
+                ld (dl_nobg),a
+                ret
+
+; La lista del menu elegido (m_it = el marcado)
+mn_drop:        call mn_geom
+                xor a
+                ld (m_i),a
+md_l:           ld a,(m_i)
+                ld hl,m_cnt
+                cp (hl)
+                ret nc
+                call mn_item
+                ld hl,m_i
+                inc (hl)
+                jr md_l
+
+; El elemento m_i de la lista
+mn_item:        ld a,(m_first)
+                ld hl,m_i
+                add a,(hl)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                ld de,it_tab
+                add hl,de
+                ld (m_ep),hl
+                inc hl
+                inc hl
+                inc hl
+                ld a,(hl)               ; activado
+                or a
+                ld b,0                  ; tinta
+                jr nz,mi_e
+                ld b,8
+mi_e:           ld a,(m_i)
+                ld hl,m_it
+                cp (hl)
+                ld c,15                 ; papel
+                jr nz,mi_ns
+                ld c,0
+                ld a,b
+                cp 8
+                jr z,mi_ns
+                ld b,15
+mi_ns:          ld a,b
+                call t_chroma
+                ld (dl_fg),a
+                ld b,a
+                ld a,c
+                call t_chroma
+                ld (dl_bg),a
+                add a,a
+                add a,a
+                add a,a
+                add a,a
+                or b
+                ld (m_attr),a
+                ld a,(m_i)              ; relleno de las 8 lineas de la fila
+                inc a
+                add a,a
+                add a,a
+                add a,a
+                ld (m_l),a
+                ld a,8
+                ld (m_k),a
+mf_l:           ld a,(m_l)
+                call pr_addr
+                ld de,HR_BM
+                add hl,de
+                ld a,(pr_bw)
+                ld b,a
+                xor a
+mf_b:           ld (hl),a
+                inc hl
+                djnz mf_b
+                ld a,(m_l)
+                call pr_addr
+                ld de,HR_ATT
+                add hl,de
+                ld a,(pr_bw)
+                ld b,a
+                ld a,(m_attr)
+mf_a:           ld (hl),a
+                inc hl
+                djnz mf_a
+                ld hl,m_l
+                inc (hl)
+                ld hl,m_k
+                dec (hl)
+                jr nz,mf_l
+                ld hl,(m_ep)            ; el texto: " " + texto + relleno + " "
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld hl,TXT
+                ld (hl),' '
+                inc hl
+                ld c,0
+mi_cp:          ld a,(de)
+                or a
+                jr z,mi_pd
+                ld (hl),a
+                inc hl
+                inc de
+                inc c
+                jr mi_cp
+mi_pd:          ld a,(m_max)
+                sub c
+                jr z,mi_en
+                ld b,a
+mi_pl:          ld (hl),' '
+                inc hl
+                djnz mi_pl
+mi_en:          ld (hl),' '
+                ld a,(m_w)
+                ld (dl_n),a
+                ld hl,TXT
+                ld (dl_ptr),hl
+                ld a,(m_i)
+                inc a
+                ld (dl_row),a
+                ld a,(pr_cxl)
+                add a,a
+                add a,a
+                add a,a
+                ld (dl_x0),a
+                ld a,1
+                ld (dl_nobg),a
+                call draw_line_px
+                xor a
+                ld (dl_nobg),a
+                ret
+
+t_menuopen:     ld a,(mn_n)
+                or a
+                jr nz,mo_ok
+                ld a,254
+                ld (mn_res),a
+                ret
+mo_ok:          ld a,255
+                ld (mn_res),a
+                xor a
+                ld (m_sel),a
+                ld (m_it),a
+                call mn_bar
+                jp mn_drop
+
+; La imagen limpia bajo la lista
+mn_restore:     ld a,(pr_ln)
+                or a
+                ret z
+                jp t_boxclose
+
+; mn_dir = 1 arriba, 3 derecha, 5 abajo, 7 izquierda
+t_menunav:      ld a,(mn_dir)
+                cp 7
+                jr z,nv_l
+                cp 3
+                jr z,nv_r
+                cp 1
+                jr z,nv_u
+                cp 5
+                ret nz
+                ld a,(m_cnt)            ; abajo
+                or a
+                ret z
+                ld b,a
+                ld a,(m_it)
+                inc a
+                cp b
+                jr c,nv_i
+                xor a
+nv_i:           ld (m_it),a
+                jp mn_drop
+nv_u:           ld a,(m_cnt)
+                or a
+                ret z
+                ld a,(m_it)
+                or a
+                jr nz,nv_u1
+                ld a,(m_cnt)
+nv_u1:          dec a
+                jr nv_i
+nv_l:           ld a,(mn_n)
+                ld b,a
+                ld a,(m_sel)
+                or a
+                jr nz,nv_l1
+                ld a,b
+nv_l1:          dec a
+                jr nv_m
+nv_r:           ld a,(mn_n)
+                ld b,a
+                ld a,(m_sel)
+                inc a
+                cp b
+                jr c,nv_m
+                xor a
+nv_m:           push af
+                call mn_restore
+                pop af
+                ld (m_sel),a
+                xor a
+                ld (m_it),a
+                call mn_bar
+                jp mn_drop
+
+; ENTER: si el elemento esta activado, mn_res = su controlador
+t_menusel:      ld a,(m_cnt)
+                or a
+                ret z
+                ld a,(m_first)
+                ld hl,m_it
+                add a,(hl)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                ld de,it_tab+2
+                add hl,de
+                ld a,(hl)
+                inc hl
+                ld b,(hl)
+                inc b
+                dec b
+                ret z
+                ld (mn_res),a
+                ret
+
+t_menuclose:    call mn_restore
+                ld a,(st_on)
+                or a
+                jr z,mc_off
+                xor a
+                ld (st_valid),a
+                ret
+mc_off:         xor a
+                ld (dl_row),a
+                jp fill_row
+
+mn_n:           defb 0
+it_n:           defb 0
+en_v:           defb 0
+m_sel:          defb 0
+m_it:           defb 0
+m_col:          defb 0
+m_first:        defb 0
+m_cnt:          defb 0
+m_max:          defb 0
+m_w:            defb 0
+m_i:            defb 0
+m_j:            defb 0
+m_c2:           defb 0
+m_l:            defb 0
+m_k:            defb 0
+m_attr:         defb 0
+m_ep:           defw 0
+mp_free:        defw mp_pool
+mp_last:        defw 0
+mn_tab:         defs 4*MN_MAX
+it_tab:         defs 4*IT_MAX
+mp_pool:        defs MP_SIZE
 
 FONT:
                 include "font6.inc"
