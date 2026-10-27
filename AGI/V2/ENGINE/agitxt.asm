@@ -247,11 +247,17 @@ dl_cell:        ld a,(dl_j)
                 ld d,0
                 ld hl,(srow)
                 add hl,de
-                ld (hl),c
+                ld a,(dl_bg)
+                ld e,a
+                ld a,(dl_fg)
+                cp e
+                jr nz,dl_f2
+                ld c,0                  ; una celda de un solo color lleva el bitmap a 0
+dl_f2:          ld (hl),c
                 ld a,h
                 add a,$20
                 ld h,a
-                ld a,(dl_bg)
+                ld a,e
                 rlca
                 rlca
                 rlca

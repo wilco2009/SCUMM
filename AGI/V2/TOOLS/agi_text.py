@@ -21,13 +21,16 @@ def plot_hr(bm, at, y, x, c):
     i = y * 32 + (x >> 3)
     bit = 0x80 >> (x & 7)
     paper, ink = at[i] >> 4, at[i] & 15
-    if c == ink:
+    if paper == ink:                    # celda de un solo color: sus bits estan a 0 y hay que dejarlos asi si el color es el mismo
+        if c == ink:
+            bm[i] &= ~bit & 255
+        else:
+            at[i] = (paper << 4) | c
+            bm[i] |= bit
+    elif c == ink:
         bm[i] |= bit
     elif c == paper:
         bm[i] &= ~bit & 255
-    elif paper == ink:
-        at[i] = (paper << 4) | c
-        bm[i] |= bit
     elif agi2hr.sdist(c, paper) < agi2hr.sdist(c, ink):
         at[i] = (c << 4) | ink
         bm[i] &= ~bit & 255
@@ -68,7 +71,7 @@ def put_line(bm, at, base, row, col, text, fg, bg):
             idx = line * 32 + cell
             b, m = bits[j], mask[j]
             if m == 255:
-                bm[idx] = b
+                bm[idx] = b if fgc != bgc else 0     # una celda de un solo color lleva el bitmap a 0
                 at[idx] = (bgc << 4) | fgc
             elif m:
                 for bit in range(8):

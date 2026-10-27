@@ -941,16 +941,20 @@ plot:           ld b,a
                 ld a,(sch)
                 ld b,a                  ; B = color nuevo
                 ld a,(pk)
+                ld c,a
+                ld a,(pp)
+                cp c
+                jr nz,pl_two
+                ld a,c                  ; celda de un solo color: sus bits estan a 0 y se quedan asi si el color es el mismo
+                cp b
+                jr z,pl_clr
+                jr pl_ri
+pl_two:         ld a,(pk)
                 cp b
                 jr z,pl_set
                 ld a,(pp)
                 cp b
                 jr z,pl_clr
-                ld a,(pk)
-                ld c,a
-                ld a,(pp)
-                cp c
-                jr z,pl_ri              ; papel = tinta: el color nuevo pasa a ser la tinta
                 push hl
                 push de
                 ld a,b
