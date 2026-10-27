@@ -30,6 +30,29 @@ O_SPR           equ 29
 PROW            equ MSGBUF
 CROW            equ TMPM
 
+; El overlay de texto (TEXT.OVL) a su pagina, que se queda mapeada en el bloque 1 ($2000)
+ov_load:        ld hl,nmo
+                call f_open
+                cp $FF
+                jr nz,ol_o
+                ld a,14
+                jp fatal
+ol_o:           ld (fh),a
+                ld hl,vlen
+                ld bc,2
+                call f_read_n
+                ld b,PG_OVL
+                ld c,MAP_PORT
+                ld a,1
+                out (c),a
+                ld a,(fh)
+                ld hl,$2000
+                ld bc,(vlen)
+                call f_read_n
+                ld a,(fh)
+                jp f_close
+nmo:            defb "TEXT.OVL",0
+
 spr_init:       ld hl,vslot
                 ld de,vslot+1
                 ld bc,NVSLOT-1

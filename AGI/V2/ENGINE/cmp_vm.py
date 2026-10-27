@@ -54,18 +54,21 @@ def main(argv):
             break
     else:
         print('resumen: %d ciclos iguales' % ncyc)
-    if it.pic is not None and b('picvalid'):
-        import agi2hr
-        bm, at = it.render()
-        PLANE = 168 * 32
-        zb, za = mem[0xA100:0xA100 + PLANE], mem[0xC100:0xC100 + PLANE]
-        nb = sum(1 for x, y in zip(zb, bm) if x != y)
-        na = sum(1 for i, (x, y) in enumerate(zip(za, at)) if x != y and i + 0x100 not in (0xFF8, 0xFF9))   # $CFF8: direccion de retorno del arnes
-        print('pantalla: %d bytes de bitmap y %d de atributos distintos' % (nb, na) if nb or na else 'pantalla: la imagen coincide')
-        bad |= 1 if nb or na else 0
-    elif it.pic is not None:
+    if it.pic is not None and not b('picvalid'):
         print('pantalla: el Z80 no dibujo la imagen')
         bad = 1
+    else:
+        bm, at = it.screen()
+        SCR = 192 * 32
+        zb, za = mem[0xA000:0xA000 + SCR], mem[0xC000:0xC000 + SCR]
+        db = [i for i, (x, y) in enumerate(zip(zb, bm)) if x != y]
+        da = [i for i, (x, y) in enumerate(zip(za, at)) if x != y and i not in (0xFF8, 0xFF9)]   # $CFF8: direccion de retorno del arnes
+        if db or da:
+            print('pantalla: %d bytes de bitmap y %d de atributos distintos; primeros (linea, celda): %s' % (
+                len(db), len(da), [(i // 32, i % 32) for i in (db + da)[:8]]))
+            bad = 1
+        else:
+            print('pantalla: coincide (192 lineas, con texto y sprites)')
     print('OK' if not bad and not errc else 'DIFERENCIAS')
     return 1 if bad or errc else 0
 

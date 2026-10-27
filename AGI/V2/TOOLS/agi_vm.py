@@ -19,6 +19,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import agi_read as ag
 from agi_logic import CMDS, CONDS
+from agi_text import plot_hr
+import agi_text
 
 DX = [0, 0, 1, 1, 1, 0, -1, -1, -1]
 DY = [0, -1, -1, 0, 1, 1, 1, 0, -1]
@@ -33,27 +35,6 @@ def b2(x):
 
 class Stop(Exception):
     pass
-
-
-def plot_hr(bm, at, y, x, c):
-    """Un pixel HiRes: cada celda de 8 pixeles solo tiene dos colores; si c no es ninguno, sustituye al mas parecido."""
-    import agi2hr
-    i = y * 32 + (x >> 3)
-    bit = 0x80 >> (x & 7)
-    paper, ink = at[i] >> 4, at[i] & 15
-    if c == ink:
-        bm[i] |= bit
-    elif c == paper:
-        bm[i] &= ~bit & 255
-    elif paper == ink:
-        at[i] = (paper << 4) | c
-        bm[i] |= bit
-    elif agi2hr.sdist(c, paper) < agi2hr.sdist(c, ink):
-        at[i] = (c << 4) | ink
-        bm[i] &= ~bit & 255
-    else:
-        at[i] = (paper << 4) | c
-        bm[i] |= bit
 
 
 class Obj:
@@ -106,6 +87,12 @@ class Interp:
         self.blocks = None
         self.pcontrol = True
         self.accept = True
+        self.tfg, self.tbg = 15, 0
+        self.status_on = False
+        self.st_last = None
+        self.pic_ops = []
+        self.ext_bm = bytearray(192 * 32)
+        self.ext_at = bytearray(192 * 32)
         self.newroom = None
         self.exit_all = False
         self.stop = False
@@ -208,12 +195,32 @@ class Interp:
             rows.append(row)
         return w, h, trans, rows
 
+    def screen(self):
+        """Pantalla completa (bitmap y atributos de 192x32): el pie y la barra de estado persistentes, y en medio la imagen con su texto y los sprites."""
+        bm, at = self.render()
+        sb = bytearray(self.ext_bm)
+        sa = bytearray(self.ext_at)
+        sb[256:256 + 168 * 32] = bm
+        sa[256:256 + 168 * 32] = at
+        return sb, sa
+
     def render(self):
         """Pantalla HiRes 8x1 (bitmap y atributos de 168x32): la imagen con los objetos dibujados encima, por prioridad."""
         import agi2hr
-        bm, at, _, _ = agi2hr.convert(self.pic)
-        bm = bytearray(bm)
-        at = bytearray(at)
+        if self.pic is None:
+            bm = bytearray(168 * 32)
+            at = bytearray(168 * 32)
+        else:
+            bm, at, _, _ = agi2hr.convert(self.pic)
+            bm = bytearray(bm)
+            at = bytearray(at)
+        for op in self.pic_ops:
+            if op[0] == 't':
+                agi_text.put_line(bm, at, 8, *op[1:])
+            else:
+                agi_text.fill_row(bm, at, 8, op[1], op[2])
+        if self.pic is None:
+            return bm, at
         pri2 = agi2hr.sprite_priority(self.pic.pri)
         for p in range(16):
             for n in sorted(self.objs):
@@ -522,6 +529,7 @@ class Interp:
         if d is None:
             raise Stop('imagen %d inexistente' % n)
         self.pic = ag.Picture(d)
+        self.pic_ops = []
 
     def c_overlay_pic(self, v):
         d = self.g.resource('PIC', self.vars[v])
@@ -737,8 +745,56 @@ class Interp:
     def c_print_v(self, v): self.c_print(self.vars[v])
     def c_print_at(self, m, r, c, w): self.c_print(m)
     def c_print_at_v(self, vm, r, c, w): self.c_print(self.vars[vm])
-    def c_display(self, r, c, m): self.log('display %d,%d: %s' % (r, c, self.msg(m)))
+    def c_display(self, r, c, m):
+        s = self.msg(m)[:250]
+        self.log('display %d,%d: %s' % (r, c, s))
+        self.text_out(r, c, s)
+
     def c_display_v(self, vr, vc, vm): self.c_display(self.vars[vr], self.vars[vc], self.vars[vm])
+
+    def text_out(self, r, c, s):
+        row = r
+        for line in s.split(chr(10)):
+            if row >= agi_text.ROWS:
+                break
+            t = agi_text.printable(line)[:max(0, agi_text.COLS - c)]
+            if t:
+                self.text_line(row, c, t, self.tfg, self.tbg)
+            row += 1
+
+    def text_line(self, row, col, t, fg, bg):
+        if 1 <= row <= 21:
+            self.pic_ops.append(('t', row, col, t, fg, bg))
+        else:
+            agi_text.put_line(self.ext_bm, self.ext_at, 0, row, col, t, fg, bg)
+
+    def c_clear_lines(self, a, b, c):
+        for r in range(a, min(b, agi_text.ROWS - 1) + 1):
+            if 1 <= r <= 21:
+                self.pic_ops.append(('f', r, c))
+            else:
+                agi_text.fill_row(self.ext_bm, self.ext_at, 0, r, c)
+
+    def c_set_text_attribute(self, fg, bg): self.tfg, self.tbg = fg & 15, bg & 15
+
+    def c_status_line_on(self):
+        self.status_on = True
+        self.st_last = None
+
+    def c_status_line_off(self):
+        self.status_on = False
+        agi_text.fill_row(self.ext_bm, self.ext_at, 0, 0, 0)
+
+    def status_tick(self):
+        if not self.status_on:
+            return
+        key = (self.vars[3], self.vars[7], self.flags[9])
+        if key == self.st_last:
+            return
+        self.st_last = key
+        agi_text.fill_row(self.ext_bm, self.ext_at, 0, 0, 15)
+        self.text_line(0, 0, ' Score:%d of %d' % (key[0], key[1]), 0, 15)
+        self.text_line(0, 30, 'Sound:on' if key[2] else 'Sound:off', 0, 15)
 
     def c_set_string(self, s, m): self.strs[s] = self.msg(m)[:40]
 
@@ -1050,10 +1106,11 @@ class Interp:
                 continue
             break
         self.update_objects()
+        self.status_tick()
         self.flags[2] = self.flags[4] = self.flags[5] = self.flags[6] = 0
         self.input = None
         self.keyq = []
-        v[2] = v[3] = v[4] = v[5] = 0
+        v[2] = v[4] = v[5] = 0
         self.tick_clock()
         self.summ.append((self.cycle, self.nsteps, sum(v) & 0xFFFF, sum(i for i in range(256) if self.flags[i]) & 0xFFFF, v[0], self.objsum(), self.strsum(), self.miscsum()))
         self.nsteps = 0

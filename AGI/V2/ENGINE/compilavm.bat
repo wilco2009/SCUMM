@@ -14,9 +14,13 @@ if not exist ..\%G% (echo *** no hay datos de %G% en AGI\V2\%G% & goto error)
 python -I ..\TOOLS\gen_agitab.py agivm.asm agiobj.asm agiin.asm agipic.asm agitab.inc || goto error
 python -I ..\TOOLS\gen_sprtab.py sprtab.inc || goto error
 pasmo agivm.asm agivm.bin agivm.sym || goto error
+python -I ..\TOOLS\gen_font.py font6.inc || goto error
+copy /y agivm.sym agires.inc >nul
+pasmo agitxt.asm agitxt.bin agitxt.sym || goto error
 set T=..\dump\%G%\log
 python -I ..\TOOLS\agi2log.py ..\%G% %T% || goto error
 python -I ..\TOOLS\agi2hr.py ..\%G% %T% || goto error
+python -I ..\TOOLS\mkovl.py agitxt.bin %T%\TEXT.OVL || goto error
 python -I ..\TOOLS\mkevents.py %T%\EVENTS.BIN 0 "" || goto error
 set S=%BASE%\AGI\V2
 set D=%S%\%G%

@@ -62,6 +62,14 @@ PG_SND          equ 26
 PG_EVT          equ 27
 PG_DBG          equ 28
 PG_PRI          equ 29
+PG_OVL          equ 41
+OVL_DISPLAY     equ $2000
+OVL_DISPLAY_V   equ $2003
+OVL_CLEAR       equ $2006
+OVL_STATUS      equ $2009
+OVL_SON         equ $200C
+OVL_SOFF        equ $200F
+OVL_ATTR        equ $2012
 MAXW            equ 6
 LPAGE0          equ 16
 NSLOTS          equ 8
@@ -91,6 +99,7 @@ start:          di
                 call sc_map
                 call video_init
                 call init
+                call ov_load
                 ld a,(stopf)
                 or a
                 jp nz,finish
@@ -123,6 +132,7 @@ ml_run:         xor a
                 call do_new_room
                 jr ml_run
 ml_end:         call update_objects
+                call OVL_STATUS
                 call render
                 xor a
                 ld (inwvalid),a         ; la orden se acaba con el ciclo
@@ -132,7 +142,6 @@ ml_end:         call update_objects
                 ld (FLAGS+5),a
                 ld (FLAGS+6),a
                 ld (VARS+2),a
-                ld (VARS+3),a
                 ld (VARS+4),a
                 ld (VARS+5),a
                 call tick_clock
