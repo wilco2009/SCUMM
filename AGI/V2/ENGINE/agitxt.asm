@@ -499,8 +499,8 @@ put_str:        ld a,(hl)
 ;  t_kpoll se llama muchas veces (en los bucles largos del dibujo y al principio de cada ciclo): lee la matriz, detecta las teclas recien
 ;  pulsadas y deja eventos en una cola (PQ). No dibuja ni toca el estado del interprete. t_kdeliv, al principio del ciclo, hace un poll,
 ;  entrega la cola (teclas -> key_push, direccion -> dirhold, linea -> ev_text) y, en modo real, redibuja la linea de entrada si cambio.
-;  Capas (como EXAMPLES/EDIT): base = minusculas, SHIFT = mayusculas (SHIFT+1 = ESC, SHIFT+9 = borrar, SHIFT+0 = DEL), ENTER+tecla =
-;  simbolos; ENTER solo = CR al soltarlo. Direccion del ego: SHIFT + 5 (izq), 6 (abajo), 7 (arriba), 8 (der), con diagonales.
+;  Capas: base = minusculas y las cifras como funciones (1 = ESC, 9 = ESC, 0 = borrar, 5/6/7/8 = izquierda / abajo / arriba / derecha del ego,
+;  con diagonales), SHIFT = mayusculas y cifras, ENTER+tecla = simbolos; ENTER solo = CR al soltarlo.
 ;  Cada caracter es un evento de tecla (v19, set.key); con accept.input tambien va a la linea de entrada, que ENTER entrega como texto.
 ; ---------------------------------------------------------------------
 PQ_MAX          equ 16
@@ -715,7 +715,7 @@ kq_put:         ld b,a
 kb_dir:         ld a,(kb_shift)
                 or a
                 ld b,0
-                jr z,kd_set
+                jr nz,kd_set            ; con SHIFT las cifras son cifras
                 ld a,(kb_cur+4)
                 ld c,a
                 bit 3,c
@@ -843,16 +843,16 @@ s_prompt:       defb "> ",0
 km_base:        defb 0,'z','x','c','v'
                 defb 'a','s','d','f','g'
                 defb 'q','w','e','r','t'
-                defb '1','2','3','4','5'
-                defb '0','9','8','7','6'
+                defb 27,0,0,0,0                 ; las cifras solas son funciones: 1 = ESC, 5/6/7/8 = direcciones (no dan caracter)
+                defb 8,27,0,0,0                 ; 0 = borrar, 9 = ESC
                 defb 'p','o','i','u','y'
                 defb 0,'l','k','j','h'
                 defb ' ','.','m','n','b'
 km_shift:       defb 0,'Z','X','C','V'
                 defb 'A','S','D','F','G'
                 defb 'Q','W','E','R','T'
-                defb 27,0,0,0,0                 ; SHIFT+1 = ESC; 2-5: sin caracter (5 = izquierda)
-                defb 127,8,0,0,0                ; SHIFT+0 = DEL, SHIFT+9 = borrar; 8, 7, 6: direcciones
+                defb '1','2','3','4','5'        ; SHIFT + cifra = la cifra
+                defb '0','9','8','7','6'
                 defb 'P','O','I','U','Y'
                 defb 0,'L','K','J','H'
                 defb ' ',9,'M','N','B'
