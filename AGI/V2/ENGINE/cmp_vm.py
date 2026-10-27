@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compara el interprete Z80 (volcado del arnes de PC) con el modelo de Python.
 
-Uso: cmp_vm.py VOLCADO.bin agivm.sym JUEGO CICLOS
+Uso: cmp_vm.py VOLCADO.bin agivm.sym JUEGO CICLOS [GUION]
 
 Mira, por orden: el codigo de error del Z80 (errc), los pasos (logica, pc) de la traza y el resumen de cada ciclo
 (pasos, suma de variables, suma de banderas, sala). Escribe la primera divergencia de cada uno.
@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'TOOLS'))
 import agi_vm
 
-SUMM, TRACE, TRMAX = 0x6E00, 0x7700, 600
+SUMM, TRACE, TRMAX = 0x8000, 0x9800, 680
 
 
 def main(argv):
@@ -35,7 +35,7 @@ def main(argv):
     it = agi_vm.Interp(argv[3], True)
     it.trace = []
     ncyc = min(int(argv[4]), nsum)
-    it.play(ncyc, [])
+    it.play(ncyc, agi_vm.parse_script(argv[5]) if len(argv) > 5 else [])
     bad = 0
     for i in range(min(trc, len(it.trace))):
         lg, pc = mem[TRACE + 3 * i], mem[TRACE + 3 * i + 1] | (mem[TRACE + 3 * i + 2] << 8)
@@ -46,10 +46,10 @@ def main(argv):
     else:
         print('traza: %d pasos iguales' % min(trc, len(it.trace)))
     for i in range(ncyc):
-        e = SUMM + 11 * i
-        z = tuple(mem[e + k] | (mem[e + k + 1] << 8) for k in (0, 2, 4, 6)) + (mem[e + 8], mem[e + 9] | (mem[e + 10] << 8))
+        e = SUMM + 15 * i
+        z = tuple(mem[e + k] | (mem[e + k + 1] << 8) for k in (0, 2, 4, 6)) + (mem[e + 8], mem[e + 9] | (mem[e + 10] << 8), mem[e + 11] | (mem[e + 12] << 8), mem[e + 13] | (mem[e + 14] << 8))
         if z != it.summ[i]:
-            print('ciclo %d: Z80 (ciclo,pasos,vars,banderas,sala,objetos) = %s, modelo = %s' % (i + 1, z, it.summ[i]))
+            print('ciclo %d: Z80 (ciclo,pasos,vars,banderas,sala,objetos,cadenas,entrada) = %s, modelo = %s' % (i + 1, z, it.summ[i]))
             bad = 1
             break
     else:

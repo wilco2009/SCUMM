@@ -25,22 +25,47 @@ CMD_64C         equ $1C
 
 VARS            equ $6800
 FLAGS           equ $6900
-LGSLOT          equ $6A00               ; logica -> ranura ($FF = no esta)
-INV             equ $6B00               ; sala de cada objeto del inventario (255 = lo lleva el ego)
-SNDLEN          equ $6C00               ; duracion de cada sonido en 1/60 s (u16)
-SUMM            equ $6E00
-SUMMAX          equ 200
-TRACE           equ $7700
-TRMAX           equ 600
-OBJ             equ $6000
+LGSLOT          equ $6A00; logica -> ranura ($FF = no esta)
+INV             equ $6B00; sala de cada objeto del inventario (255 = lo lleva el ego)
+SUMM            equ LWIN
+SUMMAX          equ 250
+TRACE           equ LWIN+$1800
+TRMAX           equ 680
+OBJ             equ $6F00
 NOBJ            equ 32
-VIEWPAGE        equ 24
-STACK           equ $7F00
+VIEWPAGE        equ PG_VIEWS
+STACK           equ $8000
 LWIN            equ $8000
+TOKLIM          equ $EA                 ; parte baja del limite de TOKS (TOKS+90)
+KEYMAP          equ $6C00               ; por tecla ASCII: controlador y si esta puesto (2 bytes)
+CTL             equ $6E00               ; controladores activos en este ciclo
+STRS            equ $7310               ; 12 cadenas de 41 bytes
+MSGBUF          equ $7500
+TMPM            equ $7600
+WTEXT           equ $7700
+STMP            equ $77C0
+STMP2           equ $77F0
+PHR             equ $7820
+WBUF            equ $7850
+TOKS            equ $7890
+TOKP            equ $78F0
+INW             equ $7910
+KEYQ            equ $7930
+TQ              equ $7940
+EVBUF           equ $79F0
+SREC            equ $7A40
+TRREC           equ $7A50
+CLR_END         equ $7A60
+PG_VIEWS        equ 24
+PG_WORDS        equ 25
+PG_SND          equ 26
+PG_EVT          equ 27
+PG_DBG          equ 28
+MAXW            equ 6
 LPAGE0          equ 16
 NSLOTS          equ 8
 MAXDEPTH        equ 12
-ARGS            equ $6400               ; argumentos del comando o la condicion en curso
+ARGS            equ $7300; argumentos del comando o la condicion en curso
 
                 include "mcu.asm"
 
@@ -66,11 +91,17 @@ start:          di
 ; ---------------------------------------------------------------------
 ;  El ciclo del interprete
 ; ---------------------------------------------------------------------
-main_loop:      ld a,(pctl)
+main_loop:      ld hl,CTL
+                ld de,CTL+1
+                ld bc,255
+                ld (hl),0
+                ldir
+                call do_events
+                ld a,(pctl)
                 or a
                 jr z,ml_np
-                xor a
-                ld (VARS+6),a           ; v6 = direccion que pide el jugador (aun sin teclas)
+                ld a,(dirhold)
+                ld (VARS+6),a           ; v6 = direccion que pide el jugador
 ml_np:          call snd_due
                 xor a
                 ld (exitall),a
@@ -86,6 +117,8 @@ ml_run:         xor a
                 jr ml_run
 ml_end:         call update_objects
                 xor a
+                ld (inwvalid),a         ; la orden se acaba con el ciclo
+                ld (keyn),a
                 ld (FLAGS+2),a
                 ld (FLAGS+4),a
                 ld (FLAGS+5),a
@@ -101,9 +134,16 @@ ml_end:         call update_objects
                 ld (cyc),hl
                 ld a,(nsum)
                 cp SUMMAX
-                jp c,main_loop
+                jp nc,finish
+                ld de,(ncyc)
+                ex de,hl
+                or a
+                sbc hl,de               ; ncyc - ciclo
+                jp nc,main_loop
 
-finish:         ld bc,$7FEF
+finish:         ld a,PG_DBG             ; deja a la vista el resumen y la traza
+                call map_page
+                ld bc,$7FEF
                 ld a,$0C
                 out (c),a
                 ld a,CMD_64C
@@ -167,6 +207,16 @@ in_s:           ld (hl),$FF
                 inc hl
                 inc hl
                 djnz in_s
+                ld hl,KEYMAP            ; teclas, controladores
+                ld de,KEYMAP+1
+                ld bc,767
+                ld (hl),0
+                ldir
+                ld hl,ARGS              ; cadenas, buffers del parser
+                ld de,ARGS+1
+                ld bc,CLR_END-ARGS-1
+                ld (hl),0
+                ldir
                 ld hl,OBJ
                 ld de,OBJ+1
                 ld bc,NOBJ*32-1
@@ -174,20 +224,41 @@ in_s:           ld (hl),$FF
                 ldir
                 ld a,36
                 ld (horizon),a
-                call map_views
+                ld a,PG_VIEWS
                 ld hl,nm_views
-                ld de,LWIN
                 ld bc,8192
-                call load_aux
+                call load_page
+                ld a,PG_WORDS
+                ld hl,nm_words
+                ld bc,8192
+                call load_page
+                ld a,PG_SND
+                ld hl,nm_snd
+                ld bc,512
+                call load_page
+                ld a,PG_EVT
+                ld hl,nm_evt
+                ld bc,8192
+                call load_page
+                ld a,PG_EVT
+                call map_page
+                ld hl,(LWIN)            ; ciclos que se ejecutan
+                ld (ncyc),hl
+                call unmap_win
                 ld hl,nm_inv
                 ld de,INV
                 ld bc,256
                 call load_aux
-                ld hl,nm_snd
-                ld de,SNDLEN
-                ld bc,512
-                call load_aux
                 ret
+
+; A = pagina, HL = nombre, BC = bytes -> los lee a la ventana del bloque 4 (pagina A)
+load_page:      push hl
+                push bc
+                call map_page
+                pop bc
+                pop hl
+                ld de,LWIN
+                jp load_aux
 
 ; HL = nombre, DE = destino, BC = bytes
 load_aux:       push de
@@ -538,16 +609,18 @@ di_2:           or a
                 jp nc,di_bad
                 cp $0E
                 jr nz,di_norm
-                ld a,(de)               ; said: k palabras de 16 bits (aun sin parser: falsa)
+                ld a,(de)               ; said: k palabras de 16 bits
                 inc de
+                ld (saidk),a
+                ld (saidp),de
                 add a,a
                 ld l,a
                 ld h,0
                 add hl,de
                 ex de,hl
                 ld (ip),de
-                xor a
-                jr di_res
+                call hc_said
+                jp di_res
 di_norm:        dec a
                 ld c,a
                 ld b,0
@@ -623,17 +696,21 @@ trace_step:     push de
                 ld hl,(trcount)
                 inc hl
                 ld (trcount),hl
-                ld hl,(trptr)
                 ld a,(curlg)
-                ld (hl),a
-                inc hl
-                ld (hl),e
-                inc hl
+                ld (TRREC),a
+                ld a,e
+                ld (TRREC+1),a
                 ld a,d
                 sub LWIN>>8
-                ld (hl),a
-                inc hl
-                ld (trptr),hl
+                ld (TRREC+2),a
+                ld a,PG_DBG
+                call map_page
+                ld hl,TRREC
+                ld de,(trptr)
+                ld bc,3
+                ldir
+                ld (trptr),de
+                call unmap_win
 ts_end:         pop de
                 ret
 
@@ -736,8 +813,8 @@ tc_2:           ld b,a                  ; periodo
                 inc (hl)
                 ret
 
-; ciclo, pasos, suma de variables, suma de los indices de las banderas puestas, sala: 9 bytes por ciclo
-summary:        ld hl,(sptr)
+; ciclo, pasos, suma de variables, suma de los indices de las banderas puestas, sala, objetos, cadenas, entrada: 15 bytes por ciclo
+summary:        ld hl,SREC
                 ld de,(cyc)
                 ld (hl),e
                 inc hl
@@ -797,7 +874,29 @@ su_f1:          inc c
                 inc hl
                 ld (hl),d
                 inc hl
-                ld (sptr),hl
+                push hl
+                call strsum
+                ex de,hl
+                pop hl
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                push hl
+                call miscsum
+                ex de,hl
+                pop hl
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                ld a,PG_DBG
+                call map_page
+                ld hl,SREC
+                ld de,(sptr)
+                ld bc,15
+                ldir
+                ld (sptr),de
+                call unmap_win
                 ld hl,nsum
                 inc (hl)
                 ld hl,0
@@ -1188,17 +1287,6 @@ h_get_room_v:   ld a,(ARGS)             ; v[b] = sala del objeto v[a]
                 ld (hl),b
                 ret
 
-h_get_num:      ld a,(ARGS+1)           ; sin teclado: 0
-                ld l,a
-                ld h,VARS>>8
-                ld (hl),0
-                ret
-h_parse:        ld a,1
-                ld (FLAGS+2),a
-                xor a
-                ld (VARS+9),a
-                ret
-
 h_quit:         ld a,1
                 ld (stopf),a
                 ret
@@ -1220,15 +1308,20 @@ so_n:           inc hl
                 inc hl
                 inc hl
                 djnz so_c
-                ld a,(ARGS)             ; t = SNDLEN[n]
+                ld a,PG_SND             ; t = SNDLEN[n]
+                call map_page
+                ld a,(ARGS)
                 ld l,a
                 ld h,0
                 add hl,hl
-                ld de,SNDLEN
+                ld de,LWIN
                 add hl,de
                 ld e,(hl)
                 inc hl
                 ld d,(hl)               ; DE = t
+                push de
+                call unmap_win
+                pop de
                 ld a,(VARS+10)
                 or a
                 jr nz,so_v
@@ -1355,12 +1448,16 @@ two_vars:       ld a,(ARGS+1)
 ;  Datos
 ; ---------------------------------------------------------------------
                 include "agiobj.asm"
+                include "agiin.asm"
                 include "agitab.inc"
 
 nm:             defb "LOG000.AGL",0
 nm_inv:         defb "INVROOM.BIN",0
 nm_snd:         defb "SNDLEN.BIN",0
 nm_views:       defb "VIEWS.HDR",0
+nm_words:       defb "WORDS.BIN",0
+nm_evt:         defb "EVENTS.BIN",0
+nm2:            defb "LOG000.MSG",0
 sv_sp:          defw 0
 sv_i:           defb 0
 fh:             defb 0
@@ -1377,6 +1474,45 @@ nsteps:         defw 0
 nsum:           defb 0
 sidx:           defb 0
 sp_tmp:         defw 0
+ncyc:           defw 0
+evp:            defw 2
+evend:          defb 0
+ev_kind:        defb 0
+dirhold:        defb 0
+keyn:           defb 0
+tqn:            defb 0
+tqh:            defb 0
+inwcnt:         defb 0
+inwvalid:       defb 0
+said_done:      defb 0
+saidp:          defw 0
+saidk:          defb 0
+wcount:         defb 0
+wtp:            defw WTEXT
+pt_src:         defw 0
+ntok:           defb 0
+intok:          defb 0
+mi:             defb 0
+mk:             defb 0
+bp_j:           defb 0
+fw_found:       defb 0
+fw_num:         defw 0
+fw_end:         defw 0
+mr_dst:         defw 0
+mr_m:           defb 0
+mrb:            defs 4
+mrn:            defb 0
+fh2:            defb 0
+bs_lg:          defb 0
+bs_dp:          defw 0
+bs_sp:          defw 0
+bs_max:         defb 0
+bs_n:           defb 0
+bs_kind:        defb 0
+bs_num:         defb 0
+pd_v:           defb 0
+pd_s:           defb 0
+ss_i:           defb 0
 horizon:        defb 36
 blk:            defs 4
 blkf:           defb 0

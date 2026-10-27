@@ -4,7 +4,7 @@
 Uso:  agi2log.py JUEGO SALIDA [n ...]
 
 LOGnnn.AGL  u16 tamano del codigo + el codigo (el bytecode tal cual)
-LOGnnn.MSG  la seccion de mensajes descifrada: u8 cuantos, u16 desplazamientos (0 = no hay) desde el principio del texto, y el texto con 0 final
+LOGnnn.MSG  la seccion de mensajes descifrada: u8 cuantos, u16 desplazamientos + 1 (0 = no hay) desde el principio del texto, y el texto con 0 final
 """
 import os
 import sys
@@ -25,7 +25,7 @@ def convert(d):
     offs = bytearray()
     for i in range(n):
         p = d[ms + 3 + 2 * i] | (d[ms + 4 + 2 * i] << 8)
-        q = 0 if p == 0 else p + ms + 1 - tstart
+        q = 0 if p == 0 else p + ms + 1 - tstart + 1
         offs += bytes((q & 255, q >> 8))
     return agl, bytes([n]) + bytes(offs) + bytes(text)
 
@@ -85,6 +85,10 @@ def main(argv):
     assert len(hdr) <= 8192, 'VIEWS.HDR no cabe en una pagina: %d' % len(hdr)
     with open(os.path.join(argv[2], 'VIEWS.HDR'), 'wb') as f:
         f.write(hdr + bytes(8192 - len(hdr)))
+    tok = open(os.path.join(argv[1], 'WORDS.TOK'), 'rb').read()
+    assert len(tok) <= 8190
+    with open(os.path.join(argv[2], 'WORDS.BIN'), 'wb') as f:
+        f.write(bytes((len(tok) & 255, len(tok) >> 8)) + tok + bytes(8190 - len(tok)))
     print('%d logicas, %d bytes' % (len(sel), tot))
     return 0
 

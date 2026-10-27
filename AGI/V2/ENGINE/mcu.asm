@@ -108,6 +108,22 @@ frn_go:          push de
                 ld (rd_cnt),hl
                 jr frn_l
 
+; A = manejador, HL = desplazamiento (16 bits) -> A = estado
+f_seek:         ld c,a
+                ld a,54                 ; CMD_FSEEK
+                call mcu_send
+                ld a,c
+                call mcu_send
+                ld a,l
+                call mcu_send
+                ld a,h
+                call mcu_send
+                xor a
+                call mcu_send
+                xor a
+                call mcu_send
+                jp mcu_recv
+
 f_close:        ld c,a
                 ld a,CMD_FCLOSE
                 call mcu_send

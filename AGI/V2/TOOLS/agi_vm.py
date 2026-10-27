@@ -660,11 +660,11 @@ class Interp:
     def c_display(self, r, c, m): self.log('display %d,%d: %s' % (r, c, self.msg(m)))
     def c_display_v(self, vr, vc, vm): self.c_display(self.vars[vr], self.vars[vc], self.vars[vm])
 
-    def c_set_string(self, s, m): self.strs[s] = self.msg(m)
+    def c_set_string(self, s, m): self.strs[s] = self.msg(m)[:40]
 
     def c_get_string(self, s, m, r, c, ln):
         self.log('get.string: ' + self.msg(m))
-        self.strs[s] = self.textq.pop(0) if self.textq else ''
+        self.strs[s] = (self.textq.pop(0) if self.textq else '')[:40]
 
     def c_get_num(self, m, v):
         self.log('get.num: ' + self.msg(m))
@@ -672,7 +672,7 @@ class Interp:
         self.vars[v] = int(t) & 255 if t.isdigit() else 0
 
     def c_word_to_string(self, n, s):
-        self.strs[s] = self.wtext[n] if n < len(self.wtext) else ''
+        self.strs[s] = (self.wtext[n] if n < len(self.wtext) else '')[:40]
 
     def c_parse(self, s):
         self.input = self.parse(self.strs[s])
@@ -907,6 +907,14 @@ class Interp:
                 t += sum(self.objbytes(self.objs[k]))
         return t & 0xFFFF
 
+    def strsum(self):
+        return sum(ord(c) + 1 for t in self.strs for c in t) & 0xFFFF
+
+    def miscsum(self):
+        t = 0 if self.input is None else 1 + len(self.input) + sum((w & 255) + (w >> 8) for w in self.input)
+        t += 97 * b2(self.said_done) + 13 * len(self.keyq) + 5 * len(self.textq) + 3 * len(self.wtext) + 7 * len(self.ctl)
+        return t & 0xFFFF
+
     def tick_clock(self):
         v = self.vars
         per = max(1, 20 // max(1, v[10]))
@@ -967,7 +975,7 @@ class Interp:
         self.keyq = []
         v[2] = v[3] = v[4] = v[5] = 0
         self.tick_clock()
-        self.summ.append((self.cycle, self.nsteps, sum(v) & 0xFFFF, sum(i for i in range(256) if self.flags[i]) & 0xFFFF, v[0], self.objsum()))
+        self.summ.append((self.cycle, self.nsteps, sum(v) & 0xFFFF, sum(i for i in range(256) if self.flags[i]) & 0xFFFF, v[0], self.objsum(), self.strsum(), self.miscsum()))
         self.nsteps = 0
 
     def play(self, cycles, script):
@@ -1014,7 +1022,7 @@ def main(argv):
             for n, p in it.trace:
                 f.write('T %d %d\n' % (n, p))
             for c in it.summ:
-                f.write('C %d %d %d %d %d %d\n' % c)
+                f.write('C %d %d %d %d %d %d %d %d\n' % c)
     ego = it.obj(EGO)
     print('fin: sala %d, ciclo %d, ego en %d,%d, v0..v9 = %s' % (it.vars[0], it.cycle, ego.x, ego.y, it.vars[:10]))
     if it.noop:
