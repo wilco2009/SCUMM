@@ -61,6 +61,7 @@ PG_WORDS        equ 25
 PG_SND          equ 26
 PG_EVT          equ 27
 PG_DBG          equ 28
+PG_PRI          equ 29
 MAXW            equ 6
 LPAGE0          equ 16
 NSLOTS          equ 8
@@ -71,6 +72,11 @@ ARGS            equ $7300; argumentos del comando o la condicion en curso
 
 start:          di
                 ld (sv_sp),sp
+                ld hl,(sv_sp)           ; la direccion de retorno a BASIC: la imagen puede pisarla en el arnes de PC (pila en $CFF8)
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld (sv_ret),de
                 ld sp,STACK
                 ld a,i
                 ld (sv_i),a
@@ -83,6 +89,7 @@ start:          di
                 ld b,7
                 ld a,7
                 call sc_map
+                call video_init
                 call init
                 ld a,(stopf)
                 or a
@@ -152,7 +159,42 @@ finish:         ld a,PG_DBG             ; deja a la vista el resumen y la traza
                 ld i,a
                 call SLOW_FAST
                 ld sp,(sv_sp)
+                ld hl,(sv_sp)
+                ld de,(sv_ret)
+                ld (hl),e
+                inc hl
+                ld (hl),d
                 ld bc,0
+                ret
+
+; HiRes nativo: bitmap en $A000, atributos de Chroma (modo 0) en $C000, ambos a cero
+video_init:     ld a,85
+                ld (2058),a             ; WRX apagado
+                xor a
+                ld (2043),a
+                ld a,HR_BM>>8
+                ld (2044),a             ; HFILE = bitmap
+                ld a,171
+                ld (2045),a             ; Superfast HiRes nativo
+                ld hl,HR_BM
+                ld de,HR_BM+1
+                ld bc,$1FFF
+                ld (hl),0
+                ldir
+                ld hl,HR_ATT
+                ld de,HR_ATT+1
+                ld bc,$1FFF
+                ld (hl),0
+                ldir
+                ld bc,$7FEF
+                ld a,$20                ; Chroma, modo 0
+                out (c),a
+                ld a,255
+                ld (2091),a
+                ld (2092),a
+                ld (2093),a
+                xor a
+                ld (2090),a
                 ret
 
 sc_map:         ld c,MAP_PORT
@@ -1449,6 +1491,7 @@ two_vars:       ld a,(ARGS+1)
 ; ---------------------------------------------------------------------
                 include "agiobj.asm"
                 include "agiin.asm"
+                include "agipic.asm"
                 include "agitab.inc"
 
 nm:             defb "LOG000.AGL",0
@@ -1458,8 +1501,10 @@ nm_views:       defb "VIEWS.HDR",0
 nm_words:       defb "WORDS.BIN",0
 nm_evt:         defb "EVENTS.BIN",0
 nm2:            defb "LOG000.MSG",0
+nm3:            defb "PIC000.GFX",0
 sv_sp:          defw 0
 sv_i:           defb 0
+sv_ret:         defw 0
 fh:             defb 0
 errc:           defb 0
 stopf:          defb 0
@@ -1513,6 +1558,15 @@ bs_num:         defb 0
 pd_v:           defb 0
 pd_s:           defb 0
 ss_i:           defb 0
+picvalid:       defb 0
+prisz:          defw 0
+pr_has0:        defb 0
+pr_water:       defb 0
+pr_land:        defb 0
+pr_sig:         defb 0
+pp_xs:          defb 0
+pp_x0:          defb 0
+pp_x1:          defb 0
 horizon:        defb 36
 blk:            defs 4
 blkf:           defb 0

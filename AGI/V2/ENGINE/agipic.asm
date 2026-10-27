@@ -1,0 +1,231 @@
+; =====================================================================
+;  agipic.asm - imagenes del interprete AGI (se incluye desde agivm.asm)
+;
+;  draw.pic lee PICnnn.GFX (TOOLS/agi2hr.py): el visual en HiRes 8x1 va a $A000 (bitmap) y $C000 (atributos), desplazado 8 lineas
+;  (la fila 0 es la de estado); la prioridad (160x168, RLE por filas) se queda en la pagina PG_PRI con un indice de filas delante,
+;  y can_be_here la consulta para las lineas de control (0 bloquea, 2 aviso, 3 agua) como el modelo de Python.
+;  overlay.pic aun no esta (el .GFX es una imagen entera, no un trazo): se ignora.
+; =====================================================================
+
+HR_BM           equ $A000
+HR_ATT          equ $C000
+PLANEB          equ 168*32
+PRI_RLE         equ LWIN+336            ; el RLE empieza tras el indice de 168 filas (u16)
+PRI_MAX         equ 7800
+
+h_draw_pic:     ld a,(ARGS)
+                call getv
+                call mk_nm3
+                ld hl,nm3
+                call f_open
+                cp $FF
+                jr nz,lp_o
+                ld a,11
+                jp fatal
+lp_o:           ld (fh),a
+                ld hl,MSGBUF
+                ld bc,256
+                call f_read_n
+                ld a,(MSGBUF)
+                cp 'A'
+                jr nz,lp_bad
+                ld a,(MSGBUF+3)
+                cp 'P'
+                jr nz,lp_bad
+                ld hl,(MSGBUF+10)       ; bytes de prioridad
+                ld bc,PRI_MAX
+                or a
+                sbc hl,bc
+                jr nc,lp_bad
+                ld hl,(MSGBUF+10)
+                ld (prisz),hl
+                ld a,(fh)
+                ld hl,HR_BM+256
+                ld bc,PLANEB
+                call f_read_n
+                ld a,(fh)
+                ld hl,HR_ATT+256
+                ld bc,PLANEB
+                call f_read_n
+                ld a,PG_PRI
+                call map_page
+                ld a,(fh)
+                ld hl,PRI_RLE
+                ld bc,(prisz)
+                call f_read_n
+                ld hl,PRI_RLE           ; indice: donde empieza cada fila
+                ld de,LWIN
+                ld b,168
+lp_row:         push hl
+                push de
+                ld de,PRI_RLE
+                or a
+                sbc hl,de               ; HL = desplazamiento de la fila
+                ex de,hl
+                pop hl                  ; HL = posicion en el indice
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                ex de,hl                ; DE = indice siguiente
+                pop hl                  ; HL = lectura del RLE
+                ld c,0
+lp_run:         ld a,(hl)
+                inc hl
+                and 15
+                inc a
+                add a,c
+                ld c,a
+                cp 160
+                jr c,lp_run
+                djnz lp_row
+                call unmap_win
+                ld a,(fh)
+                call f_close
+                ld a,1
+                ld (picvalid),a
+                ret
+lp_bad:         ld a,(fh)
+                call f_close
+                ld a,12
+                jp fatal
+
+; A = numero -> "PICnnn.GFX" en nm3
+mk_nm3:         ld b,'0'-1
+m3_h:           inc b
+                sub 100
+                jr nc,m3_h
+                add a,100
+                ld hl,nm3+3
+                ld (hl),b
+                ld b,'0'-1
+m3_t:           inc b
+                sub 10
+                jr nc,m3_t
+                add a,10+'0'
+                inc hl
+                ld (hl),b
+                inc hl
+                ld (hl),a
+                ret
+
+; Mira la linea ny entre nx y nx+ow-1 de la prioridad: pr_has0 (hay un 0), pr_water (pixeles con 3), pr_land (los demas), pr_sig (hay un 2)
+pri_probe:      xor a
+                ld (pr_has0),a
+                ld (pr_water),a
+                ld (pr_land),a
+                ld (pr_sig),a
+                ld (pp_xs),a
+                ld a,PG_PRI
+                call map_page
+                ld hl,(ny)
+                add hl,hl
+                ld de,LWIN
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld hl,PRI_RLE
+                add hl,de               ; HL = RLE de la fila
+                ld a,(nx)
+                ld (pp_x0),a
+                ld b,a
+                ld a,(ow)
+                add a,b
+                ld (pp_x1),a            ; fin (exclusivo)
+pp_l:           ld a,(pp_xs)
+                ld b,a                  ; B = principio del tramo
+                ld a,(pp_x1)
+                cp b
+                jr z,pp_end
+                jr c,pp_end
+                ld a,(hl)
+                inc hl
+                ld c,a
+                and 15
+                inc a
+                add a,b
+                ld e,a                  ; E = fin del tramo
+                ld a,c
+                rrca
+                rrca
+                rrca
+                rrca
+                and 15
+                ld c,a                  ; C = valor
+                ld a,(pp_x0)            ; inicio del solape = max(x0, B)
+                cp b
+                jr nc,pp_lo
+                ld a,b
+pp_lo:          ld d,a                  ; D = inicio
+                ld a,(pp_x1)            ; fin del solape = min(x1, E)
+                cp e
+                jr c,pp_hi
+                ld a,e
+pp_hi:          sub d
+                jr z,pp_nx
+                jr c,pp_nx
+                ld b,a                  ; B = pixeles del solape
+                ld a,c
+                or a
+                jr nz,pp_a
+                inc a
+                ld (pr_has0),a
+pp_a:           ld a,c
+                cp 3
+                jr nz,pp_land
+                ld a,(pr_water)
+                add a,b
+                ld (pr_water),a
+                jr pp_s
+pp_land:        ld a,(pr_land)
+                add a,b
+                ld (pr_land),a
+pp_s:           ld a,c
+                cp 2
+                jr nz,pp_nx
+                ld a,1
+                ld (pr_sig),a
+pp_nx:          ld a,e
+                ld (pp_xs),a
+                jr pp_l
+pp_end:         jp unmap_win
+
+; Parte de can_be_here que mira la imagen -> A = 0 si el sitio no vale
+pic_check:      ld a,(picvalid)
+                or a
+                jr z,pk_ok
+                call pri_probe
+                ld a,(pr_has0)
+                or a
+                jr z,pk_1
+                bit 0,(ix+O_F2)
+                jr z,pk_no              ; un 0 bloquea salvo a quien ignora bloques
+pk_1:           ld a,(ix+O_WATER)
+                cp 2
+                jr nz,pk_2
+                ld a,(pr_water)         ; solo tierra: nada de agua
+                or a
+                jr nz,pk_no
+pk_2:           ld a,(ix+O_WATER)
+                cp 1
+                jr nz,pk_3
+                ld a,(pr_land)          ; solo agua: nada de tierra
+                or a
+                jr nz,pk_no
+pk_3:           ld a,(curk)
+                or a
+                jr nz,pk_ok
+                ld a,(pr_water)         ; ego: bandera 0 = todo agua, bandera 3 = linea de aviso
+                ld hl,ow
+                cp (hl)
+                ld a,0
+                jr nz,pk_f0
+                inc a
+pk_f0:          ld (FLAGS+0),a
+                ld a,(pr_sig)
+                ld (FLAGS+3),a
+pk_ok:          ld a,1
+                ret
+pk_no:          xor a
+                ret

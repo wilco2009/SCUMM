@@ -1119,12 +1119,12 @@ can_be_here:    call obj_cell
                 jp c,ret_false
 cb_blk:         ld a,(curk)             ; la zona de bloqueo solo vale para el ego que no la ignora
                 or a
-                jr nz,cb_obj
+                jr nz,cb_pic
                 ld a,(blkf)
                 or a
-                jr z,cb_obj
+                jr z,cb_pic
                 bit 0,(ix+O_F2)
-                jr nz,cb_obj
+                jr nz,cb_pic
                 ld a,(blk)              ; x1 <= nx y nx+w-1 <= x2 y y1 <= ny <= y2
                 ld e,a
                 ld d,0
@@ -1158,8 +1158,11 @@ cb_y:           ld a,(blk+1)
                 ld hl,(ny)
                 or a
                 sbc hl,de
-                jr z,cb_obj
+                jr z,cb_pic
                 jp nc,ret_false
+cb_pic:         call pic_check
+                or a
+                jp z,ret_false
 cb_obj:         bit 1,(ix+O_F2)         ; ignora a los demas objetos
                 jp nz,ret_true
                 push ix

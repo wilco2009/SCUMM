@@ -72,6 +72,7 @@ class Interp:
         self.views = {}
         self.pics = {}
         self.pic = None
+        self.pics_used = set()
         self.use_pic = os.environ.get('AGI_NOPIC') != '1'     # AGI_NOPIC=1: sin el plano de prioridad (lo que modela el Z80 por etapas)
         self.inv = [r for _, r, _ in ag.objects(path)]
         self.inv_names = [n for _, _, n in ag.objects(path)]
@@ -438,6 +439,7 @@ class Interp:
 
     def c_draw_pic(self, v):
         n = self.vars[v]
+        self.pics_used.add(n)
         d = self.g.resource('PIC', n)
         if d is None:
             raise Stop('imagen %d inexistente' % n)
@@ -1012,11 +1014,17 @@ def main(argv):
             script = argv[i + 1]
     it = Interp(argv[1], quiet)
     tr = None
+    lp = None
     for i, a in enumerate(argv):
+        if a == '--listpics':
+            lp = argv[i + 1]
         if a == '--trace':
             tr = argv[i + 1]
             it.trace = []
     it.play(cycles, parse_script(script))
+    if lp:
+        with open(lp, 'w') as f:
+            f.write(' '.join(str(n) for n in sorted(it.pics_used)))
     if tr:
         with open(tr, 'w') as f:
             for n, p in it.trace:
