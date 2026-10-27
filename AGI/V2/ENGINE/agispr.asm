@@ -77,6 +77,59 @@ cb_ret:         ld b,PG_OVL
                 out (c),a
                 ret
 
+; Ritmo de AGI (solo en modo real): cada ciclo dura v10 * 2,5 tramas (v10 son 1/20 s), con al menos un VSYNC, y los sprites se escriben justo despues,
+; sin que el haz de video pille estados a medias. Mientras espera lee el teclado.
+pace:           ld hl,(ncyc)
+                ld a,h
+                or l
+                ret nz
+                in a,(ClkPort)          ; tramas que ha tardado el ciclo (desde main_loop; las lecturas de la SD las pierden)
+                and $7E
+                rrca
+                ld c,a
+                ld a,(VARS+10)
+                ld l,a
+                ld h,0
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,hl
+                add hl,de
+                inc hl
+                srl h
+                rr l                    ; (5 * v10 + 1) / 2
+                ld a,h
+                or a
+                jr z,pc_a
+                ld l,60
+pc_a:           ld a,l
+                cp 61
+                jr c,pc_b
+                ld a,60
+pc_b:           sub c                   ; las que faltan
+                jr c,pc_1
+                jr nz,pc_n
+pc_1:           ld a,1
+pc_n:           ld b,a
+pc_f:           push bc
+                call wait_frame
+                pop bc
+                djnz pc_f
+                ret
+wait_frame:     in a,(ClkPort)          ; descarta lo anterior y espera al siguiente VSYNC
+                ld bc,700
+wf_l:           push bc
+                call OVL_KPOLL
+                pop bc
+                in a,(ClkPort)
+                and $7E
+                ret nz
+                dec bc
+                ld a,b
+                or c
+                jr nz,wf_l
+                ret
+
 ; La linea de entrada solo se dibuja en modo real (ncyc = 0), cuando cambia lo escrito o accept.input
 kb_prompt:      ld hl,(ncyc)
                 ld a,h

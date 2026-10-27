@@ -115,7 +115,8 @@ start:          di
 ; ---------------------------------------------------------------------
 ;  El ciclo del interprete
 ; ---------------------------------------------------------------------
-main_loop:      ld hl,CTL
+main_loop:      in a,(ClkPort)          ; las tramas se cuentan desde aqui (ver pace)
+                ld hl,CTL
                 ld de,CTL+1
                 ld bc,255
                 ld (hl),0
@@ -144,6 +145,7 @@ ml_run:         xor a
 ml_end:         call update_objects
                 ld hl,OVB_STATUS
                 call call_b
+                call pace
                 call render
                 xor a
                 ld (inwvalid),a         ; la orden se acaba con el ciclo
