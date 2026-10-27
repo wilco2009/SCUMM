@@ -696,7 +696,8 @@ spr_draw:       call spr_prep
                 ld (sj0),a
                 ld a,(sph)
                 ld (srem),a
-sd_row:         ld a,(vpg)
+sd_row:         call OVL_KPOLL
+                ld a,(vpg)
                 call map_page
                 ld hl,(srp)
                 call decode_row

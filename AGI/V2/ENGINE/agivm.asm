@@ -70,6 +70,10 @@ OVL_STATUS      equ $2009
 OVL_SON         equ $200C
 OVL_SOFF        equ $200F
 OVL_ATTR        equ $2012
+OVL_KPOLL       equ $2015
+OVL_KDELIV      equ $2018
+OVL_ACCEPT      equ $201B
+OVL_PREVENT     equ $201E
 MAXW            equ 6
 LPAGE0          equ 16
 NSLOTS          equ 8
@@ -112,6 +116,7 @@ main_loop:      ld hl,CTL
                 ld bc,255
                 ld (hl),0
                 ldir
+                call OVL_KDELIV
                 call do_events
                 ld a,(pctl)
                 or a

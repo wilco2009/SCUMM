@@ -275,6 +275,8 @@ h_clear_lines:  jp OVL_CLEAR
 h_set_text_attribute: jp OVL_ATTR
 h_status_line_on: jp OVL_SON
 h_status_line_off: jp OVL_SOFF
+h_accept_input: jp OVL_ACCEPT
+h_prevent_input: jp OVL_PREVENT
 
 h_get_string:   ld a,(ARGS)
                 cp 12

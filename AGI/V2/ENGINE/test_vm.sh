@@ -19,6 +19,8 @@ python ../TOOLS/agi2log.py ../$G ../dump/$G/log > /dev/null
 python ../TOOLS/agi_vm.py ../$G --quiet --cycles $N --script "$SCRIPT" --listpics ../dump/$G/pics.txt > /dev/null
 python ../TOOLS/agi2hr.py ../$G ../dump/$G/log $(cat ../dump/$G/pics.txt) > /dev/null
 python ../TOOLS/mkovl.py agitxt.bin ../dump/$G/log/TEXT.OVL
-python ../TOOLS/mkevents.py ../dump/$G/log/EVENTS.BIN $N "$SCRIPT"
+# con ZX81_MATRIX (teclas del ZX81 para el arnes) el Z80 no recibe eventos del guion: los genera su teclado; el modelo si
+EVS="$SCRIPT"; [ -z "$ZX81_MATRIX" ] || EVS=""
+python ../TOOLS/mkevents.py ../dump/$G/log/EVENTS.BIN $N "$EVS"
 $E/build/test_scumm.exe agivm.bin agivm.sym ../dump/$G/log $N ../dump/test_vm.bin
 python cmp_vm.py ../dump/test_vm.bin agivm.sym ../$G $N "$SCRIPT"

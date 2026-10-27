@@ -200,6 +200,20 @@ static void mcu_byte(uint8_t b) {
 struct Key { int frame; int keys; };
 static std::vector<Key> script;
 static int cur_keys = 0, frames_done = 0, frame_limit = 0;
+// Matriz del teclado del ZX81 (ZX81_MATRIX="fotograma:TECLA+TECLA,fotograma:,..."): fila 0 SHIFT Z X C V, 1 A S D F G, 2 Q W E R T, 3 1-5, 4 0 9 8 7 6, 5 P O I U Y, 6 ENTER L K J H, 7 SPACE . M N B
+struct MKey { int frame; uint8_t m[8]; };
+static std::vector<MKey> mscript;
+static uint8_t mat[8];
+static bool mat_mode = false;
+static bool mat_key(const std::string& k, int& row, int& bit) {
+  static const char* rows[8] = {"#ZXCV", "ASDFG", "QWERT", "12345", "09876", "POIUY", "#LKJH", "_.MNB"};
+  if (k == "SHIFT") { row = 0; bit = 0; return true; }
+  if (k == "ENTER") { row = 6; bit = 0; return true; }
+  if (k == "SPACE") { row = 7; bit = 0; return true; }
+  if (k.size() != 1) return false;
+  for (int r = 0; r < 8; r++) for (int b = 0; b < 5; b++) if (rows[r][b] == k[0] && k[0] != '#' && k[0] != '_') { row = r; bit = b; return true; }
+  return false;
+}
 static bool finished = false;
 static uint16_t main_loop_addr = 0;
 // ---- TS_PROF=desde-hasta (fotogramas): cuenta T-estados por rutina (el simbolo anterior) y por vuelta del bucle principal
@@ -264,6 +278,11 @@ BYTE z80_readport_wrapper(int port, int*) {
     mcu_clk ^= 1;
     return v;
   }
+  if (lo == 0xFE && mat_mode) {
+    int sel = (port >> 8) & 255, v = 0xFF;
+    for (int r = 0; r < 8; r++) if (!(sel & (1 << r))) v &= ~mat[r];
+    return v;
+  }
   if (lo == 0xFE) {
     int row = (port >> 8) & 255;
     int v = 0xFF;
@@ -307,6 +326,21 @@ int main(int argc, char** argv) {
       p = q + 1;
     }
   }
+  if (const char* mx = getenv("ZX81_MATRIX")) {
+    std::string sc = mx; size_t p = 0; mat_mode = true;
+    while (p < sc.size()) {
+      size_t q = sc.find(',', p); if (q == std::string::npos) q = sc.size();
+      std::string it = sc.substr(p, q - p); size_t c = it.find(':');
+      MKey mk; memset(mk.m, 0, 8); mk.frame = atoi(it.substr(0, c).c_str());
+      std::string ks = it.substr(c + 1); size_t a = 0;
+      while (a < ks.size()) {
+        size_t b = ks.find('+', a); if (b == std::string::npos) b = ks.size();
+        int r, bt; if (mat_key(ks.substr(a, b - a), r, bt)) mk.m[r] |= 1 << bt;
+        a = b + 1;
+      }
+      mscript.push_back(mk); p = q + 1;
+    }
+  }
   ram[0][0x100] = 0x76;
   ram[0][0x2E7] = 0xC9; ram[0][0x207] = 0xC9;                // SET_FAST y SLOW_FAST de la ROM: RET
   for (int i = 8; i < 512; i++) ram[0][0x1E00 + i] = (uint8_t)(i * 37 + 11);   // juego de caracteres de la ROM (relleno)
@@ -345,6 +379,7 @@ int main(int argc, char** argv) {
         }
       }
       while (ki < script.size() && script[ki].frame <= frames_done) { cur_keys = script[ki].keys; ki++; }
+      { static size_t mi = 0; while (mi < mscript.size() && mscript[mi].frame <= frames_done) { memcpy(mat, mscript[mi].m, 8); mi++; } }
       if (frames_done > frame_limit) { finished = true; break; }
     }
     if (z80.pc.w == 0xFFE0) { printf("el programa ha vuelto a BASIC; ultimos PC:%c", 10); for (int k = 60; k > 0; k--) printf("%04X ", hist[(hi - k) & 255]); printf("%c", 10); break; }
