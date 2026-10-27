@@ -19,6 +19,14 @@ PG_BGB          equ 31
 PG_BGA          equ 32
 PG_VC0          equ 33
 NVSLOT          equ 8
+NEWR            equ TMPM                ; rectangulos nuevos (4 bytes por objeto) mientras se decide que se redibuja
+O_SDR           equ 23                  ; bit 0: se dibujo; bit 1: hay que redibujarlo
+O_SVW           equ 24                  ; copia de view, loop, cel, x, y, pri tal como se dibujaron
+O_SLP           equ 25
+O_SCL           equ 26
+O_SX            equ 27
+O_SY            equ 28
+O_SPR           equ 29
 PROW            equ MSGBUF
 CROW            equ TMPM
 
@@ -49,6 +57,12 @@ spr_bg:         ld a,PG_BGB
                 ld bc,4*NOBJ-1
                 ld (hl),$FF
                 ldir
+                ld hl,OBJ+O_SDR
+                ld de,32
+                ld b,NOBJ
+sb_o:           ld (hl),0
+                add hl,de
+                djnz sb_o
                 jp unmap_win
 
 ; ---------------------------------------------------------------------
@@ -122,13 +136,139 @@ mk_nmv:         ld hl,nmv+4
 render:         ld a,(picvalid)
                 or a
                 ret z
-                call spr_restore
+                ; 1. objetos cuyo aspecto cambio desde la ultima vez (bit 1 de O_SDR)
+                ld ix,OBJ
+                ld b,NOBJ
+rn_c:           push bc
+                call sig_chk
+                pop bc
+                ld de,32
+                add ix,de
+                djnz rn_c
+                ; 2. rectangulo nuevo de cada uno (el de antes si no cambio)
+                ld ix,OBJ
+                xor a
+                ld (rn),a
+rn_n1:          ld a,(rn)
+                ld hl,NEWR
+                call rp
+                ld (ndst),hl
+                bit 1,(ix+O_SDR)
+                jr nz,rn_ch
+                ld a,(rn)
+                ld hl,RECT
+                call rp
+                ld de,(ndst)
+                ld bc,4
+                ldir
+                jr rn_nx
+rn_ch:          call spr_prep
+                ld hl,(ndst)
+                jr c,rn_no
+                ld a,(rcx)
+                ld (hl),a
+                inc hl
+                ld a,(rnb)
+                ld (hl),a
+                inc hl
+                ld a,(ry0)
+                ld (hl),a
+                inc hl
+                ld a,(ry1)
+                ld (hl),a
+                jr rn_nx
+rn_no:          ld (hl),$FF
+rn_nx:          ld de,32
+                add ix,de
+                ld hl,rn
+                inc (hl)
+                ld a,(hl)
+                cp NOBJ
+                jr c,rn_n1
+                ; 3. los que se solapan con un cambiado tambien se redibujan
+cl_run:         xor a
+                ld (chg),a
+                ld ix,OBJ
+                ld (ci),a
+cl_i:           bit 1,(ix+O_SDR)
+                jr z,cl_in
+                xor a
+                ld (cj),a
+                ld iy,OBJ
+cl_j:           bit 1,(iy+O_SDR)
+                jr nz,cl_jn
+                ld a,(cj)
+                ld hl,NEWR
+                call rp
+                push hl
+                ld a,(ci)
+                ld hl,RECT
+                call rp
+                ex de,hl
+                pop hl
+                push hl
+                call rect_int
+                pop hl
+                jr c,cl_hit
+                push hl
+                ld a,(ci)
+                ld hl,NEWR
+                call rp
+                ex de,hl
+                pop hl
+                call rect_int
+                jr nc,cl_jn
+cl_hit:         set 1,(iy+O_SDR)
+                ld a,1
+                ld (chg),a
+cl_jn:          ld de,32
+                add iy,de
+                ld hl,cj
+                inc (hl)
+                ld a,(hl)
+                cp NOBJ
+                jr c,cl_j
+cl_in:          ld de,32
+                add ix,de
+                ld hl,ci
+                inc (hl)
+                ld a,(hl)
+                cp NOBJ
+                jr c,cl_i
+                ld a,(chg)
+                or a
+                jr nz,cl_run
+                ; 4. restaurar lo que dibujaron los redibujados
+                ld ix,OBJ
+                xor a
+                ld (rn),a
+rn_r:           bit 1,(ix+O_SDR)
+                jr z,rn_r2
+                ld a,(rn)
+                ld hl,RECT
+                call rp
+                push hl
+                ld a,(hl)
+                cp $FF
+                call nz,restore_rect
+                pop hl
+                ld (hl),$FF
+rn_r2:          ld de,32
+                add ix,de
+                ld hl,rn
+                inc (hl)
+                ld a,(hl)
+                cp NOBJ
+                jr c,rn_r
+                ; 5. dibujarlos por prioridad
                 xor a
                 ld (rpri),a
 rn_p:           ld ix,OBJ
                 xor a
                 ld (rn),a
-rn_o:           ld a,(ix+O_F1)
+rn_o:           bit 1,(ix+O_SDR)
+                jr z,rn_n
+                ld a,(ix+O_F1)
                 and 3
                 cp 3
                 jr nz,rn_n
@@ -147,21 +287,125 @@ rn_n:           ld de,32
                 ld a,(hl)
                 cp 16
                 jr c,rn_p
+                ; 6. recordar lo dibujado
+                ld ix,OBJ
+                ld b,NOBJ
+rn_s:           push bc
+                ld a,(ix+O_F1)
+                and 3
+                cp 3
+                ld a,0
+                jr nz,rn_s1
+                inc a
+                push ix
+                pop hl
+                inc hl
+                inc hl
+                push ix
+                pop de
+                push hl
+                ld hl,O_SVW
+                add hl,de
+                ex de,hl
+                pop hl
+                ld bc,6
+                ldir
+rn_s1:          ld (ix+O_SDR),a
+                pop bc
+                ld de,32
+                add ix,de
+                djnz rn_s
                 ret
 
-spr_restore:    ld hl,RECT
-                ld b,NOBJ
-sr_l:           push bc
-                push hl
-                ld a,(hl)
-                cp $FF
-                call nz,restore_rect
-                pop hl
-                ld (hl),$FF
-                ld de,4
+; IX = objeto: marca el bit 1 de O_SDR si lo que se dibujaria no es lo que se dibujo
+sig_chk:        ld a,(ix+O_F1)
+                and 3
+                cp 3
+                jr z,sc_dr
+                bit 0,(ix+O_SDR)
+                ret z
+                jr sc_ch
+sc_dr:          bit 0,(ix+O_SDR)
+                jr z,sc_ch
+                ld a,(ix+O_VIEW)
+                cp (ix+O_SVW)
+                jr nz,sc_ch
+                ld a,(ix+O_LOOP)
+                cp (ix+O_SLP)
+                jr nz,sc_ch
+                ld a,(ix+O_CEL)
+                cp (ix+O_SCL)
+                jr nz,sc_ch
+                ld a,(ix+O_X)
+                cp (ix+O_SX)
+                jr nz,sc_ch
+                ld a,(ix+O_Y)
+                cp (ix+O_SY)
+                jr nz,sc_ch
+                ld a,(ix+O_PRI)
+                cp (ix+O_SPR)
+                ret z
+sc_ch:          set 1,(ix+O_SDR)
+                ret
+
+; A = indice, HL = base -> HL = base + 4*A
+rp:             ld e,a
+                ld d,0
+                sla e
+                rl d
+                sla e
+                rl d
                 add hl,de
-                pop bc
-                djnz sr_l
+                ret
+
+; HL = rectangulo A, DE = rectangulo B (celda inicial, bytes por fila, fila inicial, fila final) -> C si se solapan
+rect_int:       ld a,(hl)
+                cp $FF
+                jr z,ri_no
+                ld a,(de)
+                cp $FF
+                jr z,ri_no
+                push hl
+                push de
+                ld a,(de)
+                inc de
+                ld b,a
+                ld a,(de)
+                add a,b
+                ld c,a
+                ld a,(hl)
+                cp c
+                jr nc,ri_np
+                ld a,(hl)
+                inc hl
+                ld c,a
+                ld a,(hl)
+                add a,c
+                cp b
+                jr c,ri_np
+                jr z,ri_np
+                inc hl
+                inc de
+                ld a,(hl)
+                ld c,a
+                inc de
+                ld a,(de)
+                cp c
+                jr c,ri_np
+                dec de
+                ld a,(de)
+                ld c,a
+                inc hl
+                ld a,(hl)
+                cp c
+                jr c,ri_np
+                pop de
+                pop hl
+                scf
+                ret
+ri_np:          pop de
+                pop hl
+ri_no:          or a
                 ret
 
 ; HL = rectangulo (celda inicial, bytes por fila, fila inicial, fila final)
@@ -254,14 +498,19 @@ lo_cnt:         defb 2,2,1,2,1
 masks:          defb 128,64,32,16,8,4,2,1
 
 ; IX = objeto (anim y drawn), rn = su indice
-spr_draw:       ld a,(ix+O_X)
+; IX = objeto. Prepara su celda y calcula el rectangulo de celdas (rcx, rnb, ry0, ry1) -> C si no hay nada que dibujar
+spr_prep:       ld a,(ix+O_F1)
+                and 3
+                cp 3
+                jp nz,sp_none
+                ld a,(ix+O_X)
                 cp 160
-                ret nc
+                jp nc,sp_none
                 ld (sx),a
                 ld a,(ix+O_VIEW)
                 call vc_get
                 cp $FF
-                ret z
+                jp z,sp_none
                 ld (vpg),a
                 call map_page
                 ld a,(LWIN+2)
@@ -324,12 +573,12 @@ sd_nm:          inc hl
                 call unmap_win
                 ld a,(spw)
                 or a
-                ret z
+                jp z,sp_none
                 cp 193
-                ret nc
+                jp nc,sp_none
                 ld a,(sph)
                 or a
-                ret z
+                jp z,sp_none
                 ; ancho que cabe en pantalla
                 ld a,(sx)
                 ld b,a
@@ -359,10 +608,10 @@ sd_w:           ld (swcl),a
                 jr nz,sd_y0
                 ld a,h
                 or a
-                ret nz
+                jp nz,sp_none
                 ld a,l
                 cp 168
-                ret nc
+                jp nc,sp_none
                 jr sd_y1
 sd_y0:          xor a
 sd_y1:          ld (ry0),a
@@ -393,6 +642,13 @@ sd_y2:          ld (ry1),a
                 sub (hl)
                 inc a
                 ld (rnb),a
+                or a
+                ret
+sp_none:        scf
+                ret
+
+spr_draw:       call spr_prep
+                ret c
                 ld a,(rn)
                 ld l,a
                 ld h,0
@@ -443,7 +699,9 @@ sd_nx:          ld hl,(spy16)
                 dec (hl)
                 jr nz,sd_row
                 ret
-sd_no:          jp unmap_win
+sd_no:          call unmap_win
+                scf
+                ret
 
 ; HL = origen (RLE de una fila de la celda) -> CROW con swidth colores (rellena con la transparencia); HL queda tras el 0 final
 decode_row:     ld de,CROW
@@ -767,4 +1025,8 @@ pk:             defb 0
 pp:             defb 0
 pmk:            defb 0
 drcol:          defb 0
+chg:            defb 0
+ci:             defb 0
+cj:             defb 0
+ndst:           defw 0
 RECT:           defs 4*NOBJ

@@ -9,8 +9,8 @@
 ;  Las logicas se leen de la SD como LOGnnn.AGL (convertidas por TOOLS/agi2log.py). El bytecode se ejecuta desde una ventana
 ;  en el bloque 4 ($8000), que se paginea a una de 8 paginas (16-23): una logica por pagina; la 0 se queda fija en la ranura 0.
 ;
-;  Memoria: $4200-  codigo   $6B00 variables  $6C00 banderas  $6D00 ranura de cada logica  $6E00 inventario  $6F00 teclas  $7100 controladores
-;           $7200 objetos  $7600 argumentos y cadenas  $7D60 fin de los datos   $8000 pila y ventana de la logica
+;  Memoria: $4200-  codigo   $6D00 variables  $6E00 banderas  $6F00 ranura de cada logica  $7000 inventario  $7100 teclas  $7200 controladores
+;           $7300 objetos  $7700 argumentos y cadenas  $7E60 fin de los datos   $8000 pila y ventana de la logica
 ; =====================================================================
 
                 org 16896
@@ -23,39 +23,39 @@ SLOW_FAST       equ $0207
 MAP_PORT        equ $E7
 CMD_64C         equ $1C
 
-VARS            equ $6B00
-FLAGS           equ $6C00
-LGSLOT          equ $6D00; logica -> ranura ($FF = no esta)
-INV             equ $6E00; sala de cada objeto del inventario (255 = lo lleva el ego)
+VARS            equ $6D00
+FLAGS           equ $6E00
+LGSLOT          equ $6F00; logica -> ranura ($FF = no esta)
+INV             equ $7000; sala de cada objeto del inventario (255 = lo lleva el ego)
 SUMM            equ LWIN
 SUMMAX          equ 250
 TRACE           equ LWIN+$1800
 TRMAX           equ 680
-OBJ             equ $7200
+OBJ             equ $7300
 NOBJ            equ 32
 VIEWPAGE        equ PG_VIEWS
 STACK           equ $8000
 LWIN            equ $8000
 TOKLIM          equ $EA                 ; parte baja del limite de TOKS (TOKS+90)
-KEYMAP          equ $6F00               ; por tecla ASCII: controlador y si esta puesto (2 bytes)
-CTL             equ $7100               ; controladores activos en este ciclo
-STRS            equ $7610               ; 12 cadenas de 41 bytes
-MSGBUF          equ $7800
-TMPM            equ $7900
-WTEXT           equ $7A00
-STMP            equ $7AC0
-STMP2           equ $7AF0
-PHR             equ $7B20
-WBUF            equ $7B50
-TOKS            equ $7B90
-TOKP            equ $7BF0
-INW             equ $7C10
-KEYQ            equ $7C30
-TQ              equ $7C40
-EVBUF           equ $7CF0
-SREC            equ $7D40
-TRREC           equ $7D50
-CLR_END         equ $7D60
+KEYMAP          equ $7100               ; por tecla ASCII (0-127): controlador y si esta puesto (2 bytes)
+CTL             equ $7200               ; controladores activos en este ciclo
+STRS            equ $7710               ; 12 cadenas de 41 bytes
+MSGBUF          equ $7900
+TMPM            equ $7A00
+WTEXT           equ $7B00
+STMP            equ $7BC0
+STMP2           equ $7BF0
+PHR             equ $7C20
+WBUF            equ $7C50
+TOKS            equ $7C90
+TOKP            equ $7CF0
+INW             equ $7D10
+KEYQ            equ $7D30
+TQ              equ $7D40
+EVBUF           equ $7DF0
+SREC            equ $7E40
+TRREC           equ $7E50
+CLR_END         equ $7E60
 PG_VIEWS        equ 24
 PG_WORDS        equ 25
 PG_SND          equ 26
@@ -66,7 +66,7 @@ MAXW            equ 6
 LPAGE0          equ 16
 NSLOTS          equ 8
 MAXDEPTH        equ 12
-ARGS            equ $7600; argumentos del comando o la condicion en curso
+ARGS            equ $7700; argumentos del comando o la condicion en curso
 
                 include "mcu.asm"
 
@@ -260,7 +260,7 @@ in_s:           ld (hl),$FF
                 djnz in_s
                 ld hl,KEYMAP            ; teclas, controladores
                 ld de,KEYMAP+1
-                ld bc,767
+                ld bc,511
                 ld (hl),0
                 ldir
                 ld hl,ARGS              ; cadenas, buffers del parser

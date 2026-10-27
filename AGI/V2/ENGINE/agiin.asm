@@ -112,7 +112,9 @@ key_push:       ld c,a
                 ld (hl),c
                 inc a
                 ld (keyn),a
-kp_m:           ld l,c
+kp_m:           ld a,c
+                and 127
+                ld l,a
                 ld h,0
                 add hl,hl
                 ld de,KEYMAP
@@ -131,6 +133,7 @@ kp_m:           ld l,c
 h_set_key:      ld a,(ARGS)             ; ascii, scan, controlador
                 or a
                 ret z
+                and 127
                 ld l,a
                 ld h,0
                 add hl,hl
