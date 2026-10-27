@@ -26,3 +26,14 @@ Pendiente: el pincel (`F9`/`FA`) es aproximado, no reproduce el salpicado exacto
 ## Logicas (bytecode)
 
 `agi_logic.py JUEGO [n ...]` desensambla las logicas (comandos, bloques `if (...) {}` y `goto`, con los mensajes en su sitio); `--check` comprueba que cada una se decodifica entera y que los saltos caen en limites de instruccion; `--stats` cuenta los opcodes usados. Resultado: las 506 logicas de los 6 juegos (KQ1 90, KQ2 133, Larry1 46, PQ1 118, SQ1 101, SQ2 118) se decodifican sin errores, lo que valida la tabla de 170 comandos y 18 condiciones (sobre todo el numero de argumentos de cada uno).
+
+## agi_vm.py: modelo de referencia del interprete
+
+Interprete AGI v2 sin pantalla, en Python: variables, banderas, ejecucion del bytecode, salas, objetos animados
+(movimiento, ciclos de celdas, bordes, control de prioridad de la imagen, colisiones), inventario, parser de ordenes con
+WORDS.TOK y sonido (solo su duracion). Los comandos de pantalla y menus no hacen nada y se listan al final.
+
+    python agi_vm.py ../SQ1 --cycles 900 --script "299:str:Roger 300:key:13 480:text:look at closet 600:dir:5 640:dir:0"
+
+El guion son eventos `ciclo:tipo:valor` (text, str, key, ctrl, dir). SQ1 arranca solo: intro (sala 67), nombre (69) y sala 2.
+`test_vm.sh` lo comprueba. El modelo fija la semantica antes de escribirla en Z80: el mismo guion debe dar el mismo registro.

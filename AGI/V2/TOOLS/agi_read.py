@@ -131,9 +131,9 @@ def _rnd(v, direction):
 
 
 class Picture:
-    def __init__(self, data):
-        self.vis = [15] * (W * H)
-        self.pri = [4] * (W * H)
+    def __init__(self, data, base=None):
+        self.vis = list(base.vis) if base else [15] * (W * H)
+        self.pri = list(base.pri) if base else [4] * (W * H)
         self.cc, self.con = 0, False
         self.pc, self.pon = 0, False
         self.pen = 0
