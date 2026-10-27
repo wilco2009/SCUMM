@@ -30,14 +30,17 @@ INV             equ $6B00               ; sala de cada objeto del inventario (25
 SNDLEN          equ $6C00               ; duracion de cada sonido en 1/60 s (u16)
 SUMM            equ $6E00
 SUMMAX          equ 200
-TRACE           equ $7600
-TRMAX           equ 680
+TRACE           equ $7700
+TRMAX           equ 600
+OBJ             equ $6000
+NOBJ            equ 32
+VIEWPAGE        equ 24
 STACK           equ $7F00
 LWIN            equ $8000
 LPAGE0          equ 16
 NSLOTS          equ 8
 MAXDEPTH        equ 12
-ARGS            equ $5F00               ; argumentos del comando o la condicion en curso
+ARGS            equ $6400               ; argumentos del comando o la condicion en curso
 
                 include "mcu.asm"
 
@@ -81,7 +84,8 @@ ml_run:         xor a
                 jr z,ml_end
                 call do_new_room
                 jr ml_run
-ml_end:         xor a                   ; (aqui irian los objetos animados)
+ml_end:         call update_objects
+                xor a
                 ld (FLAGS+2),a
                 ld (FLAGS+4),a
                 ld (FLAGS+5),a
@@ -163,6 +167,18 @@ in_s:           ld (hl),$FF
                 inc hl
                 inc hl
                 djnz in_s
+                ld hl,OBJ
+                ld de,OBJ+1
+                ld bc,NOBJ*32-1
+                ld (hl),0
+                ldir
+                ld a,36
+                ld (horizon),a
+                call map_views
+                ld hl,nm_views
+                ld de,LWIN
+                ld bc,8192
+                call load_aux
                 ld hl,nm_inv
                 ld de,INV
                 ld bc,256
@@ -626,19 +642,57 @@ ts_end:         pop de
 ; ---------------------------------------------------------------------
 do_new_room:    ld a,(VARS+0)
                 ld (VARS+1),a
+                ld ix,OBJ+32            ; todos menos el ego dejan de estar animados y dibujados
+                ld de,32
+                ld b,NOBJ-1
+nr_u:           res 0,(ix+O_F1)
+                res 1,(ix+O_F1)
+                add ix,de
+                djnz nr_u
+                ld ix,OBJ
+                res 1,(ix+O_F1)
+                ld a,1
+                ld (pctl),a
+                xor a
+                ld (blkf),a
+                ld a,36
+                ld (horizon),a
                 ld a,(nr_val)
                 ld (VARS+0),a
                 xor a
                 ld (VARS+3),a
                 ld (VARS+4),a
                 ld (VARS+5),a
+                ld de,0
+                bit 0,(ix+O_F1)
+                call nz,obj_cell        ; D = ancho del ego
+                ld a,(VARS+2)           ; por que borde entra
+                cp 1
+                jr nz,nr_2
+                ld (ix+O_Y),167
+                jr nr_e
+nr_2:           cp 2
+                jr nz,nr_3
+                ld (ix+O_X),0
+                jr nr_e
+nr_3:           cp 3
+                jr nz,nr_4
+                ld a,(horizon)
+                inc a
+                ld (ix+O_Y),a
+                jr nr_e
+nr_4:           cp 4
+                jr nz,nr_e
+                ld a,160
+                sub d
+                ld (ix+O_X),a
+nr_e:           xor a
                 ld (VARS+2),a
                 ld (FLAGS+0),a
                 ld (nr_pend),a
                 ld (exitall),a
                 inc a
                 ld (FLAGS+5),a
-                ld (pctl),a
                 ret
 
 tick_clock:     ld a,(VARS+10)
@@ -735,11 +789,51 @@ su_f1:          inc c
                 ld a,(VARS+0)
                 ld (hl),a
                 inc hl
+                push hl
+                call objsum
+                ex de,hl
+                pop hl
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
                 ld (sptr),hl
                 ld hl,nsum
                 inc (hl)
                 ld hl,0
                 ld (nsteps),hl
+                ret
+
+; HL = horizonte + control + bloque + los 23 primeros bytes de cada objeto
+objsum:         ld hl,0
+                ld a,(horizon)
+                call adda
+                ld a,(pctl)
+                call adda
+                ld a,(blkf)
+                call adda
+                ld de,OBJ
+                ld b,NOBJ
+os_o:           ld c,23
+os_i:           ld a,(de)
+                add a,l
+                ld l,a
+                jr nc,os_n
+                inc h
+os_n:           inc de
+                dec c
+                jr nz,os_i
+                ld a,e
+                add a,9
+                ld e,a
+                jr nc,os_p
+                inc d
+os_p:           djnz os_o
+                ret
+adda:           add a,l
+                ld l,a
+                ret nc
+                inc h
                 ret
 
 ; sonidos cuyo final ya llego: ponen su bandera (se mira al empezar el ciclo)
@@ -1052,42 +1146,6 @@ h_program_control: xor a
 h_player_control: ld a,1
                 ld (pctl),a
                 ret
-h_stop_motion:  ld a,(ARGS)
-                or a
-                ret nz
-                ld (VARS+6),a
-                ld (pctl),a
-                ret
-h_start_motion: ld a,(ARGS)
-                or a
-                ret nz
-                inc a
-                ld (pctl),a
-                ret
-h_wander:       ld a,(ARGS)
-                or a
-                ret nz
-                ld (pctl),a
-                ret
-h_move_obj:     ld a,(ARGS+4)
-mo_f:           ld l,a
-                ld h,FLAGS>>8
-                ld (hl),0
-                ld a,(ARGS)
-                or a
-                ret nz
-                ld (pctl),a
-                ret
-h_move_obj_v:   jr h_move_obj
-h_follow_ego:   ld a,(ARGS+2)
-                jr mo_flag
-h_end_of_loop:  ld a,(ARGS+1)
-mo_flag:        ld l,a
-                ld h,FLAGS>>8
-                ld (hl),0
-                ret
-h_reverse_loop: jr h_end_of_loop
-
 ; --- inventario
 h_get:          ld a,(ARGS)
                 ld l,a
@@ -1296,11 +1354,13 @@ two_vars:       ld a,(ARGS+1)
 ; ---------------------------------------------------------------------
 ;  Datos
 ; ---------------------------------------------------------------------
+                include "agiobj.asm"
                 include "agitab.inc"
 
 nm:             defb "LOG000.AGL",0
 nm_inv:         defb "INVROOM.BIN",0
 nm_snd:         defb "SNDLEN.BIN",0
+nm_views:       defb "VIEWS.HDR",0
 sv_sp:          defw 0
 sv_i:           defb 0
 fh:             defb 0
@@ -1317,6 +1377,22 @@ nsteps:         defw 0
 nsum:           defb 0
 sidx:           defb 0
 sp_tmp:         defw 0
+horizon:        defb 36
+blk:            defs 4
+blkf:           defb 0
+curk:           defb 0
+nx:             defw 0
+ny:             defw 0
+mdx:            defw 0
+mdy:            defw 0
+ow:             defb 0
+oh:             defb 0
+qw:             defb 0
+bdr:            defb 0
+pk_d:           defb 0
+vclamp:         defb 0
+ocn:            defb 0
+occ:            defb 0
 trcount:        defw 0
 trptr:          defw TRACE
 sptr:           defw SUMM

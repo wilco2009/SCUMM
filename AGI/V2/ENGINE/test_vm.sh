@@ -7,9 +7,9 @@ G=${1:-SQ1}
 N=${2:-100}
 E=../../../V2/ENGINE/test
 [ -d ../$G ] || { echo "sin datos de $G: prueba omitida"; exit 0; }
-python ../TOOLS/gen_agitab.py agivm.asm agitab.inc
+python ../TOOLS/gen_agitab.py agivm.asm agiobj.asm agitab.inc
 pasmo agivm.asm agivm.bin agivm.sym
 mkdir -p ../dump/$G
 python ../TOOLS/agi2log.py ../$G ../dump/$G/log > /dev/null
 $E/build/test_scumm.exe agivm.bin agivm.sym ../dump/$G/log $N ../dump/test_vm.bin
-python cmp_vm.py ../dump/test_vm.bin agivm.sym ../$G $N
+AGI_NOPIC=1 python cmp_vm.py ../dump/test_vm.bin agivm.sym ../$G $N

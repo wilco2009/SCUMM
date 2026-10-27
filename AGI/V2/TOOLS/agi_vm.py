@@ -27,6 +27,10 @@ LOOP2 = [4, 4, 0, 0, 0, 4, 1, 1, 1]
 EGO = 0
 
 
+def b2(x):
+    return 1 if x else 0
+
+
 class Stop(Exception):
     pass
 
@@ -68,6 +72,7 @@ class Interp:
         self.views = {}
         self.pics = {}
         self.pic = None
+        self.use_pic = os.environ.get('AGI_NOPIC') != '1'     # AGI_NOPIC=1: sin el plano de prioridad (lo que modela el Z80 por etapas)
         self.inv = [r for _, r, _ in ag.objects(path)]
         self.inv_names = [n for _, _, n in ag.objects(path)]
         self.words = ag.words(path)
@@ -680,7 +685,10 @@ class Interp:
     def c_set_menu_item(self, m, c): pass
     def sound_ticks(self, n):
         """Duracion de la pista 0 de un sonido en 1/60 s."""
-        d = self.g.resource('SND', n)
+        try:
+            d = self.g.resource('SND', n)
+        except ValueError:
+            return 0
         if not d:
             return 0
         p = d[0] | (d[1] << 8)
@@ -729,7 +737,7 @@ class Interp:
             bx1, by1, bx2, by2 = self.blocks
             if not (bx1 <= x and x + w - 1 <= bx2 and by1 <= y <= by2):
                 return False
-        if self.pic:
+        if self.pic and self.use_pic:
             pri = self.pic.pri
             water = land = 0
             sig = False
@@ -806,8 +814,8 @@ class Interp:
         if o.motion == 1:
             o.wander -= 1
             if o.wander <= 0 or o.dir == 0:
-                o.dir = 1 + self.seed.randrange(8)
-                o.wander = 4 + self.seed.randrange(10)
+                o.dir = 1 + self.rand8() % 8
+                o.wander = 4 + self.rand8() % 10
         d = o.dir
         if d == 0:
             return
@@ -882,6 +890,23 @@ class Interp:
             if k == EGO and not self.pcontrol:
                 v[6] = o.dir
 
+    NOBJ = 32
+
+    def objbytes(self, o):
+        b = lambda x: 1 if x else 0
+        f1 = b(o.anim) | b(o.drawn) << 1 | b(o.upd) << 2 | b(o.cycling) << 3 | b(o.mon) << 4 | b(o.fixpri) << 5 | b(o.fixloop) << 6 | b(o.ign_horizon) << 7
+        f2 = b(o.ign_blocks) | b(o.ign_objs) << 1
+        return [f1, f2, o.view, o.loop, o.cel, o.x & 255, o.y & 255, o.pri & 255, o.ctype, o.ctime & 255, o.ccount & 255, o.cflag,
+                o.motion, o.step & 255, o.stime & 255, o.scount & 255, o.dir, o.water, o.tx & 255, o.ty & 255, o.mstep & 255, o.mflag,
+                o.wander & 255]
+
+    def objsum(self):
+        t = self.horizon + b2(self.pcontrol) + b2(self.blocks)
+        for k in range(self.NOBJ):
+            if k in self.objs:
+                t += sum(self.objbytes(self.objs[k]))
+        return t & 0xFFFF
+
     def tick_clock(self):
         v = self.vars
         per = max(1, 20 // max(1, v[10]))
@@ -942,7 +967,7 @@ class Interp:
         self.keyq = []
         v[2] = v[3] = v[4] = v[5] = 0
         self.tick_clock()
-        self.summ.append((self.cycle, self.nsteps, sum(v) & 0xFFFF, sum(i for i in range(256) if self.flags[i]) & 0xFFFF, v[0]))
+        self.summ.append((self.cycle, self.nsteps, sum(v) & 0xFFFF, sum(i for i in range(256) if self.flags[i]) & 0xFFFF, v[0], self.objsum()))
         self.nsteps = 0
 
     def play(self, cycles, script):
@@ -989,7 +1014,7 @@ def main(argv):
             for n, p in it.trace:
                 f.write('T %d %d\n' % (n, p))
             for c in it.summ:
-                f.write('C %d %d %d %d %d\n' % c)
+                f.write('C %d %d %d %d %d %d\n' % c)
     ego = it.obj(EGO)
     print('fin: sala %d, ciclo %d, ego en %d,%d, v0..v9 = %s' % (it.vars[0], it.cycle, ego.x, ego.y, it.vars[:10]))
     if it.noop:

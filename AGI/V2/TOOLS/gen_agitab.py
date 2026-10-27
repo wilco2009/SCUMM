@@ -2,7 +2,7 @@
 """Genera agitab.inc (tablas de despacho del interprete Z80) a partir de agi_logic.CMDS/CONDS y de los manejadores
 h_<nombre> / hc_<nombre> que existen en agivm.asm. Lo que no tiene manejador va a h_nop / hc_false.
 
-Uso: gen_agitab.py agivm.asm agitab.inc
+Uso: gen_agitab.py agivm.asm agiobj.asm ... agitab.inc
 """
 import os
 import re
@@ -17,7 +17,7 @@ def mangle(n):
 
 
 def main(argv):
-    asm = open(argv[1]).read()
+    asm = ''.join(open(f).read() for f in argv[1:-1])
     have = set(re.findall(r'^(hc?_[a-z0-9_]+):', asm, re.M))
     out = ['; GENERADO por TOOLS/gen_agitab.py: no editar', 'NCMDS          equ %d' % len(CMDS), 'NCONDS         equ %d' % len(CONDS), '']
     out.append('argtab:')
@@ -46,7 +46,7 @@ def main(argv):
         else:
             h = 'hc_false'
         out.append('                defw ' + h)
-    open(argv[2], 'w').write('\n'.join(out) + '\n')
+    open(argv[-1], 'w').write('\n'.join(out) + '\n')
     print('%d de %d comandos y %d de %d condiciones con manejador' % (nimpl, len(CMDS), ncond, len(CONDS)))
     return 0
 

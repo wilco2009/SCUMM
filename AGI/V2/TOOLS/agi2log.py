@@ -65,6 +65,26 @@ def main(argv):
         snd[2 * n + 1] = t >> 8
     with open(os.path.join(argv[2], 'SNDLEN.BIN'), 'wb') as f:
         f.write(snd)
+    # cabeceras de las vistas: 256 desplazamientos u16 (0 = no hay) y, por vista, nloops, celdas de cada bucle y (ancho, alto) de cada celda
+    idx = bytearray(512)
+    blob = bytearray()
+    for n in g.present('VIEW'):
+        d = g.resource('VIEW', n)
+        if not d:
+            continue
+        loops = ag.view_cells(d)[1]
+        off = 512 + len(blob)
+        idx[2 * n] = off & 255
+        idx[2 * n + 1] = off >> 8
+        blob.append(len(loops))
+        blob.extend(len(l) for l in loops)
+        for l in loops:
+            for c in l:
+                blob.extend((c[0], c[1]))
+    hdr = bytes(idx) + bytes(blob)
+    assert len(hdr) <= 8192, 'VIEWS.HDR no cabe en una pagina: %d' % len(hdr)
+    with open(os.path.join(argv[2], 'VIEWS.HDR'), 'wb') as f:
+        f.write(hdr + bytes(8192 - len(hdr)))
     print('%d logicas, %d bytes' % (len(sel), tot))
     return 0
 

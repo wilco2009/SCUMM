@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'TOOLS'))
 import agi_vm
 
-SUMM, TRACE, TRMAX = 0x6E00, 0x7600, 680
+SUMM, TRACE, TRMAX = 0x6E00, 0x7700, 600
 
 
 def main(argv):
@@ -46,9 +46,10 @@ def main(argv):
     else:
         print('traza: %d pasos iguales' % min(trc, len(it.trace)))
     for i in range(ncyc):
-        z = tuple(mem[SUMM + 9 * i + k] | (mem[SUMM + 9 * i + k + 1] << 8) for k in (0, 2, 4, 6)) + (mem[SUMM + 9 * i + 8],)
+        e = SUMM + 11 * i
+        z = tuple(mem[e + k] | (mem[e + k + 1] << 8) for k in (0, 2, 4, 6)) + (mem[e + 8], mem[e + 9] | (mem[e + 10] << 8))
         if z != it.summ[i]:
-            print('ciclo %d: Z80 (ciclo,pasos,vars,banderas,sala) = %s, modelo = %s' % (i + 1, z, it.summ[i]))
+            print('ciclo %d: Z80 (ciclo,pasos,vars,banderas,sala,objetos) = %s, modelo = %s' % (i + 1, z, it.summ[i]))
             bad = 1
             break
     else:
