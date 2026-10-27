@@ -25,6 +25,7 @@
                 jp t_prevent            ; OVL_PREVENT
                 jp t_render             ; OVL_RENDER
                 jp t_sinit              ; OVL_SPRINIT
+                jp t_bgsave             ; OVL_BGSAVE
 
 TXT             equ TMPM
 
@@ -311,7 +312,7 @@ dl_next:        ld hl,dl_j
                 ld a,(hl)
                 cp 8
                 jp nz,dl_kl
-                ret
+                jp text_bg
 
 ; A = linea de pantalla -> srow = direccion del bitmap de su primera celda
 t_srow:         ld l,a
@@ -358,6 +359,10 @@ fill_row:       call t_chroma
                 or c
                 ld (cl_attr),a
                 xor a
+                ld (dl_ca),a
+                ld a,32
+                ld (dl_nb),a
+                xor a
                 ld (dl_k),a
 fr_k:           ld a,(dl_row)
                 add a,a
@@ -387,7 +392,7 @@ fr_a:           ld (hl),a
                 ld a,(hl)
                 cp 8
                 jr nz,fr_k
-                ret
+                jp text_bg
 
 ; ---------------------------------------------------------------------
 ;  Barra de estado
@@ -1029,6 +1034,7 @@ pmk:            defb 0
 
                 include "sprtab.inc"
                 include "agihws.asm"
+                include "agisw.asm"
 
 FONT:
                 include "font6.inc"

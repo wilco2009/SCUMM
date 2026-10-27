@@ -68,6 +68,7 @@ lp_o:           ld (fh),a
                 call f_read_n
                 call pri_index
                 call unmap_win
+                call OVL_BGSAVE
                 ld a,(fh)
                 call f_close
                 ld a,1

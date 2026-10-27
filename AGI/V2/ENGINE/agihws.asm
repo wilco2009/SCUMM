@@ -43,7 +43,9 @@ si_h:           ld a,b
                 jr c,si_h
                 ret
 
-t_render:       xor a
+t_render:       call sw_scan
+                call sw_restore
+                xor a
                 ld (sk),a
                 ld (rpri),a
 hq_p:           ld ix,OBJ
@@ -68,6 +70,8 @@ hq_n:           ld de,32
                 ld a,(hl)
                 cp 16
                 jr c,hq_p
+                xor a
+                ld (sw_force),a
                 ld a,(sk)               ; apagar los que sobran
 hq_off:         cp 64
                 ret nc
@@ -187,29 +191,21 @@ lo_t1:          defb 0,2,4,5,7
 ; ---------------------------------------------------------------------
 ;  Un objeto (IX): sus mosaicos a los siguientes sprites
 ; ---------------------------------------------------------------------
-spr_obj:        ld a,(sk)
-                cp 64
-                ret nc
-                ld a,(ix+O_X)
+; IX = objeto -> NC con la pagina de su bucle mapeada y cv_* puestos (celdas, ancho, alto, banderas, huella, mosaicos), o C si no hay celda (sin mapear)
+cel_open:       ld a,(ix+O_X)
                 cp 160
-                ret nc
+                jr nc,co_no
                 ld a,(ix+O_VIEW)
-                ld (hw_tag),a
-                ld a,(ix+O_LOOP)
-                ld (hw_tag+1),a
-                ld a,(ix+O_CEL)
-                ld (hw_tag+2),a
-                ld a,(hw_tag)
                 ld b,(ix+O_LOOP)
                 call vc_get
                 cp $FF
-                ret z
+                jr z,co_no
                 call map_page
                 ld a,(LWIN)             ; numero de celdas del bucle
                 ld b,a
-                ld a,(hw_tag+2)
+                ld a,(ix+O_CEL)
                 cp b
-                jp nc,hw_end            ; la celda no existe
+                jr nc,co_bad            ; la celda no existe
                 ld l,a
                 ld h,0
                 add hl,hl
@@ -219,14 +215,54 @@ spr_obj:        ld a,(sk)
                 inc hl
                 ld d,(hl)
                 ld hl,LWIN
-                add hl,de               ; registro de la celda: mosaicos, ancho, alto
+                add hl,de               ; registro de la celda
                 ld a,(hl)
+                ld (cv_n),a
+                inc hl
+                ld a,(hl)
+                ld (cv_w),a
+                inc hl
+                ld a,(hl)
+                ld (cv_h),a
+                inc hl
+                ld a,(hl)
+                ld (cv_fl),a
+                inc hl
+                ld a,(hl)
+                ld (cv_hl),a
+                inc hl
+                ld a,(hl)
+                ld (cv_hh),a
+                inc hl
+                ld (cv_p),hl
+                or a
+                ret
+co_bad:         call unmap_win
+co_no:          scf
+                ret
+
+; ---------------------------------------------------------------------
+;  Un objeto (IX): sus mosaicos a los siguientes sprites (o, si es un rotulo ancho, al bitmap: sw_blit)
+; ---------------------------------------------------------------------
+spr_obj:        ld a,(ix+O_VIEW)
+                ld (hw_tag),a
+                ld a,(ix+O_LOOP)
+                ld (hw_tag+1),a
+                ld a,(ix+O_CEL)
+                ld (hw_tag+2),a
+                call cel_open
+                ret c
+                ld a,(cv_fl)
+                and 1
+                jp nz,sw_blit
+                ld a,(sk)
+                cp 64
+                jp nc,hw_end
+                ld a,(cv_n)
                 ld (hw_n),a
-                inc hl
-                inc hl
-                ld a,(hl)
+                ld a,(cv_h)
                 ld (hw_h),a
-                inc hl
+                ld hl,(cv_p)
                 ld (hw_p),hl
                 ld a,(ix+O_X)
                 call lo16
@@ -405,6 +441,13 @@ rpri:           defb 0
 rn:             defb 0
 hw_k:           defb 0
 hw_n:           defb 0
+cv_n:           defb 0
+cv_w:           defb 0
+cv_h:           defb 0
+cv_fl:          defb 0
+cv_hl:          defb 0
+cv_hh:          defb 0
+cv_p:           defw 0
 hw_h:           defb 0
 hw_i:           defb 0
 hw_p:           defw 0

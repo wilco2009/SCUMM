@@ -76,6 +76,7 @@ OVL_ACCEPT      equ $201B
 OVL_PREVENT     equ $201E
 OVL_RENDER      equ $2021
 OVL_SPRINIT     equ $2024
+OVL_BGSAVE      equ $2027
 MAXW            equ 6
 LPAGE0          equ 16
 NSLOTS          equ 8

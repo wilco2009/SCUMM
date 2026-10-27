@@ -10,8 +10,10 @@ Fichero Nvvvl.SPR (vvv = vista, l = bucle), little endian:
   +0   u16 tamano del resto
   +2   u8  numero de celdas
   +3   u16 por celda: desplazamiento de su registro desde +2
-  registro de celda: u8 mosaicos, u8 ancho HiRes, u8 alto, y por mosaico: u8 tx, u8 ty, 8 bytes de color, 8 de dato y 8 de mascara
-  (los 24 bytes van tal cual a 2105-2128: color, forma, mascara)
+  registro de celda: u8 mosaicos, u8 ancho HiRes, u8 alto, u8 banderas (bit 0 = software), u16 huella de las mascaras, y por mosaico: u8 tx, u8 ty,
+  8 bytes de color, 8 de dato y 8 de mascara (los 24 bytes van tal cual a 2105-2128: color, forma, mascara)
+  Las celdas con mas de SW_TILES mosaicos en una fila (rotulos anchos) no caben en los sprites (12 por linea): las dibuja el Z80 en el bitmap, por celdas;
+  la huella (FNV-1a de las mascaras) dice si dos celdas tienen la misma forma (solo cambian los colores).
 """
 import os
 import sys
@@ -111,13 +113,28 @@ def cel_tiles(d, loop, cel):
     return hrw, h, tiles
 
 
+SW_TILES = 6
+
+
+def meta(tiles):
+    """(software, huella de 16 bits) de los mosaicos de una celda."""
+    per = {}
+    h = 0x811C
+    for tx, ty, col, pix, msk in tiles:
+        per[ty] = per.get(ty, 0) + 1
+        for b in (tx, ty) + tuple(msk):
+            h = ((h ^ b) * 0x0101) & 0xFFFF
+    return (1 if per and max(per.values()) > SW_TILES else 0), h
+
+
 def build_loop(d, loop):
     """Contenido de Nvvvl.SPR para el bucle `loop` de la vista d (sin el u16 del tamano)."""
     ncels = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)]
     recs = []
     for cel in range(ncels):
         hrw, h, tiles = cel_tiles(d, loop, cel)
-        r = bytearray((len(tiles), hrw, h))
+        sw, hh = meta(tiles)
+        r = bytearray((len(tiles), hrw, h, sw, hh & 255, hh >> 8))
         for tx, ty, col, pix, msk in tiles:
             r.extend((tx, ty))
             r.extend(col)

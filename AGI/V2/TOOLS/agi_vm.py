@@ -197,6 +197,8 @@ class Interp:
                 if c is None:
                     continue
                 hrw, h, tiles = c
+                if agi2spr.meta(tiles)[0]:
+                    continue                # rotulo ancho: lo dibuja el Z80 en el bitmap (sw_objects)
                 x0 = agi2spr.lo(o.x) + 32
                 top = 8 + o.y - h + 1 + 32
                 for tx, ty, col, pix, msk in tiles:
@@ -216,7 +218,57 @@ class Interp:
         sa = bytearray(self.ext_at)
         sb[256:256 + 168 * 32] = bm
         sa[256:256 + 168 * 32] = at
+        if self.pic is not None:
+            self.sw_blit(sb, sa)
         return sb, sa
+
+    def sw_blit(self, sb, sa):
+        """Los objetos con celdas anchas (mas de SW_TILES mosaicos en una fila) no van en sprites: se dibujan en el bitmap, de menor a mayor prioridad, por celdas de
+        8 pixeles con el borde izquierdo en la celda (lo(x) + 4) / 8. Una fila de mosaico cuyas 8 posiciones son opacas escribe el bitmap y el atributo de la
+        celda tal cual; una a medias parte de la celda de la imagen (con su texto) y pone solo sus pixeles, uno a uno."""
+        import agi2spr
+        bgb, bga = bytearray(sb), bytearray(sa)
+        for p in range(16):
+            for n in sorted(self.objs):
+                o = self.objs[n]
+                if o.pri != p or not (o.anim and o.drawn) or o.x >= 160:
+                    continue
+                d = self.g.resource('VIEW', o.view)
+                if d is None:
+                    continue
+                key = (o.view, o.loop)
+                if key not in self.spr_big:
+                    try:
+                        self.spr_big[key] = o.loop < d[2] and len(agi2spr.build_loop(d, o.loop)) > 8190
+                    except (IndexError, ValueError):
+                        self.spr_big[key] = True
+                if self.spr_big[key]:
+                    continue
+                c = agi2spr.cel_tiles(d, o.loop, o.cel)
+                if c is None or not agi2spr.meta(c[2])[0]:
+                    continue
+                hrw, h, tiles = c
+                cx0 = (agi2spr.lo(o.x) + 4) >> 3
+                top = o.y - h + 9
+                for tx, ty, col, pix, msk in tiles:
+                    cell = cx0 + tx
+                    if cell > 31:
+                        continue
+                    for r in range(8):
+                        line = top + ty * 8 + r
+                        m = msk[r]
+                        if line < 8 or line > 175 or m == 0:
+                            continue
+                        i = line * 32 + cell
+                        ink, paper = col[r] >> 4, col[r] & 15
+                        if m == 255:
+                            sb[i] = pix[r]
+                            sa[i] = (paper << 4) | ink
+                        else:
+                            sb[i], sa[i] = bgb[i], bga[i]
+                            for bit in range(8):
+                                if m & (0x80 >> bit):
+                                    plot_hr(sb, sa, line, cell * 8 + bit, ink if pix[r] & (0x80 >> bit) else paper)
 
     def render(self):
         """Plano de 168x32: la imagen con el texto que se le ha escrito encima."""
