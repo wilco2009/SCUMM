@@ -816,6 +816,7 @@ ts_end:         pop de
 ;  Sala nueva, reloj, resumen, sonidos
 ; ---------------------------------------------------------------------
 do_new_room:    call OVL_SPCLR
+                call h_stop_sound
                 ld a,(VARS+0)
                 ld (VARS+1),a
                 ld ix,OBJ+32            ; todos menos el ego dejan de estar animados y dibujados
@@ -1392,7 +1393,8 @@ h_quit:         ld a,1
 h_restart_game: jr h_quit
 
 ; --- sonido: la bandera f se pone cuando acaba (duracion de la pista 0)
-h_sound:        ld a,(ARGS+1)           ; f
+h_sound:        call snd_stop           ; el que suene se para (y su bandera se pone, como startSound -> stopSound)
+                ld a,(ARGS+1)           ; f
                 ld c,a
                 ld l,a
                 ld h,FLAGS>>8
@@ -1471,7 +1473,79 @@ so_put:         ld a,(ARGS+1)
                 inc de
                 ld a,h
                 ld (de),a
+                jp snd_play
+
+; stop.sound: el sonido se para y su bandera se pone
+h_stop_sound:   call snd_stop
+                ld a,CMD_STOPVGM
+                jp mcu_send
+
+; las banderas de los sonidos pendientes se ponen y se quedan libres
+snd_stop:       ld hl,SNDP
+                ld b,8
+sst_l:           ld a,(hl)
+                cp $FF
+                jr z,sst_n
+                ld e,a
+                ld d,FLAGS>>8
+                ld a,1
+                ld (de),a
+                ld (hl),$FF
+sst_n:           inc hl
+                inc hl
+                inc hl
+                djnz sst_l
                 ret
+
+; el MCU reproduce SNDnnn.VGM (TOOLS/agi2snd.py) de la carpeta del juego en segundo plano; con el sonido apagado (bandera 9) no suena
+snd_play:       ld a,(FLAGS+9)
+                or a
+                ret z
+                ld a,CMD_STOPVGM
+                call mcu_send
+                ld a,CMD_LOOPVGM
+                call mcu_send
+                xor a
+                call mcu_send
+                ld a,CMD_PLAYVGM
+                call mcu_send
+                ld a,10
+                call mcu_send
+                ld a,$38                ; S N D (codigos del ZX81)
+                call mcu_send
+                ld a,$33
+                call mcu_send
+                ld a,$29
+                call mcu_send
+                ld a,(ARGS)
+                ld (snd_r),a
+                ld a,100
+                call snd_dig
+                ld a,10
+                call snd_dig
+                ld a,1
+                call snd_dig
+                ld a,$1B                ; . V G M
+                call mcu_send
+                ld a,$3B
+                call mcu_send
+                ld a,$2C
+                call mcu_send
+                ld a,$32
+                call mcu_send
+                jp mcu_recv
+snd_dig:        ld c,a
+                ld b,$1B
+sdg_l:           inc b
+                ld a,(snd_r)
+                sub c
+                ld (snd_r),a
+                jr nc,sdg_l
+                add a,c
+                ld (snd_r),a
+                ld a,b
+                jp mcu_send
+snd_r:          defb 0
 
 ; ---------------------------------------------------------------------
 ;  Condiciones (hc_<nombre>): devuelven A = 1 o 0

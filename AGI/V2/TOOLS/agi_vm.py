@@ -589,6 +589,7 @@ class Interp:
     def do_new_room(self, n):
         v = self.vars
         old = v[0]
+        self.snd_stop()
         self.spans = []
         self.span_rows = 0
         for k, o in self.objs.items():
@@ -1089,22 +1090,25 @@ class Interp:
             agi_text.put_line(sb, sa, 0, 1 + i, 0, ' ' + t.ljust(mx) + ' ', fg, bg, x0=8 * cxl)
 
     def sound_ticks(self, n):
-        """Duracion de la pista 0 de un sonido en 1/60 s."""
+        """Duracion de un sonido en 1/60 s: lo que tarda en acabar el ultimo de sus cuatro canales (el sonido acaba cuando han acabado todos)."""
         try:
             d = self.g.resource('SND', n)
         except ValueError:
             return 0
-        if not d:
+        if not d or len(d) < 8:
             return 0
-        p = d[0] | (d[1] << 8)
-        t = 0
-        while p + 5 <= len(d):
-            dur = d[p] | (d[p + 1] << 8)
-            if dur == 0xFFFF:
-                break
-            t += dur
-            p += 5
-        return min(t, 0xFFFF)
+        best = 0
+        for c in range(4):
+            p = d[2 * c] | (d[2 * c + 1] << 8)
+            t = 0
+            while p + 5 <= len(d):
+                dur = d[p] | (d[p + 1] << 8)
+                if dur == 0xFFFF:
+                    break
+                t += dur
+                p += 5
+            best = max(best, t)
+        return min(best, 0xFFFF)
 
     def sound_cycles(self, n):
         """Ciclos del interprete que dura: t/60 s a 20/v10 ciclos por segundo, redondeado (aritmetica entera, como el Z80)."""
@@ -1112,13 +1116,20 @@ class Interp:
         v10 = max(1, self.vars[10])
         return max(2, (2 * t + 3 * v10) // (6 * v10))
 
+    def snd_stop(self):
+        """Las banderas de los sonidos pendientes se ponen y quedan libres (stopSound)."""
+        for t, f in self.sound_flags:
+            self.flags[f] = 1
+        self.sound_flags = []
+
     def c_sound(self, n, f):
+        self.snd_stop()
         self.flags[f] = 0
         self.sound_flags = [x for x in self.sound_flags if x[1] != f]
         self.sound_flags.append((self.cycle + self.sound_cycles(n), f))
         self.log('sound %d (%d ciclos)' % (n, self.sound_flags[-1][0] - self.cycle))
 
-    def c_stop_sound(self): pass
+    def c_stop_sound(self): self.snd_stop()
     def c_set_game_id(self, m): self.log('juego: ' + self.msg(m))
     def c_log(self, m): pass
     def c_quit(self, n):

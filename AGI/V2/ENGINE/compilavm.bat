@@ -22,6 +22,7 @@ set T=..\dump\%G%\log
 python -I ..\TOOLS\agi2log.py ..\%G% %T% || goto error
 python -I ..\TOOLS\agi2hr.py ..\%G% %T% || goto error
 python -I ..\TOOLS\agi2spr.py ..\%G% %T% || goto error
+python -I ..\TOOLS\agi2snd.py ..\%G% %T% || goto error
 python -I ..\TOOLS\mkovl.py agia.bin %T%\OVERA.OVL || goto error
 python -I ..\TOOLS\mkovl.py agib.bin %T%\OVERB.OVL || goto error
 python -I ..\TOOLS\mkevents.py %T%\EVENTS.BIN 0 "" || goto error
