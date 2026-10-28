@@ -649,10 +649,16 @@ pt_l:           ld a,(hl)
                 cp 'Z'+1
                 jr nc,pt_n1
                 add a,32
-pt_n1:          cp 39                   ; ' y - van dentro de las palabras (don't, read-outs)
-                jr z,pt_ch
+pt_n1:          cp 39                   ; ' ` - \" . se quitan sin separar (dont = don't; el vocabulario va igual, agi_read.norm_word)
+                jr z,pt_l
+                cp 96
+                jr z,pt_l
                 cp 45
-                jr z,pt_ch
+                jr z,pt_l
+                cp 34
+                jr z,pt_l
+                cp 46
+                jr z,pt_l
                 cp '0'
                 jr c,pt_sep
                 cp '9'+1

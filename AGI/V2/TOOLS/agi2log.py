@@ -90,7 +90,8 @@ def main(argv):
     assert len(hdr) <= 8192, 'VIEWS.HDR no cabe en una pagina: %d' % len(hdr)
     with open(os.path.join(argv[2], 'VIEWS.HDR'), 'wb') as f:
         f.write(hdr + bytes(8192 - len(hdr)))
-    tok = open(os.path.join(argv[1], 'WORDS.TOK'), 'rb').read()
+    import agi_read
+    tok = agi_read.words_tok(argv[1])
     assert len(tok) <= 8190
     with open(os.path.join(argv[2], 'WORDS.BIN'), 'wb') as f:
         f.write(bytes((len(tok) & 255, len(tok) >> 8)) + tok + bytes(8190 - len(tok)))

@@ -370,7 +370,7 @@ class Interp:
 
     # ------------------------------------------------------------ parser
     def parse(self, text):
-        t = re.sub(r"[^a-z0-9' -]", ' ', text.lower()).split()     # ' y - van dentro de las palabras (don't, read-outs)
+        t = ag.norm_word(text.lower()).split()     # ' ` - " . se quitan sin separar (don't = dont); lo demas separa
         self.wtext = []
         nums = []
         self.vars[9] = 0

@@ -13,6 +13,7 @@ JUEGO es la carpeta con LOGDIR, PICDIR, VIEWDIR, SNDDIR, VOL.n, WORDS.TOK y OBJE
 Solo biblioteca estandar (el PNG se escribe a mano).
 """
 import os
+import re
 import struct
 import sys
 import zlib
@@ -368,7 +369,19 @@ def view_sheet(loops, scale=2):
 
 # --------------------------------------------------------------------------- vocabulario y objetos
 
+def norm_word(w):
+    """Palabra del vocabulario o del texto: se quitan ' ` - " . (no separan: don't = dont, i.d. = id, read-outs = readouts) y el resto de lo que no es letra ni cifra
+    separa palabras. Asi se pueden teclear sin los simbolos, que en el ZX81 cuestan (ENTER + tecla)."""
+    w = re.sub(r"['`\-\".]", '', w)
+    return ' '.join(re.sub(r'[^A-Za-z0-9 ]', ' ', w).split())
+
+
 def words(path):
+    """Vocabulario de WORDS.TOK normalizado (norm_word); lo que se queda vacio se descarta."""
+    return [(n, num) for n, num in ((norm_word(w), num) for w, num in raw_words(path)) if n]
+
+
+def raw_words(path):
     with open(os.path.join(path, 'WORDS.TOK'), 'rb') as f:
         d = f.read()
     p = 52                                       # 26 desplazamientos de letra
@@ -488,3 +501,26 @@ def main(argv):
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv))
+
+
+def words_tok(path):
+    """WORDS.TOK con el vocabulario normalizado (mismo formato: 26 desplazamientos, y por palabra los caracteres compartidos con la anterior, los demas con el bit 7 en el
+    ultimo, cada uno xor $7F, y el numero en dos bytes); es lo que lee el Z80."""
+    with open(os.path.join(path, 'WORDS.TOK'), 'rb') as f:
+        head = f.read(52)
+    out = bytearray(head)
+    prev = ''
+    for w, num in words(path):
+        pre = 0
+        while pre < min(len(prev), len(w)) - 0 and prev[pre] == w[pre] and pre < 255:
+            pre += 1
+        pre = min(pre, len(w) - 1) if len(w) else 0
+        out.append(pre)
+        rest = w[pre:]
+        for i, c in enumerate(rest):
+            b = ord(c) ^ 0x7F
+            out.append(b | 0x80 if i == len(rest) - 1 else b)
+        out += bytes((num >> 8, num & 255))
+        prev = w
+    out.append(0)
+    return bytes(out)
