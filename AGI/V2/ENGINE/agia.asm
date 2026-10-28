@@ -103,6 +103,8 @@ ke_n0:          ld a,e
                 res 0,c
 ke_n1:          ld a,c
                 ld (ke_m),a
+                or a
+                jr z,ke_nr              ; sin teclas nuevas en la fila
                 xor a
                 ld (ke_b),a
 ke_bit:         ld a,(ke_b)
@@ -126,7 +128,7 @@ ke_nb:          ld hl,ke_b
                 ld a,(hl)
                 cp 5
                 jr c,ke_bit
-                ld hl,ke_r
+ke_nr:          ld hl,ke_r
                 inc (hl)
                 ld a,(hl)
                 cp 8

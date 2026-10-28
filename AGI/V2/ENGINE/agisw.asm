@@ -918,9 +918,9 @@ sw_part:        ld a,(sp_m)
                 rrca                    ; papel * 16 + tinta
                 ld (hl),a
                 ret
-; fila con huecos: los pixeles de la mascara, de izquierda a derecha, sobre la celda del bufer. Lleva el estado de la celda en registros (B = papel,
-; C = tinta, D = bitmap, E = bit) con la misma regla que `plot` (agispr.asm): celda de un color: el color igual deja el bit a 0, otro pasa a ser la tinta;
-; celda de dos: tinta -> bit a 1, papel -> bit a 0, un tercero va al mas cercano (si la tinta esta igual o mas cerca, la sustituye; si no, sustituye al papel)
+; fila con huecos: los pixeles de la mascara sobre la celda del bufer. El estado de la celda va en registros (B = papel, C = tinta, D = bitmap) y se actualiza
+; con spp_up, con la misma regla que `plot` (agispr.asm). Si todos los pixeles de la fila son del mismo color (la mayoria), una sola actualizacion con toda la
+; mascara da lo mismo que pixel a pixel (solo el primero decide si cambia la tinta o el papel); si no, se va pixel a pixel, de izquierda a derecha.
 spp_pl:         ld a,(sp_col)
                 ld c,a
                 and 15
@@ -950,7 +950,20 @@ spp_pl:         ld a,(sp_col)
                 ld hl,LBBM
                 add hl,de
                 ld d,(hl)               ; D = bitmap
-                ld e,$80                ; E = bit que toca
+                ld a,(sp_m)
+                ld l,a                  ; L = mascara
+                ld a,(sp_p)
+                and l
+                jr z,spp_1p             ; todo papel
+                cp l
+                jr nz,spp_gen           ; los dos colores
+                ld a,(sp_ci)            ; todo tinta
+                jr spp_1c
+spp_1p:         ld a,(sp_cp)
+spp_1c:         ld e,l                  ; toda la mascara de una vez
+                call spp_up
+                jr spp_w
+spp_gen:        ld e,$80                ; E = bit que toca
 spp_l:          ld a,(sp_m)
                 and e
                 jr z,spp_n
@@ -959,7 +972,33 @@ spp_l:          ld a,(sp_m)
                 ld a,(sp_cp)
                 jr z,spp_c
                 ld a,(sp_ci)
-spp_c:          ld h,a                  ; H = color nuevo
+spp_c:          call spp_up
+spp_n:          srl e
+                jr nz,spp_l
+spp_w:          ld a,d
+                ld (sp_bt),a
+                ld a,(sp_cell)
+                ld e,a
+                ld d,0
+                ld hl,LBAT
+                add hl,de
+                ld a,b
+                rlca
+                rlca
+                rlca
+                rlca
+                or c
+                ld (hl),a
+                ld hl,LBBM
+                add hl,de
+                ld a,(sp_bt)
+                ld (hl),a
+                ret
+
+; A = color nuevo, E = bits a pintar, B = papel, C = tinta, D = bitmap de la celda -> los cuatro actualizados. Celda de un color: el mismo color deja los bits a
+; 0, otro pasa a ser la tinta; de dos: tinta -> bits a 1, papel -> bits a 0, un tercero va al mas cercano (si la tinta esta igual o mas cerca, la sustituye;
+; si no, sustituye al papel)
+spp_up:         ld h,a                  ; H = color nuevo
                 ld a,b
                 cp c
                 jr nz,spp_two
@@ -970,12 +1009,12 @@ spp_c:          ld h,a                  ; H = color nuevo
 spp_set:        ld a,d
                 or e
                 ld d,a
-                jr spp_n
+                ret
 spp_clr:        ld a,e
                 cpl
                 and d
                 ld d,a
-                jr spp_n
+                ret
 spp_two:        ld a,h
                 cp c
                 jr z,spp_set
@@ -1000,27 +1039,6 @@ spp_two:        ld a,h
                 jr spp_clr
 spp_ri:         ld c,a                  ; sustituye a la tinta
                 jr spp_set
-spp_n:          srl e
-                jr nz,spp_l
-                ld a,d
-                ld (sp_bt),a
-                ld a,(sp_cell)
-                ld e,a
-                ld d,0
-                ld hl,LBAT
-                add hl,de
-                ld a,b
-                rlca
-                rlca
-                rlca
-                rlca
-                or c
-                ld (hl),a
-                ld hl,LBBM
-                add hl,de
-                ld a,(sp_bt)
-                ld (hl),a
-                ret
 
 sqs_n:          defb 0
 sqs_r:          defw 0
