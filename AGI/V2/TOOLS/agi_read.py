@@ -139,8 +139,15 @@ def testboot(n, d):
         return d
     code = bytearray()
     for it in spec.split(','):
-        k, val = it.split('=')
-        code += bytes((18, int(val))) if k == 'room' else bytes((3, int(k[1:]), int(val)))
+        k, _, val = it.partition('=')
+        if k == 'room':
+            code += bytes((18, int(val)))
+        elif k == 'ign':                    # ignore.blocks(o0)
+            code += bytes((88, 0))
+        elif k == 'pri':                    # set.priority(o0, val)
+            code += bytes((54, 0, int(val)))
+        else:
+            code += bytes((3, int(k[1:]), int(val)))
     code = bytes((0xFF, 0x01, 0, 0, 0xFF, len(code) & 255, len(code) >> 8)) + bytes(code)       # if (equaln(v0, 0)) { ... }: solo al arrancar
     size = (d[0] | (d[1] << 8)) + len(code)
     return bytes((size & 255, size >> 8)) + code + bytes(d[2:])

@@ -861,7 +861,10 @@ nr_u:           res 0,(ix+O_F1)
                 add ix,de
                 djnz nr_u
                 ld ix,OBJ
-                res 1,(ix+O_F1)
+                ld a,(ix+O_F1)
+                and $DD                 ; el ego sin dibujar ni prioridad fija, y listo para andar (actualiza, cicla, se mueve) aunque la sala anterior le hiciera stop.motion o set.priority
+                or $1C
+                ld (ix+O_F1),a
                 ld a,1
                 ld (pctl),a
                 xor a

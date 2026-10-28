@@ -622,6 +622,8 @@ class Interp:
                 o.anim = o.drawn = False
         ego = self.obj(EGO)
         ego.drawn = False
+        ego.upd = ego.cycling = ego.mon = True      # el ego sale de la sala listo para andar y sin prioridad fija aunque la anterior le hiciera stop.motion o set.priority
+        ego.fixpri = False
         self.pcontrol = True
         self.blocks = None
         self.horizon = 36
