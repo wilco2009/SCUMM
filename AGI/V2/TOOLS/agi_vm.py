@@ -784,8 +784,7 @@ class Interp:
         if n == EGO:
             self.vars[16] = view            # v16 = la vista del ego (la logica 0 la vuelve a poner con set.view.v en cada sala nueva)
         self.loops(view)
-        o.loop = o.cel = 0 if not o.drawn else min(o.loop, 0)
-        self.cell(o)
+        self.cell(o)                    # el bucle y la celda se conservan (cell los ajusta si la vista nueva no los tiene), como en AGI
 
     def c_set_view_v(self, n, v): self.c_set_view(n, self.vars[v])
 

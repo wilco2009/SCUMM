@@ -245,10 +245,7 @@ sv_set:         ld (ix+O_VIEW),a
                 jr nz,sv_nv
                 ld a,c                  ; v16 = la vista del ego
                 ld (VARS+16),a
-sv_nv:          xor a
-                ld (ix+O_LOOP),a
-                ld (ix+O_CEL),a
-                jp obj_cell
+sv_nv:          jp obj_cell             ; el bucle y la celda se conservan (obj_cell los ajusta si la vista nueva no los tiene), como en AGI: SQ1 pone set.loop y luego set.view
 h_set_view_v:   call argobj
                 ld a,(ARGS+1)
                 call getv
