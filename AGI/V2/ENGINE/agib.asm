@@ -2271,7 +2271,7 @@ s_empty:        defb "(empty)",0
 s_room:         defb "Room ",0
 s_score2:       defb "  Score ",0
 sf_tab:         defw VARS,256, FLAGS,256, INV,256, KEYMAP,256, OBJ,1024, STRS,492
-                defw horizon,1, blk,5, pctl,1, lastpic,1, mg_n,33, st_on,1, tfg,2, accin,1, ticks,1
+                defw horizon,1, blk,5, pctl,1, lastpic,2, mg_n,33, st_on,1, tfg,2, accin,1, ticks,1
                 defw 0
 sf_mode:        defb 0
 sf_h:           defb 0

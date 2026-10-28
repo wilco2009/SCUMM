@@ -4,7 +4,7 @@
 ;  draw.pic lee PICnnn.GFX (TOOLS/agi2hr.py): el visual en HiRes 8x1 va a $A000 (bitmap) y $C000 (atributos), desplazado 8 lineas
 ;  (la fila 0 es la de estado); la prioridad (160x168, RLE por filas) se queda en la pagina PG_PRI con un indice de filas delante,
 ;  y can_be_here la consulta para las lineas de control (0 bloquea, 2 aviso, 3 agua) como el modelo de Python.
-;  overlay.pic aun no esta (el .GFX es una imagen entera, no un trazo): se ignora.
+;  overlay.pic (solo KQ1): la imagen de la sala con el overlay ya aplicado es otro .GFX (PICAnn.GFX, ver agi2hr.py) que se carga como una imagen normal.
 ; =====================================================================
 
 HR_BM           equ $A000
@@ -14,11 +14,20 @@ PRI_RLE         equ LWIN+336            ; el RLE empieza tras el indice de 168 f
 PRI_MAX         equ 7800
 
 h_draw_pic:     call clr_static
+                xor a
+                ld (ovl_on),a
                 ld a,(ARGS)
                 call getv
                 ld (lastpic),a
 dp_num:         call mk_nm3             ; (dp_num: A = imagen; lo usa cargar partida)
-                ld hl,nm3
+                ld a,(ovl_on)           ; con overlay.pic: PICAnn.GFX (la cifra de las centenas pasa a letra: 0 -> A, 1 -> B, 2 -> C)
+                or a
+                jr z,dp_o
+                ld hl,nm3+7
+                ld a,(hl)
+                add a,17
+                ld (hl),a
+dp_o:           ld hl,nm3
                 call f_open
                 cp $FF
                 jr nz,lp_o

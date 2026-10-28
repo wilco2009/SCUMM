@@ -21,7 +21,9 @@
 TXT             equ TMPM
 
 ; El estado del juego vuelve al del arranque (lo de init que no son ficheros ni los punteros de pruebas); la logica en curso se sale sola (exitall)
-t_restart:      call h_stop_sound
+t_restart:      xor a
+                ld (ovl_on),a
+                call h_stop_sound
                 ld hl,LGSLOT
                 ld de,LGSLOT+1
                 ld bc,255

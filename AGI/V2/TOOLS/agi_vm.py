@@ -86,6 +86,7 @@ class Interp:
         self.spans = []                 # add.to.pic: (fila 0 de la celda, prioridad, [(ax0, ax1) por fila])
         self.span_rows = 0
         self.pics_used = set()
+        self.ovl_pairs = set()
         self.use_pic = os.environ.get('AGI_NOPIC') != '1'     # AGI_NOPIC=1: sin el plano de prioridad (lo que modela el Z80 por etapas)
         self.inv = [r for _, r, _ in ag.objects(path)]
         self.inv_names = [n for _, _, n in ag.objects(path)]
@@ -161,6 +162,7 @@ class Interp:
             d = self.g.resource('LOG', n)
             if d is None:
                 raise Stop('logica %d inexistente' % n)
+            d = ag.testboot(n, d)
             size = d[0] | (d[1] << 8)
             try:
                 msgs = ag.help_override(self.path, n, ag.logic_messages(d))
@@ -372,6 +374,7 @@ class Interp:
     wtext = []
     rs_keep = False
     txtm = False                # pantalla de texto (text.screen)
+    ovl_n = None                # overlay.pic aplicado a lastpic
     hk_seen = False             # have.key sin tecla ya llamado en este ciclo
 
     def msg(self, n):
@@ -648,6 +651,7 @@ class Interp:
         n = self.vars[v]
         self.pics_used.add(n)
         self.lastpic = n
+        self.ovl_n = None
         d = self.g.resource('PIC', n)
         if d is None:
             raise Stop('imagen %d inexistente' % n)
@@ -707,9 +711,18 @@ class Interp:
 
     def c_add_to_pic_v(self, *a): self.c_add_to_pic(*[self.vars[i] for i in a])
 
+    def build_pic(self):
+        """La imagen de lastpic y, si la tiene, su overlay.pic (que se dibuja encima sin borrar)."""
+        p = ag.Picture(self.g.resource('PIC', self.lastpic))
+        if self.ovl_n is not None:
+            p = ag.Picture(self.g.resource('PIC', self.ovl_n), p)
+        return p
+
     def c_overlay_pic(self, v):
-        d = self.g.resource('PIC', self.vars[v])
-        self.pic = ag.Picture(d, self.pic)
+        """La imagen de la sala con la superpuesta ya hecha (PICpnn.GFX en el Z80): se redibuja como graphics (los textos y los objetos fijos se rehacen)."""
+        self.ovl_n = self.vars[v]
+        self.ovl_pairs.add((self.lastpic, self.ovl_n))
+        self.c_graphics()
 
     # ------------------------------------------------------------ objetos animados
     def c_animate_obj(self, n):
@@ -978,7 +991,7 @@ class Interp:
     def c_show_obj_v(self, v): self.c_show_obj(self.vars[v])
 
     RESTART_FIELDS = ('vars', 'flags', 'strs', 'objs', 'inv', 'keys', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'horizon', 'blocks', 'pcontrol',
-                      'lastpic', 'status_on', 'st_last', 'tfg', 'tbg', 'accept', 'sound_flags', 'input', 'said_done', 'keyq', 'textq', 'ctl', 'wtext', 'ext_bm', 'ext_at', 'box')
+                      'lastpic', 'ovl_n', 'status_on', 'st_last', 'tfg', 'tbg', 'accept', 'sound_flags', 'input', 'said_done', 'keyq', 'textq', 'ctl', 'wtext', 'ext_bm', 'ext_at', 'box')
 
     def c_restart_game(self):
         """Confirmacion (ENTER reinicia, ESC sigue); el estado vuelve al del arranque y se sale de la logica en curso."""
@@ -1031,7 +1044,7 @@ class Interp:
 
     def c_graphics(self):
         self.txtm = False
-        self.pic = ag.Picture(self.g.resource('PIC', self.lastpic))
+        self.pic = self.build_pic()
         self.pic_ops = []
         self.spans = []
         self.span_rows = 0
@@ -1217,7 +1230,7 @@ class Interp:
     def snapshot(self):
         import copy
         return copy.deepcopy(dict(vars=self.vars, flags=self.flags, strs=self.strs, inv=self.inv, keys=self.keys, objs=self.objs, horizon=self.horizon, blocks=self.blocks,
-                                  pcontrol=self.pcontrol, lastpic=self.lastpic, margins=self.margins, status_on=self.status_on, tfg=self.tfg, tbg=self.tbg,
+                                  pcontrol=self.pcontrol, lastpic=self.lastpic, ovl_n=self.ovl_n, margins=self.margins, status_on=self.status_on, tfg=self.tfg, tbg=self.tbg,
                                   accept=self.accept, ticks=self.ticks))
 
     def c_save_game(self): self.save_load(False)
@@ -1250,7 +1263,7 @@ class Interp:
         self.inv[:] = st['inv']
         self.keys = st['keys']
         self.objs = st['objs']
-        for k in ('horizon', 'blocks', 'pcontrol', 'lastpic', 'margins', 'status_on', 'tfg', 'tbg', 'accept', 'ticks'):
+        for k in ('horizon', 'blocks', 'pcontrol', 'lastpic', 'ovl_n', 'margins', 'status_on', 'tfg', 'tbg', 'accept', 'ticks'):
             setattr(self, k, st[k])
         self.flags[6] = 1
         self.rs_keep = True
@@ -1259,7 +1272,7 @@ class Interp:
                 it[2] = True
         self.st_last = None
         self.pics_used.add(self.lastpic)
-        self.pic = ag.Picture(self.g.resource('PIC', self.lastpic))
+        self.pic = self.build_pic()
         self.pic_ops = []
         self.spans = []
         self.span_rows = 0
@@ -1666,7 +1679,7 @@ def main(argv):
     it.play(cycles, parse_script(script))
     if lp:
         with open(lp, 'w') as f:
-            f.write(' '.join(str(n) for n in sorted(it.pics_used)))
+            f.write(' '.join([str(n) for n in sorted(it.pics_used)] + ['%d+%d' % p for p in sorted(it.ovl_pairs)]))
     if tr:
         with open(tr, 'w') as f:
             for n, p in it.trace:

@@ -132,6 +132,20 @@ def help_override(path, n, msgs):
     return msgs
 
 
+def testboot(n, d):
+    """Solo para pruebas (variable de entorno AGI_BOOT="v80=6,room=6"): codigo inyectado al principio de la logica 0 (asignaciones y new.room); igual en agi2log.py."""
+    spec = os.environ.get('AGI_BOOT', '')
+    if n != 0 or not spec:
+        return d
+    code = bytearray()
+    for it in spec.split(','):
+        k, val = it.split('=')
+        code += bytes((18, int(val))) if k == 'room' else bytes((3, int(k[1:]), int(val)))
+    code = bytes((0xFF, 0x01, 0, 0, 0xFF, len(code) & 255, len(code) >> 8)) + bytes(code)       # if (equaln(v0, 0)) { ... }: solo al arrancar
+    size = (d[0] | (d[1] << 8)) + len(code)
+    return bytes((size & 255, size >> 8)) + code + bytes(d[2:])
+
+
 def logic_messages(d):
     """Mensajes de una logica: lista (indice 1..n) de cadenas."""
     code = d[0] | (d[1] << 8)

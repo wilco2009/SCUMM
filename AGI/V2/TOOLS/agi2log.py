@@ -59,6 +59,7 @@ def main(argv):
         d = g.resource('LOG', n)
         if d is None:
             continue
+        d = ag.testboot(n, d)
         agl, msg = convert(d, (argv[1], n))
         with open(sub(argv[2], 'LOG', 'LOG%03d.AGL' % n), 'wb') as f:
             f.write(agl)

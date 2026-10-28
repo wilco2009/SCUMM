@@ -209,6 +209,34 @@ def read_back(data):
     return rows, unrle_priority(pr), unrle_priority(p2)
 
 
+def ovl_name(base):
+    """PICAnn.GFX: la imagen `base` con su overlay.pic ya aplicado; la cifra de las centenas pasa a letra (0 -> A, 1 -> B, 2 -> C): lo hace dp_num en agipic.asm."""
+    s = '%03d' % base
+    return 'PIC%s%s.GFX' % (chr(ord(s[0]) + 17), s[1:])
+
+
+def overlay_pairs(g):
+    """{imagen de la sala: imagen superpuesta} de las logicas que llaman a overlay.pic(vX) (la sala N tiene la logica N y su imagen N; vX se asigna con assignn)."""
+    import re
+    import agi_logic
+    pairs = {}
+    for n in g.present('LOG'):
+        try:
+            txt = [t for _, t, _ in agi_logic.Logic(g.resource('LOG', n)).ins]
+        except Exception:
+            continue
+        for t in txt:
+            m = re.match(r'overlay\.pic\(v(\d+)\)', t)
+            if not m:
+                continue
+            for u in txt:
+                a = re.match(r'assignn\(v%s, (\d+)\)' % m.group(1), u)
+                if a:
+                    assert pairs.setdefault(n, int(a.group(1))) == int(a.group(1)), 'logica %d: dos overlay.pic distintos' % n
+                    break
+    return pairs
+
+
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith('--')]
     png = '--png' in argv
@@ -218,7 +246,8 @@ def main(argv):
     g = ag.Game(args[0])
     out = args[1]
     os.makedirs(os.path.join(out, 'PIC'), exist_ok=True)
-    sel = [int(a) for a in args[2:]] or g.present('PIC')
+    sel = [int(a) for a in args[2:] if '+' not in a] or ([] if any('+' in a for a in args[2:]) else g.present('PIC'))
+    pairs = [tuple(int(x) for x in a.split('+')) for a in args[2:] if '+' in a] or (list(overlay_pairs(g).items()) if not args[2:] else [])
     tot = bad = n = 0
     sizes = []
     for k in sel:
@@ -242,6 +271,19 @@ def main(argv):
         bad += b
         n += 1
         sizes.append(len(data))
+    for base, ov in pairs:                      # overlay.pic: la imagen de la sala con la superpuesta ya aplicada
+        d1, d2 = g.resource('PIC', base), g.resource('PIC', ov)
+        if d1 is None or d2 is None:
+            continue
+        pic = ag.Picture(d2, ag.Picture(d1))
+        data, rec, b = build(pic)
+        rows, pri, pri2 = read_back(data)
+        assert rows == rec and pri == pic.pri and pri2 == sprite_priority(pic.pri), 'PIC %d+%d: el fichero no reproduce la conversion' % (base, ov)
+        with open(os.path.join(out, 'PIC', ovl_name(base)), 'wb') as f:
+            f.write(data)
+        if png:
+            ag.write_png(os.path.join(out, 'ovl%03d.png' % base), [[CHROMA[v] for v in r] for r in rec], HW, H)
+        print('overlay.pic %d + %d -> %s (%d bytes)' % (base, ov, ovl_name(base), len(data)))
     print('%s: %d imagenes, %d bytes en total (media %d, maximo %d); pixeles cambiados %.2f%%; verificadas contra el fichero' % (
         os.path.basename(args[0].rstrip('/\\')), n, sum(sizes), sum(sizes) // max(n, 1), max(sizes), 100.0 * bad / max(tot, 1)))
     return 0

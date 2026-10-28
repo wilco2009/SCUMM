@@ -143,3 +143,11 @@ Sonido: AGI solo reproduce un sonido a la vez (`sound()` para el que suene), asi
 - **Rotulos anchos**: `spp_pl` (agisw.asm) lleva el estado de la celda en registros en vez de llamar a `plot` por pixel (mismo resultado): la intro de SQ1 baja un 18 % (17,5 -> 14,4 millones de T-estados en los ciclos 1-248); queda margen (el bucle por pixeles sigue siendo la mitad del coste de los rotulos).
 - **Regla de overlays**: un bucle que espera fotogramas o teclas (llama a `wait_frame`/`OVL_KPOLL`, del overlay A) no puede estar en B ni en C: se pierde (reinicio de la maquina). Va en el nucleo, que tiene un tope: `agivm.bin` <= 11008 bytes (lo comprueban `test_vm.sh` y `compilavm.bat`).
 
+## overlay.pic (2026-10-28, solo lo usa KQ1)
+
+- KQ1 llama a `overlay.pic(v92)` en las salas 6, 22, 31, 35 y 38 (siempre la imagen 84: la habichuela) cuando `v80 == 6`. `agi2hr.py` detecta esas parejas (la sala N tiene la logica N y la imagen N; `v92` se asigna con `assignn` en la misma logica) y escribe `PIC/PICAnn.GFX` (A = centenas 0, B = 1, C = 2): la imagen de la sala con la 84 ya dibujada encima (`Picture(overlay, base)`), con su prioridad y todo. Una sala con dos overlay distintos daria error al convertir.
+- Z80: `overlay.pic` pone `ovl_on` y hace lo que `graphics` (`rd_pic`): `dp_num` carga `PICAnn.GFX` en vez de `PICnnn.GFX`; los objetos fijos se rehacen. `draw.pic` y `restart.game` limpian `ovl_on`. **Las partidas guardadas ahora llevan 1 byte mas** (`ovl_on` va justo despues de `lastpic` en `sf_tab`): las guardadas con versiones anteriores no valen.
+- Modelo: `ovl_n` (+ `build_pic`); `--listpics` escribe tambien `base+overlay`, y `test_vm.sh` los convierte.
+- Prueba: `AGI_BOOT="v80=6,room=6" sh test_vm.sh KQ1 40 ""` (gancho de pruebas `agi_read.testboot`: inyecta `if (v0 == 0) { v80 = 6; new.room(6) }` al principio de la logica 0, en el modelo y en `agi2log.py`): Z80 y modelo iguales, con la habichuela.
+- El nucleo queda en 11001 de 11008 bytes.
+
