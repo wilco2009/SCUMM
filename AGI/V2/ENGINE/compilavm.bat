@@ -29,6 +29,7 @@ python -I ..\TOOLS\mkevents.py %T%\DATA\EVENTS.BIN 0 "" || goto error
 set S=%BASE%\AGI\V2
 set D=%S%\%G%
 if not exist "%D%" mkdir "%D%"
+if not exist "%D%\SAV" mkdir "%D%\SAV"
 copy /y agivm.bin "%S%\AGIVM.BIN" >nul || goto error
 copy /y AGIVM.B81 "%D%\AGIVM.B81" >nul || goto error
 rem los datos van por carpetas (LOG, PIC, SPR, SND, VIEW, DATA); en la del juego solo queda el BASIC y se quitan los ficheros sueltos de versiones anteriores

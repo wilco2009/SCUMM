@@ -16,7 +16,8 @@ PRI_MAX         equ 7800
 h_draw_pic:     call clr_static
                 ld a,(ARGS)
                 call getv
-                call mk_nm3
+                ld (lastpic),a
+dp_num:         call mk_nm3             ; (dp_num: A = imagen; lo usa cargar partida)
                 ld hl,nm3
                 call f_open
                 cp $FF

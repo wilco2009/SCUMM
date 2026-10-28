@@ -75,6 +75,8 @@ class Interp:
         self.views = {}
         self.pics = {}
         self.pic = None
+        self.saves = {}                 # ranura -> (descripcion, estado)
+        self.lastpic = 0
         self.menus = []                 # [titulo, [[texto, controlador, activado]]]
         self.menu_ui = None
         self.margins = []
@@ -625,6 +627,7 @@ class Interp:
     def c_draw_pic(self, v):
         n = self.vars[v]
         self.pics_used.add(n)
+        self.lastpic = n
         d = self.g.resource('PIC', n)
         if d is None:
             raise Stop('imagen %d inexistente' % n)
@@ -1017,17 +1020,23 @@ class Interp:
                     it[2] = False
 
     def c_menu_input(self):
-        """Modal como print: cada vuelta es un ciclo; las flechas (cambios de la direccion a 1, 3, 5, 7) mueven, ENTER elige (enciende el controlador del elemento si
-        esta activado) y ESC cierra; la tecla no llega a la logica."""
         if not self.menus or not self.flags[14]:
             return                      # f14: los menus estan disponibles (el juego lo enciende al salir de la intro)
         if self.keyq and self.keyq[-1] in self.keys:
             self.keyq.pop()             # la tecla que lo abre (un controlador) no llega a have.key
             self.vars[19] = 0
+        r = self.menu_loop()
+        if r is not None:
+            self.ctl.add(r)
+
+    def menu_loop(self):
+        """Modal como print: cada vuelta es un ciclo; las flechas (cambios de la direccion a 1, 3, 5, 7) mueven, ENTER elige (devuelve el controlador del elemento si
+        esta activado) y ESC cierra (None); la tecla no llega a la logica."""
         sel = it = 0
         self.menu_ui = [sel, it]
         n0, v19 = len(self.keyq), self.vars[19]
         prev = self.dirhold
+        res = None
         done = False
         while not done:
             self.cycle += 1
@@ -1053,12 +1062,68 @@ class Interp:
                 if k == 27:
                     done = True
                 elif k == 13 and self.menus[sel][1] and self.menus[sel][1][it][2]:
-                    self.ctl.add(self.menus[sel][1][it][1])
+                    res = self.menus[sel][1][it][1]
                     done = True
         del self.keyq[n0:]
         self.vars[19] = v19
         self.menu_ui = None
         self.st_last = None
+        return res
+
+    # ------------------------------------------------------------ guardar y cargar partida
+    def snapshot(self):
+        import copy
+        return copy.deepcopy(dict(vars=self.vars, flags=self.flags, strs=self.strs, inv=self.inv, keys=self.keys, objs=self.objs, horizon=self.horizon, blocks=self.blocks,
+                                  pcontrol=self.pcontrol, lastpic=self.lastpic, margins=self.margins, status_on=self.status_on, tfg=self.tfg, tbg=self.tbg,
+                                  accept=self.accept, ticks=self.ticks))
+
+    def c_save_game(self): self.save_load(False)
+    def c_restore_game(self): self.save_load(True)
+
+    def save_load(self, load):
+        """La lista de 9 ranuras es un menu de una sola entrada con el bucle de menu.input; las partidas se guardan en self.saves (el Z80, en SAV/GAMEn.SAV)."""
+        items = []
+        for n in range(1, 10):
+            s = self.saves.get(n)
+            items.append(['%d %s' % (n, s[0] if s else '(empty)'), n, (s is not None) if load else True])
+        real = self.menus
+        self.menus = [['Restore game' if load else 'Save game', items]]
+        try:
+            r = self.menu_loop()
+        finally:
+            if self.cycle <= self.max_cycles:
+                self.menus = real
+        if r is None:
+            return
+        if not load:
+            self.saves[r] = ('Room %d  Score %d' % (self.vars[0], self.vars[3]), self.snapshot())
+            return
+        import copy
+        st = copy.deepcopy(self.saves[r][1])
+        self.snd_stop()
+        self.vars[:] = st['vars']
+        self.flags[:] = st['flags']
+        self.strs[:] = st['strs']
+        self.inv[:] = st['inv']
+        self.keys = st['keys']
+        self.objs = st['objs']
+        for k in ('horizon', 'blocks', 'pcontrol', 'lastpic', 'margins', 'status_on', 'tfg', 'tbg', 'accept', 'ticks'):
+            setattr(self, k, st[k])
+        self.flags[6] = 1
+        for t, its in self.menus:
+            for it in its:
+                it[2] = True
+        self.st_last = None
+        self.pics_used.add(self.lastpic)
+        self.pic = ag.Picture(self.g.resource('PIC', self.lastpic))
+        self.pic_ops = []
+        self.spans = []
+        self.span_rows = 0
+        for k in sorted(self.objs):
+            o = self.objs[k]
+            if k >= 24 and o.static and o.anim:
+                self.add_spans(o)
+        self.exit_all = True
 
     def draw_menu(self, sb, sa):
         import agi2hr

@@ -28,6 +28,9 @@
                 jp t_menunav            ; OVB_MENUNAV
                 jp t_menusel            ; OVB_MENUSEL
                 jp t_menuclose          ; OVB_MENUCLOSE
+                jp t_dlgsave            ; OVB_DLGSAVE
+                jp t_dlgload            ; OVB_DLGLOAD
+                jp t_dlgdone            ; OVB_DLGDONE
 
 TXT             equ TMPM
 
@@ -1067,9 +1070,9 @@ tb_n:           defb 0
 ;  elementos en las filas 1... (el elegido en inverso, los desactivados en gris), alineada a la celda del titulo sin salirse; al cerrar se devuelve la imagen limpia
 ;  (t_boxclose) y la barra de estado. Mismo resultado que Interp.draw_menu() de TOOLS/agi_vm.py.
 ; ---------------------------------------------------------------------
-MN_MAX          equ 8
-IT_MAX          equ 48
-MP_SIZE         equ 1100
+MN_MAX          equ 10
+IT_MAX          equ 60
+MP_SIZE         equ 1500
 MP_LIM          equ mp_pool+MP_SIZE-40
 
 ; mensaje ARGS[0] -> a la reserva (mp_last = donde queda); C si no cabe
@@ -1087,7 +1090,7 @@ mt_ok:          ld a,(ARGS)
                 ld de,TXT
                 ld c,250
                 call build_str
-                ld hl,(mp_free)
+mp_cp:          ld hl,(mp_free)         ; TXT a la reserva
                 ld (mp_last),hl
                 ld de,TXT
                 ld b,36
@@ -1209,6 +1212,9 @@ en_n:           inc hl
 ; Columna del titulo elegido (m_col), elementos (m_first, m_cnt), el texto mas largo (m_max), m_w = ancho en caracteres y el rectangulo de la lista (pr_*)
 mn_geom:        xor a
                 ld (m_col),a
+                ld a,(m_only)
+                cp 255
+                jr nz,mg_c0
                 ld a,(m_sel)
                 or a
                 jr z,mg_c0
@@ -1321,11 +1327,21 @@ mn_bar:         ld a,1
                 ld (dl_row),a
                 ld a,15
                 call fill_row
-                xor a
+                ld a,(mn_n)
+                ld (m_je),a
+                ld a,(m_only)
+                cp 255
+                jr z,mb_a
                 ld (m_j),a
+                inc a
+                ld (m_je),a
+                jr mb_b
+mb_a:           xor a
+                ld (m_j),a
+mb_b:           xor a
                 ld (m_c2),a
 mb_l:           ld a,(m_j)
-                ld hl,mn_n
+                ld hl,m_je
                 cp (hl)
                 jr nc,mb_e
                 call mn_pa
@@ -1520,8 +1536,12 @@ t_menuopen:     ld a,(mn_n)
 mo_ok:          ld a,255
                 ld (mn_res),a
                 xor a
-                ld (m_sel),a
                 ld (m_it),a
+                ld a,(m_only)
+                cp 255
+                jr nz,mo_sx
+                xor a
+mo_sx:           ld (m_sel),a
                 call mn_bar
                 jp mn_drop
 
@@ -1561,7 +1581,10 @@ nv_u:           ld a,(m_cnt)
                 ld a,(m_cnt)
 nv_u1:          dec a
                 jr nv_i
-nv_l:           ld a,(mn_n)
+nv_l:           ld a,(m_only)
+                cp 255
+                jr nz,nv_m
+                ld a,(mn_n)
                 ld b,a
                 ld a,(m_sel)
                 or a
@@ -1569,7 +1592,10 @@ nv_l:           ld a,(mn_n)
                 ld a,b
 nv_l1:          dec a
                 jr nv_m
-nv_r:           ld a,(mn_n)
+nv_r:           ld a,(m_only)
+                cp 255
+                jr nz,nv_m
+                ld a,(mn_n)
                 ld b,a
                 ld a,(m_sel)
                 inc a
@@ -1620,8 +1646,13 @@ mc_off:         xor a
 
 mn_n:           defb 0
 it_n:           defb 0
+bk_mn:          defb 0
+bk_it:          defb 0
+bk_mp:          defw 0
 en_v:           defb 0
 m_sel:          defb 0
+m_only:         defb 255                ; menu unico (guardar / cargar) o 255
+m_je:           defb 0
 m_it:           defb 0
 m_col:          defb 0
 m_first:        defb 0
@@ -1640,6 +1671,420 @@ mp_last:        defw 0
 mn_tab:         defs 4*MN_MAX
 it_tab:         defs 4*IT_MAX
 mp_pool:        defs MP_SIZE
+
+; ---------------------------------------------------------------------
+;  Guardar y cargar partida. SAV/GAMEn.SAV (n = 1-9): 32 bytes de descripcion ("Room n  Score m") y los bloques de sf_tab (direccion, largo).
+;  La lista de ranuras se arma como un menu de una sola entrada (m_only) al final de las tablas de menus y t_dlgdone la quita.
+; ---------------------------------------------------------------------
+CMD_FWRITE      equ 56
+CMD_FCREATE     equ 71
+
+t_dlgsave:      xor a
+                jr dg_go
+t_dlgload:      ld a,1
+dg_go:          ld (sf_mode),a
+                call dg_read
+                jp dg_menu
+
+; las descripciones de las 9 ranuras (sf_desc) y si existen (sf_ex)
+dg_read:        ld a,1
+                ld (dg_i),a
+dr_l:           ld a,(dg_i)
+                add a,'0'
+                ld (sf_nm+8),a
+                ld hl,sf_nm
+                call f_open
+                cp $FF
+                jr z,dr_no
+                ld (sf_h),a
+                call dg_dptr
+                ld bc,32
+                ld a,(sf_h)
+                call f_read_n
+                ld a,(sf_h)
+                call f_close
+                ld a,1
+                jr dr_s
+dr_no:          call dg_dptr
+                ex de,hl
+                ld hl,s_empty
+dr_c:           ld a,(hl)
+                ld (de),a
+                inc hl
+                inc de
+                or a
+                jr nz,dr_c
+                xor a
+dr_s:           push af
+                ld a,(dg_i)
+                dec a
+                ld e,a
+                ld d,0
+                ld hl,sf_ex
+                add hl,de
+                pop af
+                ld (hl),a
+                ld hl,dg_i
+                inc (hl)
+                ld a,(hl)
+                cp 10
+                jr c,dr_l
+                ret
+
+; HL = sf_desc + 32 * (dg_i - 1)
+dg_dptr:        ld a,(dg_i)
+                dec a
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld de,sf_desc
+                add hl,de
+                ret
+
+; HL = cadena acabada en 0 -> TXT
+dg_cp:          ld de,TXT
+dg_c2:          ld a,(hl)
+                ld (de),a
+                inc hl
+                inc de
+                or a
+                jr nz,dg_c2
+                ret
+
+dg_menu:        ld a,(mn_n)
+                ld (bk_mn),a
+                ld a,(it_n)
+                ld (bk_it),a
+                ld hl,(mp_free)
+                ld (bk_mp),hl
+                ld hl,s_sav
+                ld a,(sf_mode)
+                or a
+                jr z,dg_t
+                ld hl,s_rst
+dg_t:           call dg_cp
+                call mp_cp
+                ld a,(mn_n)
+                ld (m_only),a
+                call mn_pa
+                ld de,(mp_last)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                ld a,(it_n)
+                ld (hl),a
+                inc hl
+                ld (hl),0
+                ld hl,mn_n
+                inc (hl)
+                ld a,1
+                ld (dg_i),a
+dg_il:          ld hl,TXT
+                ld a,(dg_i)
+                add a,'0'
+                ld (hl),a
+                inc hl
+                ld (hl),' '
+                call dg_dptr
+                ld de,TXT+2
+dg_c:           ld a,(hl)
+                ld (de),a
+                inc hl
+                inc de
+                or a
+                jr nz,dg_c
+                call mp_cp
+                ld a,(it_n)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                ld de,it_tab
+                add hl,de
+                ld (dg_ep),hl
+                ld de,(mp_last)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                ld a,(dg_i)
+                ld (hl),a
+                ld a,(sf_mode)
+                or a
+                ld a,1
+                jr z,dg_e
+                ld a,(dg_i)
+                dec a
+                ld e,a
+                ld d,0
+                ld hl,sf_ex
+                add hl,de
+                ld a,(hl)
+dg_e:           ld hl,(dg_ep)
+                inc hl
+                inc hl
+                inc hl
+                ld (hl),a
+                ld hl,it_n
+                inc (hl)
+                ld a,(mn_n)
+                dec a
+                call mn_pa
+                inc hl
+                inc hl
+                inc hl
+                inc (hl)
+                ld hl,dg_i
+                inc (hl)
+                ld a,(hl)
+                cp 10
+                jr c,dg_il
+                ret
+
+; despues del bucle de menu: se quita la lista y, si se eligio una ranura (mn_res), se guarda o se carga (sv_ok = 1 si se ha cargado)
+t_dlgdone:      xor a
+                ld (sv_ok),a
+                ld a,(bk_mn)
+                ld (mn_n),a
+                ld a,(bk_it)
+                ld (it_n),a
+                ld hl,(bk_mp)
+                ld (mp_free),hl
+                ld a,255
+                ld (m_only),a
+                ld a,(mn_res)
+                cp 255
+                ret z
+                add a,'0'
+                ld (sf_nm+8),a
+                ld a,(sf_mode)
+                or a
+                jp z,sf_save
+                jp sf_load
+
+sf_save:        ld hl,sf_nm
+                call f_create
+                cp $FF
+                ret z
+                ld (sf_h),a
+                call sf_mkdesc
+                xor a
+                ld (wf_err),a
+                ld a,(sf_h)
+                ld hl,sf_buf
+                ld bc,32
+                call f_write_n
+                ld hl,sf_tab
+sw_l:           ld e,(hl)
+                inc hl
+                ld d,(hl)
+                inc hl
+                ld c,(hl)
+                inc hl
+                ld b,(hl)
+                inc hl
+                ld a,d
+                or e
+                jr z,sw_d
+                push hl
+                ex de,hl
+                ld a,(sf_h)
+                call f_write_n
+                pop hl
+                jr sw_l
+sw_d:           ld a,(sf_h)
+                jp f_close
+
+sf_load:        ld hl,sf_nm
+                call f_open
+                cp $FF
+                ret z
+                ld (sf_h),a
+                call h_stop_sound       ; el sonido que suene se para (antes de cambiar las banderas)
+                ld a,(sf_h)
+                ld hl,sf_buf
+                ld bc,32
+                call f_read_n
+                ld hl,sf_tab
+sl_l:           ld e,(hl)
+                inc hl
+                ld d,(hl)
+                inc hl
+                ld c,(hl)
+                inc hl
+                ld b,(hl)
+                inc hl
+                ld a,d
+                or e
+                jr z,sl_d
+                push hl
+                ex de,hl
+                ld a,(sf_h)
+                call f_read_n
+                pop hl
+                jr sl_l
+sl_d:           ld a,(sf_h)
+                call f_close
+                ld a,1
+                ld (FLAGS+6),a          ; restore.game acaba de ejecutarse
+                ld (sv_ok),a
+                xor a
+                ld (st_valid),a         ; la barra de estado se redibuja
+                ld a,(it_n)             ; los menus vuelven a estar activados
+                or a
+                ret z
+                ld b,a
+                ld hl,it_tab+3
+sl_e:           ld (hl),1
+                inc hl
+                inc hl
+                inc hl
+                inc hl
+                djnz sl_e
+                ret
+
+; "Room n  Score m" (con la sala v0 y los puntos v3) en sf_buf, 32 bytes
+sf_mkdesc:      ld hl,sf_buf
+                ld de,sf_buf+1
+                ld bc,31
+                ld (hl),0
+                ldir
+                ld hl,sf_buf
+                ld de,s_room
+                call sd_cp
+                ld a,(VARS)
+                call sd_dec
+                ld de,s_score2
+                call sd_cp
+                ld a,(VARS+3)
+                jp sd_dec
+sd_cp:          ld a,(de)
+                or a
+                ret z
+                ld (hl),a
+                inc hl
+                inc de
+                jr sd_cp
+sd_dec:         ld d,0
+                ld b,100
+                call sd_d1
+                ld b,10
+                call sd_d1
+                add a,'0'
+                ld (hl),a
+                inc hl
+                ret
+sd_d1:          ld c,'0'-1
+sdd_l:           inc c
+                sub b
+                jr nc,sdd_l
+                add a,b
+                ld b,a
+                ld a,c
+                cp '0'
+                jr nz,sd_w
+                ld a,d
+                or a
+                jr z,sd_s
+                ld a,'0'
+sd_w:           ld (hl),a
+                inc hl
+                ld d,1
+sd_s:           ld a,b
+                ret
+
+; HL = nombre acabado en 0 -> A = manejador ($FF si no se puede crear): crea el fichero o lo vacia
+f_create:       ld b,0
+                push hl
+fcr_l:          ld a,(hl)
+                or a
+                jr z,fcr_e
+                inc hl
+                inc b
+                jr fcr_l
+fcr_e:          pop hl
+                ld a,CMD_FCREATE
+                call mcu_send
+                ld a,b
+                call mcu_send
+                inc b
+                jr fcr_t
+fcr_s:          ld a,(hl)
+                inc hl
+                call mcu_send
+fcr_t:          djnz fcr_s
+                jp mcu_recv
+
+; A = manejador, HL = origen, BC = cuantos: en trozos de CHUNK
+f_write_n:      ld (wf_h),a
+                ld (wf_src),hl
+                ld (wf_cnt),bc
+fwn_l:          ld bc,(wf_cnt)
+                ld a,b
+                or c
+                ret z
+                ld hl,CHUNK
+                or a
+                sbc hl,bc
+                jr c,fwn_full
+                ld d,b
+                ld e,c
+                jr fwn_go
+fwn_full:       ld de,CHUNK
+fwn_go:         push de
+                ld a,CMD_FWRITE
+                call mcu_send
+                ld a,(wf_h)
+                call mcu_send
+                ld a,e
+                call mcu_send
+                ld a,d
+                call mcu_send
+                ld hl,(wf_src)
+fwn_b:          ld a,(hl)
+                inc hl
+                call mcu_send
+                dec de
+                ld a,d
+                or e
+                jr nz,fwn_b
+                ld (wf_src),hl
+                call mcu_recv
+                ld hl,wf_err
+                or (hl)
+                ld (hl),a
+                pop de
+                ld hl,(wf_cnt)
+                or a
+                sbc hl,de
+                ld (wf_cnt),hl
+                jr fwn_l
+
+sf_nm:          defb "SAV/GAME0.SAV",0
+s_sav:          defb "Save game",0
+s_rst:          defb "Restore game",0
+s_empty:        defb "(empty)",0
+s_room:         defb "Room ",0
+s_score2:       defb "  Score ",0
+sf_tab:         defw VARS,256, FLAGS,256, INV,256, KEYMAP,256, OBJ,1024, STRS,492
+                defw horizon,1, blk,5, pctl,1, lastpic,1, mg_n,33, st_on,1, tfg,2, accin,1, ticks,1
+                defw 0
+sf_mode:        defb 0
+sf_h:           defb 0
+dg_i:           defb 0
+dg_ep:          defw 0
+wf_h:           defb 0
+wf_err:         defb 0
+wf_src:         defw 0
+wf_cnt:         defw 0
+sf_buf:         defs 32
+sf_ex:          defs 9
+sf_desc:        defs 9*32
 
 FONT:
                 include "font6.inc"

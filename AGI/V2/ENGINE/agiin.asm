@@ -473,6 +473,9 @@ mi_nd:          ld a,(keyn)
                 cp 255
                 jr z,mi_idle            ; elemento desactivado
                 ld l,a
+                ld a,(mi_dlg)
+                or a
+                jr nz,mi_end            ; guardar/cargar: el resultado se queda en mn_res
                 ld h,CTL>>8
                 ld (hl),1
                 jr mi_end
@@ -489,6 +492,47 @@ mi_end:         ld a,(mi_k)
                 call call_b
                 jp OVL_FORCE
 mn_res:         defb 0
+mi_dlg:         defb 0
+sv_ok:          defb 0
+
+; save.game / restore.game: la lista de 9 ranuras es un menu de una sola entrada (overlay B, agib.asm) con el mismo bucle de menu.input; B lee y escribe los ficheros
+; SAV/GAMEn.SAV (el estado: variables, banderas, inventario, objetos, cadenas...) y aqui se rehace la imagen y los objetos fijos al cargar
+h_save_game:    ld hl,OVB_DLGSAVE
+                jr sg_go
+h_restore_game: ld hl,OVB_DLGLOAD
+sg_go:          call call_b
+                ld a,1
+                ld (mi_dlg),a
+                call mi_nk
+                xor a
+                ld (mi_dlg),a
+                ld a,(stopf)
+                or a
+                ret nz                  ; pruebas: se acabaron los ciclos, la lista se queda
+                ld hl,OVB_DLGDONE
+                call call_b
+                ld a,(sv_ok)
+                or a
+                ret z
+                call OVL_SPCLR          ; se carga: la imagen, los rangos de los objetos fijos y se sale de la logica
+                ld a,(lastpic)
+                call dp_num
+                ld ix,OBJ+24*32
+                ld b,8
+rp_l:           bit 2,(ix+O_F2)
+                jr z,rp_n
+                bit 0,(ix+O_F1)
+                jr z,rp_n
+                push bc
+                call OVL_ADDPIC
+                pop bc
+rp_n:           ld de,32
+                add ix,de
+                djnz rp_l
+                ld a,1
+                ld (exitall),a
+                call OVL_SPRINIT
+                jp OVL_FORCE
 mn_dir:         defb 0
 mi_k:           defb 0
 mi_v:           defb 0

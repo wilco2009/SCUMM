@@ -91,6 +91,9 @@ OVB_MENUOPEN    equ $202A
 OVB_MENUNAV     equ $202D
 OVB_MENUSEL     equ $2030
 OVB_MENUCLOSE   equ $2033
+OVB_DLGSAVE     equ $2036
+OVB_DLGLOAD     equ $2039
+OVB_DLGDONE     equ $203C
 MAXW            equ 6
 LPAGE0          equ 16
 NSLOTS          equ 8
@@ -1649,6 +1652,7 @@ fh:             defb 0
 errc:           defb 0
 stopf:          defb 0
 exitall:        defb 0
+lastpic:        defb 0                  ; la ultima imagen dibujada (para rehacerla al cargar una partida)
 nr_pend:        defb 0
 nr_val:         defb 0
 pctl:           defb 1
