@@ -954,7 +954,7 @@ class Interp:
 
     def c_show_obj_v(self, v): self.c_show_obj(self.vars[v])
 
-    RESTART_FIELDS = ('vars', 'flags', 'strs', 'objs', 'inv', 'keys', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'menus', 'menu_ui', 'horizon', 'blocks', 'pcontrol',
+    RESTART_FIELDS = ('vars', 'flags', 'strs', 'objs', 'inv', 'keys', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'horizon', 'blocks', 'pcontrol',
                       'lastpic', 'status_on', 'st_last', 'tfg', 'tbg', 'accept', 'sound_flags', 'input', 'said_done', 'keyq', 'textq', 'ctl', 'wtext', 'ext_bm', 'ext_at', 'box')
 
     def c_restart_game(self):
@@ -972,6 +972,7 @@ class Interp:
                 cur.update(nw)
             else:
                 setattr(self, k, nw)
+        self.flags[6] = 1                       # como AGI: la logica 0 conserva los menus y vuelve a la sala 2
         self.exit_all = True
 
     def c_print(self, m): self.do_print(self.msg(m)[:250], None, None, 0)

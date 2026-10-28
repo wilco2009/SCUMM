@@ -1428,8 +1428,8 @@ h_restart_game: ld a,2
                 ret nz                  ; ESC (o cualquier otra tecla): sigue la partida
                 ld hl,OVC_RESTART
                 call call_c
-                ld hl,OVB_MENURESET
-                call call_b
+                ld a,1
+                ld (FLAGS+6),a          ; la logica 0 conserva los menus y vuelve a la sala 2
                 call OVL_SPCLR
                 call ov_tail
                 ld a,1
