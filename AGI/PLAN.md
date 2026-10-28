@@ -117,3 +117,5 @@ Sprites reservados por objeto (2026-10-27, visto en el emulador: las puertas se 
 En la carpeta del juego (SD) solo queda `AGIVM.B81`; el resto va por tipos: `LOG/` (LOGnnn.AGL y .MSG), `PIC/` (PICnnn.GFX), `SPR/` (N%03d%d.SPR), `SND/` (SNDnnn.VGM), `VIEW/` y `DATA/` (INVROOM.BIN, SNDLEN.BIN, VIEWS.HDR, WORDS.BIN, EVENTS.BIN, OVERA.OVL, OVERB.OVL). Los generadores (`agi2log/hr/spr/snd.py`) escriben ya en esas subcarpetas de `dump/JUEGO/log`, el Z80 abre `LOG/LOG000.AGL` etc. (rutas relativas a la carpeta actual del MCU, que `fopen` y `PLAY_VGM` admiten) y `compilavm.bat` las copia con `xcopy` y borra los ficheros sueltos de versiones anteriores. El arnes de PC (`test_scumm.cpp`) abre primero la ruta relativa completa.
 
 Sonido: AGI solo reproduce un sonido a la vez (`sound()` para el que suene), asi que los VGM del MCU (uno a la vez) encajan sin solapes.
+
+- Teclas, menus y controladores pendientes de decidir: ver [TECLAS.md](TECLAS.md).
