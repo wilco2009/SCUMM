@@ -58,6 +58,8 @@ def main(argv):
     # inventario (sala de cada objeto) y duracion de los sonidos (1/60 s), para el Z80
     inv = bytearray(256)
     for i, room, _ in ag.objects(argv[1]):
+        if str(i) in os.environ.get('AGI_INV255', '').split(','):
+            room = 255                      # solo para pruebas: objetos que lleva el ego desde el principio
         if i < 256:
             inv[i] = room
     with open(sub(argv[2], 'DATA', 'INVROOM.BIN'), 'wb') as f:
@@ -70,6 +72,11 @@ def main(argv):
         t = vm.sound_ticks(n)
         snd[2 * n] = t & 255
         snd[2 * n + 1] = t >> 8
+    names = [n[:36] for n in vm.inv_names][:255]
+    blob = bytes([len(names)]) + b''.join(n.encode('latin-1', 'replace') + b'\x00' for n in names)
+    assert len(blob) <= 8192
+    with open(sub(argv[2], 'DATA', 'INVNAMES.BIN'), 'wb') as f:     # el numero de objetos y sus nombres, para la pantalla del inventario (status)
+        f.write(blob + bytes(8192 - len(blob)))
     with open(sub(argv[2], 'DATA', 'SNDLEN.BIN'), 'wb') as f:
         f.write(snd)
     # cabeceras de las vistas: 256 desplazamientos u16 (0 = no hay) y, por vista, nloops, celdas de cada bucle y (ancho, alto) de cada celda

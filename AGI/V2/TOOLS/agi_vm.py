@@ -65,6 +65,8 @@ class Obj:
 
 class Interp:
     def __init__(self, path, quiet=False):
+        self.path = path
+        self.last_key = 0
         self.g = ag.Game(path)
         self.quiet = quiet
         self.vars = [0] * 256
@@ -86,6 +88,9 @@ class Interp:
         self.use_pic = os.environ.get('AGI_NOPIC') != '1'     # AGI_NOPIC=1: sin el plano de prioridad (lo que modela el Z80 por etapas)
         self.inv = [r for _, r, _ in ag.objects(path)]
         self.inv_names = [n for _, _, n in ag.objects(path)]
+        for k in os.environ.get('AGI_INV255', '').split(','):          # solo para pruebas (igual en agi2log.py)
+            if k.isdigit() and int(k) < len(self.inv):
+                self.inv[int(k)] = 255
         self.words = ag.words(path)
         self.wmap = {}
         for w, n in self.words:
@@ -900,6 +905,75 @@ class Interp:
     def c_get_room_v(self, i, v): self.vars[v] = self.inv[self.vars[i]]
 
     # ------------------------------------------------------------ texto y cadenas
+    # ------------------------------------------------------------ pausa, inventario, ver objeto, reinicio
+    def c_pause(self):
+        self.do_print('Game paused.\n\nPress any key to continue.', None, None, 0)
+
+    def c_status(self):
+        """La ventana del inventario: lo que lleva el ego (objetos con la sala 255), uno por linea. Con la bandera 13 se elige uno (v25 = el objeto o 255): lista de un
+        menu de una sola entrada."""
+        names = [n[:36] for n in self.inv_names][:255]
+        if self.flags[13]:
+            items = [[n, i, True] for i, n in enumerate(names) if i < len(self.inv) and self.inv[i] == 255]
+            if items:
+                real = self.menus
+                self.menus = [['You are carrying', items]]
+                try:
+                    r = self.menu_loop()
+                finally:
+                    if self.cycle <= self.max_cycles:
+                        self.menus = real
+                self.vars[25] = 255 if r is None else r
+                return
+            self.vars[25] = 255
+        s = 'You are carrying:\n\n'
+        any_ = False
+        for i, n in enumerate(names):
+            if self.inv[i] == 255 if i < len(self.inv) else False:
+                if len(s) > 190:
+                    continue
+                s += n + '\n'
+                any_ = True
+        if not any_:
+            s += 'Nothing\n'
+        s += '\nPress any key to return\nto the game.'
+        self.do_print(s, None, None, 0)
+
+    def c_show_obj(self, n):
+        """La descripcion de la vista n (el dibujo no se muestra): la cadena a la que apuntan los bytes 3-4 del recurso."""
+        d = self.g.resource('VIEW', n)
+        if not d or len(d) < 5:
+            return
+        off = d[3] | (d[4] << 8)
+        if off == 0 or off >= len(d):
+            return
+        q = d.find(b'\x00', off)
+        s = bytes(d[off:q if q >= 0 else len(d)]).decode('latin-1')[:99]
+        if s:
+            self.do_print(s, None, None, 0)
+
+    def c_show_obj_v(self, v): self.c_show_obj(self.vars[v])
+
+    RESTART_FIELDS = ('vars', 'flags', 'strs', 'objs', 'inv', 'keys', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'menus', 'menu_ui', 'horizon', 'blocks', 'pcontrol',
+                      'lastpic', 'status_on', 'st_last', 'tfg', 'tbg', 'accept', 'sound_flags', 'input', 'said_done', 'keyq', 'textq', 'ctl', 'wtext', 'ext_bm', 'ext_at', 'box')
+
+    def c_restart_game(self):
+        """Confirmacion (ENTER reinicia, ESC sigue); el estado vuelve al del arranque y se sale de la logica en curso."""
+        self.do_print('Press ENTER to restart\nthe game.\n\nPress ESC to continue\nthis game.', None, None, 0)
+        if self.last_key != 13:
+            return
+        new = Interp(self.path, True)
+        for k in self.RESTART_FIELDS:           # los contenedores se cambian por dentro: interpret_cycle guarda referencias a ellos
+            cur, nw = getattr(self, k), getattr(new, k)
+            if isinstance(cur, (list, bytearray)):
+                cur[:] = nw
+            elif isinstance(cur, (dict, set)):
+                cur.clear()
+                cur.update(nw)
+            else:
+                setattr(self, k, nw)
+        self.exit_all = True
+
     def c_print(self, m): self.do_print(self.msg(m)[:250], None, None, 0)
     def c_print_v(self, v): self.c_print(self.vars[v])
     def c_print_at(self, m, r, c, w): self.do_print(self.msg(m)[:250], r, c, w)
@@ -920,6 +994,7 @@ class Interp:
             self.apply_events(self.ev.get(self.cycle, []))
             if len(self.keyq) > n:
                 break
+        self.last_key = self.keyq[n]
         del self.keyq[n:]
         self.vars[19] = v19
         self.box = None
@@ -1204,9 +1279,6 @@ class Interp:
         self.log('quit')
         self.stop = True
 
-    def c_restart_game(self):
-        self.log('restart.game')
-        self.stop = True
 
     def c_version(self): pass
 

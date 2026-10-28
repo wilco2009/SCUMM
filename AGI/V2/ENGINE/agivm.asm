@@ -63,6 +63,8 @@ PG_EVT          equ 27
 PG_DBG          equ 28
 PG_PRI          equ 29
 PG_OVL          equ 41
+PG_OVC          equ 44
+PG_INV          equ 45
 OVL_KPOLL       equ $2000               ; overlay A (teclado, sprites, rotulos): siempre en el bloque 1
 OVL_KDELIV      equ $2003
 OVL_ACCEPT      equ $2006
@@ -94,6 +96,14 @@ OVB_MENUCLOSE   equ $2033
 OVB_DLGSAVE     equ $2036
 OVB_DLGLOAD     equ $2039
 OVB_DLGDONE     equ $203C
+OVB_MENURESET   equ $203F
+OVB_DLGINV      equ $2042
+OVC_ECHO        equ $2009
+OVC_CANCEL      equ $200C
+OVC_CURSOR      equ $200F
+OVC_RESTART     equ $2000               ; overlay C (restart.game, status, show.obj): tambien con call_c
+OVC_INVTXT      equ $2003
+OVC_OBJDESC     equ $2006
 MAXW            equ 6
 LPAGE0          equ 16
 NSLOTS          equ 8
@@ -336,6 +346,10 @@ in_s:           ld (hl),$FF
                 ld a,PG_SND
                 ld hl,nm_snd
                 ld bc,512
+                call load_page
+                ld a,PG_INV
+                ld hl,nm_invn
+                ld bc,8192
                 call load_page
                 ld a,PG_EVT
                 ld hl,nm_evt
@@ -1039,7 +1053,17 @@ adda:           add a,l
                 ret
 
 ; sonidos cuyo final ya llego: ponen su bandera (se mira al empezar el ciclo)
-snd_due:        ld hl,SNDP
+snd_due:        ld a,(FLAGS+9)          ; sonido apagado: se para lo que suene
+                or a
+                jr nz,sd_on
+                ld a,(snd_on)
+                or a
+                jr z,sd_on
+                xor a
+                ld (snd_on),a
+                ld a,CMD_STOPVGM
+                call mcu_send
+sd_on:          ld hl,SNDP
                 ld b,8
 sd_l:           ld a,(hl)
                 cp $FF
@@ -1393,7 +1417,74 @@ h_get_room_v:   ld a,(ARGS)             ; v[b] = sala del objeto v[a]
 h_quit:         ld a,1
                 ld (stopf),a
                 ret
-h_restart_game: jr h_quit
+; restart.game: confirmacion y, con ENTER, el estado vuelve al del arranque (overlay C) y se sale de la logica en curso
+h_restart_game: ld a,2
+                call pr_rawgo
+                ld a,(stopf)
+                or a
+                ret nz
+                ld a,(pw_last)
+                cp 13
+                ret nz                  ; ESC (o cualquier otra tecla): sigue la partida
+                ld hl,OVC_RESTART
+                call call_c
+                ld hl,OVB_MENURESET
+                call call_b
+                call OVL_SPCLR
+                call ov_tail
+                ld a,1
+                ld (exitall),a
+                jp OVL_FORCE
+; pause, status (inventario) y show.obj son ventanas de mensaje: pr_raw 1 = pausa, 2 = confirmar el reinicio (textos del overlay B), 3 = el texto ya esta en TMPM
+h_pause:        ld a,1
+pr_rawgo:       ld (pr_raw),a
+                ld a,255
+                ld (pr_row),a
+                xor a
+                ld (pr_w),a
+                call pr_go
+                xor a
+                ld (pr_raw),a
+                ret
+h_status:       ld a,(FLAGS+13)         ; con la bandera 13 se elige un objeto (v25 = el elegido o 255): lista de un menu y el mismo bucle de menu.input
+                or a
+                jr z,hs_txt
+                ld hl,OVB_DLGINV
+                call call_b
+                ld a,(oc_res)
+                or a
+                jr z,hs_none
+                ld a,1
+                ld (mi_dlg),a
+                call mi_nk
+                xor a
+                ld (mi_dlg),a
+                ld a,(stopf)
+                or a
+                ret nz
+                ld hl,OVB_DLGDONE
+                call call_b
+                ld a,(mn_res)
+                ld (VARS+25),a
+                ret
+hs_none:        ld a,255
+                ld (VARS+25),a
+hs_txt:         ld hl,OVC_INVTXT
+                call call_c
+                ld a,3
+                jr pr_rawgo
+h_show_obj_v:   ld a,(ARGS)
+                call getv
+                ld (ARGS),a
+h_show_obj:     ld hl,OVC_OBJDESC
+                call call_c
+                ld a,(oc_res)
+                or a
+                ret z
+                ld a,3
+                jr pr_rawgo
+pr_raw:         defb 0
+oc_res:         defb 0
 
 ; --- sonido: la bandera f se pone cuando acaba (duracion de la pista 0)
 h_sound:        call snd_stop           ; el que suene se para (y su bandera se pone, como startSound -> stopSound)
@@ -1504,6 +1595,7 @@ sst_n:           inc hl
 snd_play:       ld a,(FLAGS+9)
                 or a
                 ret z
+                ld (snd_on),a
                 ld a,CMD_STOPVGM
                 call mcu_send
                 ld a,CMD_LOOPVGM
@@ -1557,6 +1649,7 @@ sdg_l:           inc b
                 ld a,b
                 jp mcu_send
 snd_r:          defb 0
+snd_on:         defb 0
 
 ; ---------------------------------------------------------------------
 ;  Condiciones (hc_<nombre>): devuelven A = 1 o 0
@@ -1643,6 +1736,7 @@ nm_snd:         defb "DATA/SNDLEN.BIN",0
 nm_views:       defb "DATA/VIEWS.HDR",0
 nm_words:       defb "DATA/WORDS.BIN",0
 nm_evt:         defb "DATA/EVENTS.BIN",0
+nm_invn:        defb "DATA/INVNAMES.BIN",0
 nm2:            defb "LOG/LOG000.MSG",0
 nm3:            defb "PIC/PIC000.GFX",0
 sv_sp:          defw 0

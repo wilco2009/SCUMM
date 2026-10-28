@@ -119,3 +119,7 @@ En la carpeta del juego (SD) solo queda `AGIVM.B81`; el resto va por tipos: `LOG
 Sonido: AGI solo reproduce un sonido a la vez (`sound()` para el que suene), asi que los VGM del MCU (uno a la vez) encajan sin solapes.
 
 - Teclas, menus y controladores pendientes de decidir: ver [TECLAS.md](TECLAS.md).
+
+## Opciones del menu (2026-10-28)
+
+`restart.game` (confirmacion y vuelta al estado de arranque), `status` (inventario; con la bandera 13 se elige un objeto con la misma lista que guardar/cargar y deja v25), `pause` y `show.obj` (solo la descripcion de la vista; falta el dibujo) estan hechos, y al apagar el sonido (bandera 9) se para el que suene. Nuevo **overlay C** (`agic.asm`, pagina 44, `DATA/OVERC.OVL`): reinicio, texto del inventario, descripcion de objetos y editor de linea; los nombres de los objetos van en `DATA/INVNAMES.BIN` (pagina 45). Las ventanas usan `pr_raw` (1 pausa, 2 reinicio, 3 texto ya preparado). El nucleo queda con unos 100 bytes libres (hasta `$6D00`). Prueba: `AGI_INV255="1,2,3"` da objetos al ego desde el principio (solo para pruebas).

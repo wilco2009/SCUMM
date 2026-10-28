@@ -31,14 +31,14 @@ Controlador y tecla del PC segun la logica 104. "Texto" = se puede escribir la o
 | File | Save | c3 | F5 | "save game" | hecho |
 | File | Restore | c5 | F7 | "restore game" | hecho |
 | File | (separador) | c20 | — | — | desactivado por el juego |
-| File | Restart | c7 | F9 | "restart game" | **falta**: `restart.game` hoy sale como `quit` |
+| File | Restart | c7 | F9 | "restart game" | hecho: confirmacion (ENTER reinicia, ESC sigue) y el estado vuelve al del arranque |
 | File | Quit | c1 | Alt-Z | "quit" | hecho (para el interprete) |
-| Action | See Object | c22 (y c4) | F4 | — | **falta**: `show.obj` (ventana con el dibujo del objeto) |
-| Action | Inventory | c10 | Tab | — | **falta**: `status` (pantalla del inventario) |
-| Special | Sound On/Off | c16 | F2 | — | hecho (bandera 9); falta parar el sonido que suene al apagarlo |
+| Action | See Object | c22 (y c4) | F4 | — | hecho a medias: `show.obj` muestra la **descripcion** del objeto (el dibujo no) |
+| Action | Inventory | c10 | Tab | — | hecho: ventana con la lista; con "See Object" se elige un objeto (flechas y ENTER) |
+| Special | Sound On/Off | c16 | F2 | — | hecho (bandera 9); al apagarlo se para el sonido que suene |
 | Special | Graphics Mode | c12 | Ctrl-R | — | no aplica (`toggle.monitor`) |
 | Special | Joystick / Controller | c15 | Ctrl-J | — | no aplica (`init.joy`) |
-| Special | Pause | c18 | Esc (otros equipos) | "pause game" | **falta**: `pause` |
+| Special | Pause | c18 | Esc (otros equipos) | "pause game" | hecho (ventana, cualquier tecla sigue) |
 | Speed | Normal / Slow / Fast / Fastest | c24 / c25 / c23 / c28 | — (F10 = c29) | "normal", "slow", "fast", "fastest" | hecho (v10) |
 
 ## 4. Otras teclas que el juego asigna y que no tienen opcion de menu
@@ -65,7 +65,7 @@ Controlador y tecla del PC segun la logica 104. "Texto" = se puede escribir la o
    mensajes son de la logica 0; habria que cambiarlos al cargar el juego (en la conversion, `agi2log.py`) para no tocar los datos originales.
 3. **Pantalla de ayuda** (c2, logica 92): habla de las teclas del PC; hay que reescribirla con las del ZX81.
 4. **Otros juegos** (KQ1, KQ2, PQ1, SQ2, Larry1): repetir esta tabla con su logica de teclas antes de fijar la correspondencia.
-5. **Funciones que faltan** (no son teclas): `status` (inventario), `show.obj`, `pause`, `restart.game`.
+5. **Funciones que faltan** (no son teclas): el dibujo de `show.obj`.
 
 ## 6. Que se puede hacer ya sin teclas nuevas
 

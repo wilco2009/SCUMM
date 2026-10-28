@@ -31,6 +31,8 @@
                 jp t_dlgsave            ; OVB_DLGSAVE
                 jp t_dlgload            ; OVB_DLGLOAD
                 jp t_dlgdone            ; OVB_DLGDONE
+                jp t_menureset          ; OVB_MENURESET
+                jp t_dlginv             ; OVB_DLGINV
 
 TXT             equ TMPM
 
@@ -640,14 +642,25 @@ LB:             defs 68
 ;  a t_boxclose (devuelve la imagen limpia). Mismo resultado que agi_text.wrap / box_geom / draw_box: lineas de como mucho pr_w caracteres (30 si 0 o mas de 36),
 ;  una celda de relleno a cada lado y una fila arriba y otra abajo, blanco con letras negras y un marco rojo de un pixel.
 ; ---------------------------------------------------------------------
-t_print:        ld a,(pr_msg)
+t_print:        ld a,(pr_raw)           ; 1 = pausa, 2 = reiniciar, 3 = el texto ya esta en TXT; 0 = el mensaje pr_msg de la logica
+                or a
+                jr z,tp_norm
+                cp 3
+                jr z,tp_have
+                ld hl,s_pause
+                cp 1
+                jr z,tp_cp
+                ld hl,s_restart
+tp_cp:          call dg_cp
+                jr tp_have
+tp_norm:        ld a,(pr_msg)
                 ld b,a
                 ld a,(curlg)
                 ld (bs_lg),a
                 ld de,TXT
                 ld c,250
                 call build_str
-                ld a,(pr_w)
+tp_have:        ld a,(pr_w)
                 or a
                 jr z,tp_w30
                 cp 37
@@ -1074,6 +1087,21 @@ MN_MAX          equ 10
 IT_MAX          equ 60
 MP_SIZE         equ 1500
 MP_LIM          equ mp_pool+MP_SIZE-40
+
+; restart.game: los menus que definio el juego, la barra de estado y los colores del texto vuelven al arranque
+t_menureset:    xor a
+                ld (mn_n),a
+                ld (it_n),a
+                ld (st_on),a
+                ld (st_valid),a
+                ld (tbg),a
+                ld a,255
+                ld (m_only),a
+                ld a,15
+                ld (tfg),a
+                ld hl,mp_pool
+                ld (mp_free),hl
+                ret
 
 ; mensaje ARGS[0] -> a la reserva (mp_last = donde queda); C si no cabe
 mp_text:        ld hl,(mp_free)
@@ -1639,7 +1667,7 @@ t_menuclose:    call mn_restore
                 jr z,mc_off
                 xor a
                 ld (st_valid),a
-                ret
+                jp t_status             ; la barra de estado se redibuja ya (puede abrirse una ventana antes de acabar el ciclo)
 mc_off:         xor a
                 ld (dl_row),a
                 jp fill_row
@@ -1755,33 +1783,7 @@ dg_c2:          ld a,(hl)
                 jr nz,dg_c2
                 ret
 
-dg_menu:        ld a,(mn_n)
-                ld (bk_mn),a
-                ld a,(it_n)
-                ld (bk_it),a
-                ld hl,(mp_free)
-                ld (bk_mp),hl
-                ld hl,s_sav
-                ld a,(sf_mode)
-                or a
-                jr z,dg_t
-                ld hl,s_rst
-dg_t:           call dg_cp
-                call mp_cp
-                ld a,(mn_n)
-                ld (m_only),a
-                call mn_pa
-                ld de,(mp_last)
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                inc hl
-                ld a,(it_n)
-                ld (hl),a
-                inc hl
-                ld (hl),0
-                ld hl,mn_n
-                inc (hl)
+dg_menu:        call dg_head
                 ld a,1
                 ld (dg_i),a
 dg_il:          ld hl,TXT
@@ -1799,21 +1801,8 @@ dg_c:           ld a,(hl)
                 or a
                 jr nz,dg_c
                 call mp_cp
-                ld a,(it_n)
-                ld l,a
-                ld h,0
-                add hl,hl
-                add hl,hl
-                ld de,it_tab
-                add hl,de
-                ld (dg_ep),hl
-                ld de,(mp_last)
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                inc hl
                 ld a,(dg_i)
-                ld (hl),a
+                ld (dg_ctl),a
                 ld a,(sf_mode)
                 or a
                 ld a,1
@@ -1825,10 +1814,65 @@ dg_c:           ld a,(hl)
                 ld hl,sf_ex
                 add hl,de
                 ld a,(hl)
-dg_e:           ld hl,(dg_ep)
+dg_e:           call dg_add
+                ld hl,dg_i
+                inc (hl)
+                ld a,(hl)
+                cp 10
+                jr c,dg_il
+                ret
+
+; la copia de las tablas de menus y el menu unico de la lista (titulo segun sf_mode: 0 guardar, 1 cargar, 2 inventario)
+dg_head:        ld a,(mn_n)
+                ld (bk_mn),a
+                ld a,(it_n)
+                ld (bk_it),a
+                ld hl,(mp_free)
+                ld (bk_mp),hl
+                ld hl,s_sav
+                ld a,(sf_mode)
+                or a
+                jr z,dg_t
+                ld hl,s_rst
+                cp 1
+                jr z,dg_t
+                ld hl,s_inv
+dg_t:           call dg_cp
+                call mp_cp
+                ld a,(mn_n)
+                ld (m_only),a
+                call mn_pa
+                ld de,(mp_last)
+                ld (hl),e
                 inc hl
+                ld (hl),d
                 inc hl
+                ld a,(it_n)
+                ld (hl),a
                 inc hl
+                ld (hl),0
+                ld hl,mn_n
+                inc (hl)
+                ret
+
+; un elemento al menu unico: el texto esta en la reserva (mp_last), dg_ctl = su controlador, A = activado
+dg_add:         ld (dg_en),a
+                ld a,(it_n)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                ld de,it_tab
+                add hl,de
+                ld de,(mp_last)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                ld a,(dg_ctl)
+                ld (hl),a
+                inc hl
+                ld a,(dg_en)
                 ld (hl),a
                 ld hl,it_n
                 inc (hl)
@@ -1839,11 +1883,61 @@ dg_e:           ld hl,(dg_ep)
                 inc hl
                 inc hl
                 inc (hl)
-                ld hl,dg_i
+                ret
+
+; status con la bandera 13 (elegir un objeto): la lista de lo que lleva el ego es un menu de una sola entrada; oc_res = 1 si hay algo que elegir
+t_dlginv:       xor a
+                ld (oc_res),a
+                ld a,PG_INV
+                call map_page
+                ld a,(LWIN)
+                ld (di_cnt),a
+                ld b,a
+                or a
+                jr z,dv_x
+                ld hl,INV
+dv_c:           ld a,(hl)
+                cp 255
+                jr z,dv_y
+                inc hl
+                djnz dv_c
+dv_x:           jp unmap_win
+dv_y:           ld a,2
+                ld (sf_mode),a
+                call dg_head
+                ld hl,LWIN+1
+                ld (di_sp),hl
+                xor a
+                ld (di_i),a
+dv_l:           ld a,(di_i)
+                ld e,a
+                ld d,INV>>8
+                ld a,(de)
+                cp 255
+                ld hl,(di_sp)
+                jr nz,dv_skip
+                call dg_cp
+                ld (di_sp),hl
+                call mp_cp
+                ld a,(di_i)
+                ld (dg_ctl),a
+                ld a,1
+                call dg_add
+                jr dv_n
+dv_skip:        ld a,(hl)
+                inc hl
+                or a
+                jr nz,dv_skip
+                ld (di_sp),hl
+dv_n:           ld hl,di_i
                 inc (hl)
                 ld a,(hl)
-                cp 10
-                jr c,dg_il
+                ld hl,di_cnt
+                cp (hl)
+                jr c,dv_l
+                call unmap_win
+                ld a,1
+                ld (oc_res),a
                 ret
 
 ; despues del bucle de menu: se quita la lista y, si se eligio una ranura (mn_res), se guarda o se carga (sv_ok = 1 si se ha cargado)
@@ -1860,6 +1954,10 @@ t_dlgdone:      xor a
                 ld a,(mn_res)
                 cp 255
                 ret z
+                ld a,(sf_mode)
+                cp 2
+                ret z                   ; inventario: el resultado se queda en mn_res
+                ld a,(mn_res)
                 add a,'0'
                 ld (sf_nm+8),a
                 ld a,(sf_mode)
@@ -2067,6 +2165,9 @@ fwn_b:          ld a,(hl)
 
 sf_nm:          defb "SAV/GAME0.SAV",0
 s_sav:          defb "Save game",0
+s_inv:          defb "You are carrying",0
+s_pause:        defb "Game paused.",10,10,"Press any key to continue.",0
+s_restart:      defb "Press ENTER to restart",10,"the game.",10,10,"Press ESC to continue",10,"this game.",0
 s_rst:          defb "Restore game",0
 s_empty:        defb "(empty)",0
 s_room:         defb "Room ",0
@@ -2077,7 +2178,11 @@ sf_tab:         defw VARS,256, FLAGS,256, INV,256, KEYMAP,256, OBJ,1024, STRS,49
 sf_mode:        defb 0
 sf_h:           defb 0
 dg_i:           defb 0
-dg_ep:          defw 0
+dg_ctl:         defb 0
+dg_en:          defb 0
+di_cnt:         defb 0
+di_i:           defb 0
+di_sp:          defw 0
 wf_h:           defb 0
 wf_err:         defb 0
 wf_src:         defw 0

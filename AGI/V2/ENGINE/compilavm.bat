@@ -18,6 +18,7 @@ python -I ..\TOOLS\gen_font.py font6.inc || goto error
 copy /y agivm.sym agires.inc >nul
 pasmo agia.asm agia.bin agia.sym || goto error
 pasmo agib.asm agib.bin agib.sym || goto error
+pasmo agic.asm agic.bin agic.sym || goto error
 set T=..\dump\%G%\log
 python -I ..\TOOLS\agi2log.py ..\%G% %T% || goto error
 python -I ..\TOOLS\agi2hr.py ..\%G% %T% || goto error
@@ -25,6 +26,7 @@ python -I ..\TOOLS\agi2spr.py ..\%G% %T% || goto error
 python -I ..\TOOLS\agi2snd.py ..\%G% %T% || goto error
 python -I ..\TOOLS\mkovl.py agia.bin %T%\DATA\OVERA.OVL || goto error
 python -I ..\TOOLS\mkovl.py agib.bin %T%\DATA\OVERB.OVL || goto error
+python -I ..\TOOLS\mkovl.py agic.bin %T%\DATA\OVERC.OVL || goto error
 python -I ..\TOOLS\mkevents.py %T%\DATA\EVENTS.BIN 0 "" || goto error
 set S=%BASE%\AGI\V2
 set D=%S%\%G%

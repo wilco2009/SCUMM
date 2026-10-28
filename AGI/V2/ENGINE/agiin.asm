@@ -364,7 +364,14 @@ pw_run:         call OVL_KDELIV
                 or l
                 call z,wait_frame
                 jr pw_l
-pw_d:           ld a,(pw_k)
+pw_d:           ld a,(pw_k)             ; la tecla que cierra, para quien la quiera (restart.game)
+                ld e,a
+                ld d,0
+                ld hl,KEYQ
+                add hl,de
+                ld a,(hl)
+                ld (pw_last),a
+                ld a,(pw_k)
                 ld (keyn),a
                 ld a,(pw_v)
                 ld (VARS+19),a
@@ -374,6 +381,7 @@ pr_row:         defb 0
 pr_col:         defb 0
 pr_w:           defb 0
 pw_k:           defb 0
+pw_last:        defb 0
 pw_v:           defb 0
 
 ; ---------------------------------------------------------------------
@@ -543,44 +551,12 @@ mi_v:           defb 0
 mi_d:           defb 0
 
 ; echo.line: la ultima orden vuelve a la linea de entrada; cancel.line la borra; set.cursor.char: el caracter del cursor (solo se ve en modo real)
-h_echo_line:    ld hl,LASTLN
-                ld de,INBUF
-                ld bc,41
-                ldir
-                ld hl,INBUF
-                ld b,0
-el_l:           ld a,(hl)
-                or a
-                jr z,el_d
-                inc hl
-                inc b
-                jr el_l
-el_d:           ld a,b
-                ld (il_n),a
-                ld a,1
-                ld (kb_dirty),a
-                ret
-h_cancel_line:  xor a
-                ld (il_n),a
-                ld (INBUF),a
-                inc a
-                ld (kb_dirty),a
-                ret
-h_set_cursor_char: ld a,(ARGS)
-                ld b,a
-                ld a,(curlg)
-                ld (bs_lg),a
-                ld de,TMPM
-                ld c,250
-                call build_str
-                ld a,(TMPM)
-                or a
-                jr nz,cc_s
-                ld a,' '
-cc_s:           ld (curchar),a
-                ld a,1
-                ld (kb_dirty),a
-                ret
+h_echo_line:    ld hl,OVC_ECHO
+                jp call_c
+h_cancel_line:  ld hl,OVC_CANCEL
+                jp call_c
+h_set_cursor_char: ld hl,OVC_CURSOR
+                jp call_c
 curchar:        defb '_'
 LASTLN:         defs 41
 
