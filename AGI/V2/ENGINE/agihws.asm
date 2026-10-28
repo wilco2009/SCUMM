@@ -231,9 +231,9 @@ vg_n:           inc hl
                 ld (hl),$FF
                 ld a,(vwantl)
                 add a,'0'
-                ld (nmv+4),a
+                ld (nmv+8),a
                 ld a,(vwant)
-                ld hl,nmv+1
+                ld hl,nmv+5
                 call mk_dig
                 ld hl,nmv
                 call f_open
@@ -1057,7 +1057,7 @@ vwant:          defb 0
 vwantl:         defb 0
 vtry:           defb 0
 vlen2:          defw 0
-nmv:            defb "N0000.SPR",0
+nmv:            defb "SPR/N0000.SPR",0
 sk:             defb 0
 rpri:           defb 0
 rn:             defb 0

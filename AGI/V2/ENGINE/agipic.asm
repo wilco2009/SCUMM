@@ -116,7 +116,7 @@ lp_bad:         ld a,(fh)
                 jp fatal
 
 ; A = numero -> "PICnnn.GFX" en nm3
-mk_nm3:         ld hl,nm3+3
+mk_nm3:         ld hl,nm3+7
 mk_dig:         ld b,'0'-1
 m3_h:           inc b
                 sub 100

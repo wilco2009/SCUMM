@@ -1046,7 +1046,7 @@ mq_h:           inc b
                 sub 100
                 jr nc,mq_h
                 add a,100
-                ld hl,nm2+3
+                ld hl,nm2+7
                 ld (hl),b
                 ld b,'0'-1
 mq_t:           inc b

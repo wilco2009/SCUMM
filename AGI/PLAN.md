@@ -111,3 +111,9 @@ Sprites reservados por objeto (2026-10-27, visto en el emulador: las puertas se 
 - **Una sola tecla de escape: la 9.** La 1 queda libre (faltan teclas de funcion para todo lo que viene). Hay que revisar mas adelante la **pantalla de ayuda** y las **teclas que muestra el menu** (`F5`, `F7`, `F9`, `Alt-Z`, `F4`, `Tab`, `F2`, `Ctrl R`, `Ctrl J`, `Esc`...): son las del PC y en el ZX81 no existen; hay que decidir la correspondencia de cada controlador (`set.key` de la logica 104) y cambiar los textos de los menus (se leen de los mensajes de la logica 0, habra que sustituirlos al cargar) y la ayuda.
 - Menus: `menu.input` solo actua con el flag 14 (el juego lo enciende al salir de la intro) y la tecla que lo abre no llega a `have.key`.
 - Parser: el vocabulario y el texto tecleado se normalizan igual (`agi_read.norm_word`): `' \` - " .` se quitan sin separar (don't = dont, i.d. card = id card, read-outs = readouts) y lo demas que no es letra o cifra separa. `agi2log.py` escribe `WORDS.BIN` ya normalizado. No hace falta teclear simbolos: en los 6 juegos el vocabulario solo trae `'`, `-` y `.`.
+
+## Ficheros del juego por carpetas (2026-10-28)
+
+En la carpeta del juego (SD) solo queda `AGIVM.B81`; el resto va por tipos: `LOG/` (LOGnnn.AGL y .MSG), `PIC/` (PICnnn.GFX), `SPR/` (N%03d%d.SPR), `SND/` (SNDnnn.VGM), `VIEW/` y `DATA/` (INVROOM.BIN, SNDLEN.BIN, VIEWS.HDR, WORDS.BIN, EVENTS.BIN, OVERA.OVL, OVERB.OVL). Los generadores (`agi2log/hr/spr/snd.py`) escriben ya en esas subcarpetas de `dump/JUEGO/log`, el Z80 abre `LOG/LOG000.AGL` etc. (rutas relativas a la carpeta actual del MCU, que `fopen` y `PLAY_VGM` admiten) y `compilavm.bat` las copia con `xcopy` y borra los ficheros sueltos de versiones anteriores. El arnes de PC (`test_scumm.cpp`) abre primero la ruta relativa completa.
+
+Sonido: AGI solo reproduce un sonido a la vez (`sound()` para el que suene), asi que los VGM del MCU (uno a la vez) encajan sin solapes.

@@ -217,7 +217,7 @@ def main(argv):
         return 1
     g = ag.Game(args[0])
     out = args[1]
-    os.makedirs(out, exist_ok=True)
+    os.makedirs(os.path.join(out, 'PIC'), exist_ok=True)
     sel = [int(a) for a in args[2:]] or g.present('PIC')
     tot = bad = n = 0
     sizes = []
@@ -233,7 +233,7 @@ def main(argv):
         data, rec, b = build(pic)
         rows, pri, pri2 = read_back(data)
         assert rows == rec and pri == pic.pri and pri2 == sprite_priority(pic.pri), 'PIC %d: el fichero no reproduce la conversion' % k
-        with open(os.path.join(out, 'PIC%03d.GFX' % k), 'wb') as f:
+        with open(os.path.join(out, 'PIC', 'PIC%03d.GFX' % k), 'wb') as f:
             f.write(data)
         if png:
             img = [[CHROMA[v] for v in r] for r in rec]

@@ -164,7 +164,7 @@ def main(argv):
         print(__doc__)
         return 1
     g = ag.Game(argv[1])
-    os.makedirs(argv[2], exist_ok=True)
+    os.makedirs(os.path.join(argv[2], 'SPR'), exist_ok=True)
     sel = [int(a) for a in argv[3:]] or g.present('VIEW')
     n = big = 0
     for v in sel:
@@ -179,7 +179,7 @@ def main(argv):
                     big += 1
                     print('VIEW %d bucle %d: %d bytes, no cabe en una pagina' % (v, lp, len(data)))
                     continue
-                with open(os.path.join(argv[2], 'N%03d%d.SPR' % (v, lp)), 'wb') as f:
+                with open(os.path.join(argv[2], 'SPR', 'N%03d%d.SPR' % (v, lp)), 'wb') as f:
                     f.write(bytes((len(data) & 255, len(data) >> 8)) + data)
                 n += 1
         except (IndexError, ValueError) as e:

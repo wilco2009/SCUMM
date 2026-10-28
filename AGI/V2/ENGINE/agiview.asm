@@ -195,7 +195,7 @@ mn_h:           inc b
                 sub 100
                 jr nc,mn_h
                 add a,100
-                ld hl,nm+3
+                ld hl,nm+7
                 ld (hl),b
                 ld b,'0'-1
 mn_t:           inc b
@@ -220,7 +220,7 @@ clear:          ld hl,HR_BM
                 ldir
                 ret
 
-nm:             defb "PIC000.GFX",0
+nm:             defb "PIC/PIC000.GFX",0
 sv_sp:          defw 0
 sv_i:           defb 0
 picno:          defb 0

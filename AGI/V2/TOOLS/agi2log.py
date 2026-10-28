@@ -30,6 +30,13 @@ def convert(d):
     return agl, bytes([n]) + bytes(offs) + bytes(text)
 
 
+def sub(base, folder, name):
+    """Ruta de un fichero de salida en su carpeta por tipo (LOG, VIEW, DATA...), que se crea si hace falta."""
+    d = os.path.join(base, folder)
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, name)
+
+
 def main(argv):
     if len(argv) < 3:
         print(__doc__)
@@ -43,9 +50,9 @@ def main(argv):
         if d is None:
             continue
         agl, msg = convert(d)
-        with open(os.path.join(argv[2], 'LOG%03d.AGL' % n), 'wb') as f:
+        with open(sub(argv[2], 'LOG', 'LOG%03d.AGL' % n), 'wb') as f:
             f.write(agl)
-        with open(os.path.join(argv[2], 'LOG%03d.MSG' % n), 'wb') as f:
+        with open(sub(argv[2], 'LOG', 'LOG%03d.MSG' % n), 'wb') as f:
             f.write(msg)
         tot += len(agl) + len(msg)
     # inventario (sala de cada objeto) y duracion de los sonidos (1/60 s), para el Z80
@@ -53,7 +60,7 @@ def main(argv):
     for i, room, _ in ag.objects(argv[1]):
         if i < 256:
             inv[i] = room
-    with open(os.path.join(argv[2], 'INVROOM.BIN'), 'wb') as f:
+    with open(sub(argv[2], 'DATA', 'INVROOM.BIN'), 'wb') as f:
         f.write(inv)
     snd = bytearray(512)
     vm = None
@@ -63,7 +70,7 @@ def main(argv):
         t = vm.sound_ticks(n)
         snd[2 * n] = t & 255
         snd[2 * n + 1] = t >> 8
-    with open(os.path.join(argv[2], 'SNDLEN.BIN'), 'wb') as f:
+    with open(sub(argv[2], 'DATA', 'SNDLEN.BIN'), 'wb') as f:
         f.write(snd)
     # cabeceras de las vistas: 256 desplazamientos u16 (0 = no hay) y, por vista, nloops, celdas de cada bucle y (ancho, alto) de cada celda
     idx = bytearray(512)
@@ -74,7 +81,7 @@ def main(argv):
             continue
         loops = ag.view_cells(d)[1]
         if len(d) <= 8190:
-            with open(os.path.join(argv[2], 'VIEW%03d.GFX' % n), 'wb') as f:   # u16 tamano + el recurso tal cual (los sprites lo leen de aqui)
+            with open(sub(argv[2], 'VIEW', 'VIEW%03d.GFX' % n), 'wb') as f:   # u16 tamano + el recurso tal cual (los sprites lo leen de aqui)
                 f.write(bytes((len(d) & 255, len(d) >> 8)) + bytes(d))
         else:
             print('VIEW %d: %d bytes, no cabe en una pagina' % (n, len(d)))
@@ -88,12 +95,12 @@ def main(argv):
                 blob.extend((c[0], c[1]))
     hdr = bytes(idx) + bytes(blob)
     assert len(hdr) <= 8192, 'VIEWS.HDR no cabe en una pagina: %d' % len(hdr)
-    with open(os.path.join(argv[2], 'VIEWS.HDR'), 'wb') as f:
+    with open(sub(argv[2], 'DATA', 'VIEWS.HDR'), 'wb') as f:
         f.write(hdr + bytes(8192 - len(hdr)))
     import agi_read
     tok = agi_read.words_tok(argv[1])
     assert len(tok) <= 8190
-    with open(os.path.join(argv[2], 'WORDS.BIN'), 'wb') as f:
+    with open(sub(argv[2], 'DATA', 'WORDS.BIN'), 'wb') as f:
         f.write(bytes((len(tok) & 255, len(tok) >> 8)) + tok + bytes(8190 - len(tok)))
     print('%d logicas, %d bytes' % (len(sel), tot))
     return 0

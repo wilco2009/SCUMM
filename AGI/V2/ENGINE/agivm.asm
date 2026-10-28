@@ -594,7 +594,7 @@ mn_h:           inc b
                 sub 100
                 jr nc,mn_h
                 add a,100
-                ld hl,nm+3
+                ld hl,nm+7
                 ld (hl),b
                 ld b,'0'-1
 mn_t:           inc b
@@ -1509,9 +1509,17 @@ snd_play:       ld a,(FLAGS+9)
                 call mcu_send
                 ld a,CMD_PLAYVGM
                 call mcu_send
-                ld a,10
+                ld a,14
                 call mcu_send
-                ld a,$38                ; S N D (codigos del ZX81)
+                ld a,$38                ; S N D / S N D (codigos del ZX81)
+                call mcu_send
+                ld a,$33
+                call mcu_send
+                ld a,$29
+                call mcu_send
+                ld a,$18
+                call mcu_send
+                ld a,$38
                 call mcu_send
                 ld a,$33
                 call mcu_send
@@ -1626,14 +1634,14 @@ two_vars:       ld a,(ARGS+1)
                 include "agispr.asm"
                 include "agitab.inc"
 
-nm:             defb "LOG000.AGL",0
-nm_inv:         defb "INVROOM.BIN",0
-nm_snd:         defb "SNDLEN.BIN",0
-nm_views:       defb "VIEWS.HDR",0
-nm_words:       defb "WORDS.BIN",0
-nm_evt:         defb "EVENTS.BIN",0
-nm2:            defb "LOG000.MSG",0
-nm3:            defb "PIC000.GFX",0
+nm:             defb "LOG/LOG000.AGL",0
+nm_inv:         defb "DATA/INVROOM.BIN",0
+nm_snd:         defb "DATA/SNDLEN.BIN",0
+nm_views:       defb "DATA/VIEWS.HDR",0
+nm_words:       defb "DATA/WORDS.BIN",0
+nm_evt:         defb "DATA/EVENTS.BIN",0
+nm2:            defb "LOG/LOG000.MSG",0
+nm3:            defb "PIC/PIC000.GFX",0
 sv_sp:          defw 0
 sv_i:           defb 0
 sv_ret:         defw 0

@@ -59,8 +59,8 @@ ol_o:           ld (fh),a
                 call f_read_n
                 ld a,(fh)
                 jp f_close
-nmo:            defb "OVERA.OVL",0
-nmob:           defb "OVERB.OVL",0
+nmo:            defb "DATA/OVERA.OVL",0
+nmob:           defb "DATA/OVERB.OVL",0
 vlen:           defw 0
 ov_pg:          defb 0
 

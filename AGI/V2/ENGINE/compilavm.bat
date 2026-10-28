@@ -23,15 +23,17 @@ python -I ..\TOOLS\agi2log.py ..\%G% %T% || goto error
 python -I ..\TOOLS\agi2hr.py ..\%G% %T% || goto error
 python -I ..\TOOLS\agi2spr.py ..\%G% %T% || goto error
 python -I ..\TOOLS\agi2snd.py ..\%G% %T% || goto error
-python -I ..\TOOLS\mkovl.py agia.bin %T%\OVERA.OVL || goto error
-python -I ..\TOOLS\mkovl.py agib.bin %T%\OVERB.OVL || goto error
-python -I ..\TOOLS\mkevents.py %T%\EVENTS.BIN 0 "" || goto error
+python -I ..\TOOLS\mkovl.py agia.bin %T%\DATA\OVERA.OVL || goto error
+python -I ..\TOOLS\mkovl.py agib.bin %T%\DATA\OVERB.OVL || goto error
+python -I ..\TOOLS\mkevents.py %T%\DATA\EVENTS.BIN 0 "" || goto error
 set S=%BASE%\AGI\V2
 set D=%S%\%G%
 if not exist "%D%" mkdir "%D%"
 copy /y agivm.bin "%S%\AGIVM.BIN" >nul || goto error
 copy /y AGIVM.B81 "%D%\AGIVM.B81" >nul || goto error
-copy /y %T%\* "%D%" >nul || goto error
+rem los datos van por carpetas (LOG, PIC, SPR, SND, VIEW, DATA); en la del juego solo queda el BASIC y se quitan los ficheros sueltos de versiones anteriores
+for %%e in (AGL MSG GFX SPR VGM BIN HDR OVL) do del /q "%D%\*.%%e" 2>nul
+xcopy /e /i /y /q "%T%\*" "%D%\" >nul || goto error
 echo OK: %S%\AGIVM.BIN y el juego en %D%  (LOAD "AGIVM.B81" desde esa carpeta)
 exit /b 0
 

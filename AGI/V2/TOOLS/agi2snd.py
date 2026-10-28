@@ -5,7 +5,7 @@ Formato del recurso: cuatro desplazamientos u16 a los canales (0-2 tono, 3 ruido
 duracion 0xFFFF. Tono: divisor de 10 bits ((b2 & 0x3F) << 4) | (b3 & 0x0F) sobre 111860 Hz, igual que el periodo del AY con el reloj del interface (1789772,8 Hz);
 atenuacion b4 & 15 (pasos de 2 dB, 15 = silencio). Ruido: b3 & 7 (bit 2 = blanco, bits 0-1 = velocidad, 3 = la del canal 2); el AY solo tiene volumen por canal, asi que
 el ruido va en un canal de tono libre (como TOOLS de SCUMM, sound2vgm.py).
-Uso: agi2snd.py JUEGO SALIDA_DIR  -> SALIDA_DIR/SND000.VGM ...
+Uso: agi2snd.py JUEGO SALIDA_DIR  -> SALIDA_DIR/SND/SND000.VGM ...
 """
 import os
 import sys
@@ -97,7 +97,7 @@ def main(argv):
         print(__doc__)
         return 1
     g = ag.Game(argv[1])
-    os.makedirs(argv[2], exist_ok=True)
+    os.makedirs(os.path.join(argv[2], 'SND'), exist_ok=True)
     n = 0
     for k in g.present('SND'):
         try:
@@ -107,7 +107,7 @@ def main(argv):
         if not d or len(d) < 8:
             continue
         data, total = convert(d)
-        with open(os.path.join(argv[2], 'SND%03d.VGM' % k), 'wb') as f:
+        with open(os.path.join(argv[2], 'SND', 'SND%03d.VGM' % k), 'wb') as f:
             f.write(data)
         n += 1
     print('%d sonidos' % n)
