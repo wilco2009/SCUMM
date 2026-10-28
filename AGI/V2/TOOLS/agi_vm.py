@@ -370,7 +370,7 @@ class Interp:
 
     # ------------------------------------------------------------ parser
     def parse(self, text):
-        t = re.sub(r'[^a-z0-9 ]', ' ', text.lower()).split()
+        t = re.sub(r"[^a-z0-9' -]", ' ', text.lower()).split()     # ' y - van dentro de las palabras (don't, read-outs)
         self.wtext = []
         nums = []
         self.vars[9] = 0

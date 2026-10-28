@@ -23,7 +23,7 @@
 ;  t_kpoll se llama muchas veces (en los bucles largos del dibujo y al principio de cada ciclo): lee la matriz, detecta las teclas recien
 ;  pulsadas y deja eventos en una cola (PQ). No dibuja ni toca el estado del interprete. t_kdeliv, al principio del ciclo, hace un poll,
 ;  entrega la cola (teclas -> key_push, direccion -> dirhold, linea -> ev_text) y, en modo real, redibuja la linea de entrada si cambio.
-;  Capas: base = minusculas y las cifras como funciones (1 = ESC, 9 = ESC, 0 = borrar, 5/6/7/8 = izquierda / abajo / arriba / derecha del ego,
+;  Capas: base = minusculas y las cifras como funciones (9 = ESC, 0 = borrar, 5/6/7/8 = izquierda / abajo / arriba / derecha del ego,
 ;  con diagonales), SHIFT = mayusculas y cifras, ENTER+tecla = simbolos; ENTER solo = CR al soltarlo.
 ;  Cada caracter es un evento de tecla (v19, set.key); con accept.input tambien va a la linea de entrada, que ENTER entrega como texto.
 ; ---------------------------------------------------------------------
@@ -317,8 +317,8 @@ kdl_p:          ret
 km_base:        defb 0,'z','x','c','v'
                 defb 'a','s','d','f','g'
                 defb 'q','w','e','r','t'
-                defb 27,0,0,0,0                 ; las cifras solas son funciones: 1 = ESC, 5/6/7/8 = direcciones (no dan caracter)
-                defb 8,27,0,0,0                 ; 0 = borrar, 9 = ESC
+                defb 0,0,0,0,0                  ; las cifras solas son funciones: 5/6/7/8 = direcciones (no dan caracter); 1 libre
+                defb 8,27,0,0,0                 ; 0 = borrar, 9 = ESC (la unica)
                 defb 'p','o','i','u','y'
                 defb 0,'l','k','j','h'
                 defb ' ','.','m','n','b'

@@ -649,7 +649,11 @@ pt_l:           ld a,(hl)
                 cp 'Z'+1
                 jr nc,pt_n1
                 add a,32
-pt_n1:          cp '0'
+pt_n1:          cp 39                   ; ' y - van dentro de las palabras (don't, read-outs)
+                jr z,pt_ch
+                cp 45
+                jr z,pt_ch
+                cp '0'
                 jr c,pt_sep
                 cp '9'+1
                 jr c,pt_ch
