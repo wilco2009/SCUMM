@@ -59,6 +59,10 @@ def main(argv):
         bad = 1
     else:
         bm, at = it.screen()
+        if os.environ.get('MODEL_PNG'):                  # depuracion: la pantalla del modelo a PNG
+            import agi2hr
+            rows = [[tuple(agi2hr.CHROMA[at[y * 32 + c] & 15 if (bm[y * 32 + c] >> (7 - k)) & 1 else at[y * 32 + c] >> 4]) for c in range(32) for k in range(8)] for y in range(192)]
+            agi_vm.ag.write_png(os.environ['MODEL_PNG'], rows, 256, 192)
         SCR = 192 * 32
         zb, za = mem[0xA000:0xA000 + SCR], mem[0xC000:0xC000 + SCR]
         db = [i for i, (x, y) in enumerate(zip(zb, bm)) if x != y]

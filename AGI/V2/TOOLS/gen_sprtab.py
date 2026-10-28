@@ -9,9 +9,9 @@ import agi2hr
 
 def main(argv):
     out = ['; generado por TOOLS/gen_sprtab.py: no editar', 'ega2ch:        defb ' + ','.join(str(agi2hr.to_chroma(e)) for e in range(16)),
-           'sdist_tab:']
-    for a in range(16):
-        out.append('                defb ' + ','.join(str(agi2hr.sdist(a, b)) for b in range(16)))
+           'sdt_st:        defb ' + ','.join(str(a * (a - 1) // 2) for a in range(16)), 'sdt_tri:']
+    for a in range(1, 16):                  # la distancia es simetrica: fila a = distancias a los colores menores
+        out.append('                defb ' + ','.join(str(agi2hr.sdist(a, b)) for b in range(a)))
     with open(argv[1], 'w', newline='\n') as f:
         f.write('\n'.join(out) + '\n')
     return 0

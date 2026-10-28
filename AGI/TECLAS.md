@@ -18,7 +18,7 @@ tienen el mismo esquema con pequenas diferencias.
 | Base | letras en minuscula, espacio, `.`; cifras **solas** = funciones: `5`/`6`/`7`/`8` = izquierda/abajo/arriba/derecha del ego (se combinan en diagonal), `9` = **ESC** (la unica), `0` = borrar |
 | SHIFT | letras en mayuscula y cifras |
 | ENTER + tecla | simbolos (`: ; ? / \ ~ \` ' { } [ _ ! @ # \| % & " ) ( $ ] = + - ^`); ENTER solo = retorno de carro (al soltar) |
-| **Libres** | las cifras **1, 2, 3 y 4 solas** (antes `1` era ESC) |
+| Funciones (2026-10-28) | `1` = borrar la linea de entrada (Ctrl-C, ASCII 3), `2` = guardar (F5), `3` = cargar (F7), `4` = repetir la orden (Ctrl-E, ASCII 5); solo generan el evento, no editan la linea. F5 y F7 son teclas de barrido que `set.key(0, 63/65, c)` liga a un controlador: el interprete las guarda en los codigos de control 28 y 30. El resto de teclas de funcion no se implementan: se usa el menu. Los textos de las opciones del menu pierden la tecla del PC (`<F5>`...), salvo F5/F7, que pasan a `<2>`/`<3>` (generico, para todos los juegos) |
 
 ## 3. Opciones del menu de SQ1 (ESC)
 
@@ -33,7 +33,7 @@ Controlador y tecla del PC segun la logica 104. "Texto" = se puede escribir la o
 | File | (separador) | c20 | — | — | desactivado por el juego |
 | File | Restart | c7 | F9 | "restart game" | hecho: confirmacion (ENTER reinicia, ESC sigue) y el estado vuelve al del arranque |
 | File | Quit | c1 | Alt-Z | "quit" | hecho (para el interprete) |
-| Action | See Object | c22 (y c4) | F4 | — | hecho a medias: `show.obj` muestra la **descripcion** del objeto (el dibujo no) |
+| Action | See Object | c22 (y c4) | F4 | — | hecho: `show.obj` muestra el dibujo (bucle 0, celda 0, de `SPR/Nvvv0.SPR`) y la descripcion |
 | Action | Inventory | c10 | Tab | — | hecho: ventana con la lista; con "See Object" se elige un objeto (flechas y ENTER) |
 | Special | Sound On/Off | c16 | F2 | — | hecho (bandera 9); al apagarlo se para el sonido que suene |
 | Special | Graphics Mode | c12 | Ctrl-R | — | no aplica (`toggle.monitor`) |
@@ -65,7 +65,7 @@ Controlador y tecla del PC segun la logica 104. "Texto" = se puede escribir la o
    mensajes son de la logica 0; habria que cambiarlos al cargar el juego (en la conversion, `agi2log.py`) para no tocar los datos originales.
 3. **Pantalla de ayuda** (c2, logica 92): habla de las teclas del PC; hay que reescribirla con las del ZX81.
 4. **Otros juegos** (KQ1, KQ2, PQ1, SQ2, Larry1): repetir esta tabla con su logica de teclas antes de fijar la correspondencia.
-5. **Funciones que faltan** (no son teclas): el dibujo de `show.obj`.
+5. Hecho el dibujo de `show.obj` (filas con huecos: solo la tinta sobre papel blanco).
 
 ## 6. Que se puede hacer ya sin teclas nuevas
 

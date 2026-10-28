@@ -101,6 +101,8 @@ OVB_DLGINV      equ $2042
 OVC_ECHO        equ $2009
 OVC_CANCEL      equ $200C
 OVC_CURSOR      equ $200F
+OVC_OBJPIC      equ $2012
+OVC_TEXTSCR     equ $2015
 OVC_RESTART     equ $2000               ; overlay C (restart.game, status, show.obj): tambien con call_c
 OVC_INVTXT      equ $2003
 OVC_OBJDESC     equ $2006
@@ -1485,6 +1487,10 @@ h_show_obj:     ld hl,OVC_OBJDESC
                 jr pr_rawgo
 pr_raw:         defb 0
 oc_res:         defb 0
+oc_pw:          defb 0                  ; show.obj: ancho (HiRes) del dibujo, 0 = sin dibujo
+pr_bw:          defb 0                  ; geometria de la ventana (la deja t_print, la usa el dibujo del overlay C)
+pr_top:         defb 0
+pr_cxl:         defb 0
 
 ; --- sonido: la bandera f se pone cuando acaba (duracion de la pista 0)
 h_sound:        call snd_stop           ; el que suene se para (y su bandera se pone, como startSound -> stopSound)

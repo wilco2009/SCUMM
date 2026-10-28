@@ -232,25 +232,11 @@ pl_two:         ld a,(pk)
                 jr z,pl_clr
                 push hl
                 push de
-                ld a,b
-                rlca
-                rlca
-                rlca
-                rlca
-                ld e,a
-                ld d,0
-                ld hl,sdist_tab
-                add hl,de
-                push hl
                 ld a,(pp)
-                ld e,a
-                add hl,de
-                ld c,(hl)               ; distancia al papel
-                pop hl
+                call sd_get
+                ld c,a                  ; distancia al papel
                 ld a,(pk)
-                ld e,a
-                add hl,de
-                ld a,(hl)               ; distancia a la tinta
+                call sd_get             ; distancia a la tinta
                 cp c
                 pop de
                 pop hl
@@ -266,6 +252,32 @@ pl_two:         ld a,(pk)
                 or c
                 ld (hl),a
                 jr pl_clr
+; distancia entre el color B y el A (simetrica: solo se guarda el triangulo, sdt_tri; sdt_st = donde empieza la fila de cada color mayor); conserva B y C
+sd_get:         ld e,a
+                ld a,b
+                cp e
+                jr nz,sg_n
+                xor a
+                ret
+sg_n:           jr nc,sg_o
+                ld d,e
+                ld e,a
+                ld a,d
+sg_o:           ld hl,sdt_st            ; A = el mayor, E = el menor
+                add a,l
+                ld l,a
+                jr nc,sg_c
+                inc h
+sg_c:           ld a,(hl)
+                add a,e
+                ld hl,sdt_tri
+                add a,l
+                ld l,a
+                jr nc,sg_d
+                inc h
+sg_d:           ld a,(hl)
+                ret
+
 pl_ri:          ld a,(pp)
                 rlca
                 rlca

@@ -136,8 +136,16 @@ kp_m:           ld a,c
 
 h_set_key:      ld a,(ARGS)             ; ascii, scan, controlador
                 or a
-                ret z
-                and 127
+                jr nz,sk_a
+                ld a,(ARGS+1)           ; teclas de funcion: F5 (63) y F7 (65) viven en los codigos de control 28 y 30 (teclas 2 y 3 del ZX81)
+                cp 63
+                ld a,28
+                jr z,sk_a
+                ld a,(ARGS+1)
+                cp 65
+                ret nz
+                ld a,30
+sk_a:           and 127
                 ld l,a
                 ld h,0
                 add hl,hl
@@ -159,7 +167,18 @@ hc_controller:  ld a,(ARGS)
 
 hc_have_key:    ld a,(keyn)
                 or a
+                jr nz,hk_k
+                ld a,(txtm)             ; en la pantalla de texto (ayuda) espera la tecla
+                or a
                 jp z,ret_false
+                call pr_wait
+                ld a,(stopf)
+                or a
+                jp nz,ret_false
+                ld a,(pw_last)
+                ld (VARS+19),a
+                jp ret_true
+hk_k:
                 ld a,(KEYQ)
                 ld (VARS+19),a
                 ld hl,KEYQ+1
@@ -277,6 +296,17 @@ h_display:      ld hl,OVB_DISPLAY
                 jp call_b
 h_display_v:    ld hl,OVB_DISPLAY_V
                 jp call_b
+; text.screen: la pantalla se queda en blanco (overlay C) y sin sprites; graphics la devuelve (la imagen se vuelve a dibujar)
+h_text_screen:  ld a,1
+                ld (txtm),a
+                call OVL_SPRINIT
+                ld hl,OVC_TEXTSCR
+                jp call_c
+h_graphics:     xor a
+                ld (txtm),a
+                call rd_pic
+                jp sg_t
+txtm:           defb 0
 h_clear_lines:  ld hl,OVB_CLEAR
                 jp call_b
 h_set_text_attribute: ld hl,OVB_ATTR
@@ -325,7 +355,14 @@ h_print_at_v:   ld a,(ARGS)
 pr_go:          call OVL_SPRINIT        ; con la ventana abierta los sprites se apagan
                 ld hl,OVB_PRINT
                 call call_b
-                call pr_wait
+                ld a,(oc_pw)            ; show.obj: el dibujo del objeto dentro de la ventana
+                or a
+                jr z,pg_w
+                ld hl,OVC_OBJPIC
+                call call_c
+                xor a
+                ld (oc_pw),a
+pg_w:           call pr_wait
                 ld a,(stopf)
                 or a
                 ret nz                  ; se acabaron los ciclos (pruebas): la ventana se queda
@@ -526,7 +563,13 @@ sg_go:          call call_b
                 ld a,(sv_ok)
                 or a
                 ret z
-                call OVL_SPCLR          ; se carga: la imagen, los rangos de los objetos fijos y se sale de la logica
+                call rd_pic             ; se carga: la imagen, los rangos de los objetos fijos y se sale de la logica
+                ld a,1
+                ld (exitall),a
+sg_t:           call OVL_SPRINIT
+                jp OVL_FORCE
+; la imagen y los objetos fijos otra vez (cargar partida, graphics)
+rd_pic:         call OVL_SPCLR
                 ld a,(lastpic)
                 call dp_num
                 ld ix,OBJ+24*32
@@ -541,10 +584,7 @@ rp_l:           bit 2,(ix+O_F2)
 rp_n:           ld de,32
                 add ix,de
                 djnz rp_l
-                ld a,1
-                ld (exitall),a
-                call OVL_SPRINIT
-                jp OVL_FORCE
+                ret
 mn_dir:         defb 0
 mi_k:           defb 0
 mi_v:           defb 0

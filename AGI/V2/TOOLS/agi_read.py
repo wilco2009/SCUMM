@@ -100,6 +100,38 @@ class Game:
 
 # --------------------------------------------------------------------------- logicas
 
+# Textos que sustituyen a los del juego original (la pantalla de ayuda habla de teclas del PC): {juego: {logica: {numero de mensaje: texto}}}.
+# Las filas las fija la propia logica (display con fila y columna); un mensaje con saltos de linea ocupa filas seguidas.
+HELP = {
+    'SQ1': {92: {
+        2: '          ZX81 keys',
+        3: '    1  clears the typed line.',
+        4: '    4  retypes the last line typed.',
+        5: '    2  saves your current game.',
+        7: '    3  restores a saved game.',
+        9: '    9  pops up the menus (ESC).',
+        11: '    5 6 7 8  left, down, up, right.',
+        13: '    0  deletes the last character.',
+        14: 'SHIFT + key: capitals and numbers.',
+        15: 'ENTER + key: symbols:',
+        16: '    Z:  X;  C?  V/  S\\  F~  G`\n    Q\'  W{  E}  R[  T_  Y]  P"\n    1!  2@  3#  4|  5%  6&  H^\n    .,  M>  N<  B*  I(  O)  U$\n    L=  K+  J-',
+        22: '',
+    }},
+}
+
+
+def help_override(path, n, msgs):
+    """La lista de mensajes de la logica n con los textos sustitutos del juego (path = carpeta del juego), si los hay."""
+    ov = HELP.get(os.path.basename(os.path.normpath(path)).upper(), {}).get(n)
+    if not ov:
+        return msgs
+    msgs = list(msgs)
+    for i, t in ov.items():
+        if i <= len(msgs):
+            msgs[i - 1] = t
+    return msgs
+
+
 def logic_messages(d):
     """Mensajes de una logica: lista (indice 1..n) de cadenas."""
     code = d[0] | (d[1] << 8)

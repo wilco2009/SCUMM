@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import agi_read as ag
 
 
-def convert(d):
+def convert(d, ov=None):
     size = d[0] | (d[1] << 8)
     agl = bytes(d[:2 + size])
     ms = size + 2
@@ -27,6 +27,16 @@ def convert(d):
         p = d[ms + 3 + 2 * i] | (d[ms + 4 + 2 * i] << 8)
         q = 0 if p == 0 else p + ms + 1 - tstart + 1
         offs += bytes((q & 255, q >> 8))
+    if ov:                                  # textos sustitutos (agi_read.HELP): el bloque de texto se rehace
+        ms = ag.help_override(ov[0], ov[1], ag.logic_messages(d))
+        offs = bytearray()
+        text = bytearray()
+        for m in ms:
+            q = 0 if m is None else len(text) + 1
+            offs += bytes((q & 255, q >> 8))
+            if m is not None:
+                text += m.encode('latin-1') + b'\0'
+        n = len(ms)
     return agl, bytes([n]) + bytes(offs) + bytes(text)
 
 
@@ -49,7 +59,7 @@ def main(argv):
         d = g.resource('LOG', n)
         if d is None:
             continue
-        agl, msg = convert(d)
+        agl, msg = convert(d, (argv[1], n))
         with open(sub(argv[2], 'LOG', 'LOG%03d.AGL' % n), 'wb') as f:
             f.write(agl)
         with open(sub(argv[2], 'LOG', 'LOG%03d.MSG' % n), 'wb') as f:

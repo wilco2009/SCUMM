@@ -21,6 +21,7 @@ import agi_read as ag
 from agi_logic import CMDS, CONDS
 from agi_text import plot_hr
 import agi_text
+import agi2spr
 
 DX = [0, 0, 1, 1, 1, 0, -1, -1, -1]
 DY = [0, -1, -1, 0, 1, 1, 1, 0, -1]
@@ -162,7 +163,7 @@ class Interp:
                 raise Stop('logica %d inexistente' % n)
             size = d[0] | (d[1] << 8)
             try:
-                msgs = ag.logic_messages(d)
+                msgs = ag.help_override(self.path, n, ag.logic_messages(d))
             except (IndexError, ValueError):
                 msgs = []
             self.logics[n] = (d[2:2 + size], msgs)
@@ -213,8 +214,8 @@ class Interp:
                                 pri2[row * 160 + ax] = pri
         out = [None] * 64
         k = 0
-        if self.box is not None or self.menu_ui is not None:
-            return out                  # con una ventana o un menu abiertos los sprites se apagan
+        if self.box is not None or self.menu_ui is not None or self.txtm:
+            return out                  # con una ventana, un menu o la pantalla de texto abiertos los sprites se apagan
         for n in self.draw_order():
             if True:
                 o = self.objs[n]
@@ -273,10 +274,10 @@ class Interp:
         sa = bytearray(self.ext_at)
         sb[256:256 + 168 * 32] = bm
         sa[256:256 + 168 * 32] = at
-        if self.pic is not None:
+        if self.pic is not None and not self.txtm:
             self.sw_blit(sb, sa)
         if self.box is not None:
-            agi_text.draw_box(sb, sa, self.box[0], self.box[1])
+            agi_text.draw_box(sb, sa, self.box[0], self.box[1], self.box[2])
         if self.menu_ui is not None:
             self.draw_menu(sb, sa)
         return sb, sa
@@ -369,6 +370,7 @@ class Interp:
         return re.sub(r'%([vmsgw])(\d+)(?:\|\d+)?', rep, s)
 
     wtext = []
+    txtm = False                # pantalla de texto (text.screen)
 
     def msg(self, n):
         ms = self.stack[-1][1]
@@ -445,6 +447,12 @@ class Interp:
         if name == 'controller':
             return a[0] in self.ctl
         if name == 'have.key':
+            if not self.keyq and self.txtm:                 # en la pantalla de texto (ayuda) espera la tecla
+                while not self.keyq:
+                    self.cycle += 1
+                    if self.cycle > self.max_cycles:
+                        raise Stop('fin de los ciclos en la pantalla de texto')
+                    self.apply_events(self.ev.get(self.cycle, []))
             if self.keyq:
                 v[19] = self.keyq.pop(0)
                 return True
@@ -948,9 +956,17 @@ class Interp:
         if off == 0 or off >= len(d):
             return
         q = d.find(b'\x00', off)
-        s = bytes(d[off:q if q >= 0 else len(d)]).decode('latin-1')[:99]
+        s = bytes(d[off:q if q >= 0 else len(d)]).decode('latin-1')[:239]
+        pic = None
         if s:
-            self.do_print(s, None, None, 0)
+            try:
+                c = agi2spr.cel_tiles(d, 0, 0)
+            except IndexError:
+                c = None
+            if c and c[2] and c[0] <= 200 and c[1] <= 56:        # el dibujo: bucle 0, celda 0; delante del texto, las filas que ocupa y una en blanco
+                s = '\n' * (((c[1] + 7) >> 3) + 1) + s
+                pic = (c[0], c[2])
+            self.do_print(s, None, None, 0, pic)
 
     def c_show_obj_v(self, v): self.c_show_obj(self.vars[v])
 
@@ -980,13 +996,13 @@ class Interp:
     def c_print_at(self, m, r, c, w): self.do_print(self.msg(m)[:250], r, c, w)
     def c_print_at_v(self, vm, vr, vc, vw): self.c_print_at(self.vars[vm], self.vars[vr], self.vars[vc], self.vars[vw])
 
-    def do_print(self, s, row, col, w):
+    def do_print(self, s, row, col, w, pic=None):
         """Ventana de mensaje: se dibuja y el interprete espera una tecla (un evento `key`); cada vuelta de la espera es un ciclo (con sus eventos). La tecla que la
         cierra no llega a la logica (v19 y la cola de teclas quedan como estaban). Si se acaban los ciclos con la ventana abierta, se queda en la pantalla."""
         width = w if 1 <= w <= 36 else 30
         lines = agi_text.wrap(s, width)
         self.log('print: ' + ' / '.join(lines))
-        self.box = (lines, agi_text.box_geom(lines, row, col))
+        self.box = (lines, agi_text.box_geom(lines, row, col, ((pic[0] + 7) >> 3) + 2 if pic else 0), pic)
         n, v19 = len(self.keyq), self.vars[19]
         while True:
             self.cycle += 1
@@ -999,6 +1015,23 @@ class Interp:
         del self.keyq[n:]
         self.vars[19] = v19
         self.box = None
+    def c_text_screen(self):
+        """La pantalla de texto: las filas 1-21 en negro y sin sprites hasta graphics."""
+        self.txtm = True
+        for r in range(1, 22):
+            self.pic_ops.append(('f', r, 0))
+
+    def c_graphics(self):
+        self.txtm = False
+        self.pic = ag.Picture(self.g.resource('PIC', self.lastpic))
+        self.pic_ops = []
+        self.spans = []
+        self.span_rows = 0
+        for k in sorted(self.objs):
+            o = self.objs[k]
+            if k >= 24 and o.static and o.anim:
+                self.add_spans(o)
+
     def c_display(self, r, c, m):
         s = self.msg(m)[:250]
         self.log('display %d,%d: %s' % (r, c, s))
@@ -1074,7 +1107,7 @@ class Interp:
     def c_cancel_line(self): pass
     def c_set_cursor_char(self, m): self.cursor = self.msg(m)[:1] or ' '
     def c_accept_input(self): self.accept = True
-    def c_set_key(self, a, s, c): self.keys[a if a else (s << 8)] = c
+    def c_set_key(self, a, s, c): self.keys[a if a else {63: 28, 65: 30}.get(s, s << 8)] = c      # F5 y F7: codigos 28 y 30
     # ------------------------------------------------------------ menus
     def c_set_menu(self, m):
         if len(self.menus) < 8:
@@ -1082,7 +1115,17 @@ class Interp:
 
     def c_set_menu_item(self, m, c):
         if self.menus and sum(len(x[1]) for x in self.menus) < 48:
-            self.menus[-1][1].append([self.msg(m)[:36], c, True])
+            self.menus[-1][1].append([self.menu_tag(self.msg(m)[:36]), c, True])
+
+    @staticmethod
+    def menu_tag(t):
+        """La tecla del PC del texto de una opcion (<F5>, <Alt-Z>...): F5 y F7 pasan a <2> y <3> (teclas del ZX81); las demas se quitan con los espacios que las separan."""
+        p = t.find('<')
+        if p < 0:
+            return t
+        if t[p:p + 4] in ('<F5>', '<F7>'):
+            return t[:p] + ('<2>' if t[p + 2] == '5' else '<3>')
+        return t[:p].rstrip(' ')
 
     def c_submit_menu(self): pass
 

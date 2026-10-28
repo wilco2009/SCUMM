@@ -12,6 +12,8 @@
                 jp t_echo               ; OVC_ECHO
                 jp t_cancel             ; OVC_CANCEL
                 jp t_curchar            ; OVC_CURSOR
+                jp t_objpic             ; OVC_OBJPIC
+                jp t_textscr            ; OVC_TEXTSCR
 
 TXT             equ TMPM
 
@@ -171,7 +173,9 @@ oc_cd:          ld (oc_dp),hl
 ; TXT = la descripcion de la vista ARGS[0] (en el recurso, a partir del desplazamiento de los bytes 3-4); oc_res = 1 si la tiene
 t_objdesc:      xor a
                 ld (oc_res),a
+                ld (oc_pw),a
                 ld a,(ARGS)
+                ld (oc_vw),a
                 ld hl,ov_nm+9
                 call mk_dig
                 ld hl,ov_nm
@@ -194,22 +198,200 @@ t_objdesc:      xor a
                 call f_seek
                 ld a,(oc_h)
                 ld hl,TXT
-                ld bc,100
+                ld bc,240
                 call f_read_n
                 xor a
-                ld (TXT+99),a
+                ld (TXT+239),a
                 ld a,(TXT)
                 or a
                 jr z,od_c
                 ld a,1
                 ld (oc_res),a
+                ld a,(oc_h)
+                call f_close
+                call pic_open           ; el dibujo (bucle 0, celda 0): si cabe, el texto lleva delante filas en blanco para el
+                ret z
+                ld a,(oc_h)
+                call f_close
+                ld a,(MSGBUF)
+                or a
+                ret z
+                ld a,(MSGBUF+1)
+                cp 201
+                ret nc
+                ld a,(MSGBUF+2)
+                cp 57
+                ret nc
+                ld a,(MSGBUF+1)
+                ld (oc_pw),a
+                ld a,(MSGBUF+2)
+                add a,7
+                rrca
+                rrca
+                rrca
+                and 31
+                inc a
+                ld (od_k),a
+                ld e,a
+                ld d,0
+                ld hl,TXT+239
+                push hl
+                add hl,de
+                ex de,hl
+                pop hl
+                ld bc,240
+                lddr
+                ld a,(od_k)
+                ld b,a
+                ld hl,TXT
+                ld a,10
+od_f:           ld (hl),a
+                inc hl
+                djnz od_f
+                ret
 od_c:           ld a,(oc_h)
+                jp f_close
+
+; abre SPR/Nvvv0.SPR y lee en MSGBUF el registro de la celda 0 (mosaicos, ancho, alto...); Z si no hay fichero
+pic_open:       ld a,(oc_vw)
+                ld hl,pc_nm+5
+                call mk_dig
+                ld hl,pc_nm
+                call f_open
+                cp $FF
+                ret z
+                ld (oc_h),a
+                ld hl,MSGBUF
+                ld bc,6
+                call f_read_n
+                ld hl,(MSGBUF+4)
+                inc hl
+                inc hl
+                ld a,(oc_h)
+                call f_seek
+                ld a,(oc_h)
+                ld hl,MSGBUF
+                ld bc,6
+                call f_read_n
+                ld a,1
+                or a
+                ret
+
+; el dibujo del objeto en la ventana ya pintada: los mosaicos de la celda sobre el bitmap (fila completa: sus colores; fila con huecos: solo la tinta sobre papel blanco)
+t_objpic:       call pic_open
+                ret z
+                ld a,(MSGBUF+1)
+                add a,7
+                rrca
+                rrca
+                rrca
+                and 31
+                ld b,a
+                ld a,(pr_bw)
+                sub 2
+                sub b
+                srl a
+                ld b,a
+                ld a,(pr_cxl)
+                inc a
+                add a,b
+                ld (op_c),a
+                ld a,(pr_top)
+                inc a
+                add a,a
+                add a,a
+                add a,a
+                ld (op_y),a
+                ld a,(MSGBUF)
+                ld (op_n),a
+op_l:           ld a,(op_n)
+                or a
+                jr z,op_x
+                dec a
+                ld (op_n),a
+                ld a,(oc_h)
+                ld hl,MSGBUF+16
+                ld bc,26
+                call f_read_n
+                ld a,(MSGBUF+17)        ; ty
+                add a,a
+                add a,a
+                add a,a
+                ld b,a
+                ld a,(op_y)
+                add a,b
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld a,(op_c)
+                ld b,a
+                ld a,(MSGBUF+16)        ; tx
+                add a,b
+                ld c,a
+                ld b,0
+                add hl,bc
+                ld (op_o),hl
+                ld ix,MSGBUF+18
+                ld b,8
+op_r:           push bc
+                ld a,(ix+16)            ; mascara
+                or a
+                jr z,op_nx
+                ld c,a
+                ld a,(ix+8)
+                and c
+                ld d,a                  ; bitmap
+                ld a,(ix+0)             ; color: tinta * 16 + papel
+                ld e,a
+                ld a,c
+                inc a
+                ld a,e
+                jr z,op_f
+                and $F0
+                rrca
+                rrca
+                rrca
+                rrca
+                or $F0
+                jr op_w
+op_f:           rrca
+                rrca
+                rrca
+                rrca
+op_w:           ld hl,(op_o)
+                ld bc,HR_ATT
+                add hl,bc
+                ld (hl),a
+                ld hl,(op_o)
+                ld bc,HR_BM
+                add hl,bc
+                ld (hl),d
+op_nx:          ld hl,(op_o)
+                ld bc,32
+                add hl,bc
+                ld (op_o),hl
+                inc ix
+                pop bc
+                djnz op_r
+                jp op_l
+op_x:           ld a,(oc_h)
                 jp f_close
 
 s_have:         defb "You are carrying:",10,10,0
 s_none:         defb "Nothing",10,0
 s_foot:         defb 10,"Press any key to return",10,"to the game.",0
 ov_nm:          defb "VIEW/VIEW000.GFX",0
+pc_nm:          defb "SPR/N0000.SPR",0
+oc_vw:          defb 0
+od_k:           defb 0
+op_c:           defb 0
+op_y:           defb 0
+op_n:           defb 0
+op_o:           defw 0
 oc_dp:          defw 0
 oc_sp:          defw 0
 oc_n:           defb 0
@@ -255,4 +437,17 @@ t_curchar:      ld a,(ARGS)
 cc_s:           ld (curchar),a
                 ld a,1
                 ld (kb_dirty),a
+                ret
+
+; text.screen: las filas de texto 1-21 (lineas 8-175) en negro
+t_textscr:      ld hl,HR_BM+256
+                ld de,HR_BM+257
+                ld bc,5375
+                ld (hl),0
+                ldir
+                ld hl,HR_ATT+256
+                ld de,HR_ATT+257
+                ld bc,5375
+                ld (hl),0
+                ldir
                 ret

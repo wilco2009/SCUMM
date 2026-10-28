@@ -691,7 +691,20 @@ tp_mn:          ld de,40
                 and 31
                 add a,2
                 ld (pr_bw),a
-                ld a,(wr_n)
+                ld a,(oc_pw)            ; show.obj: la ventana cabe el dibujo
+                or a
+                jr z,tp_np
+                add a,7
+                rrca
+                rrca
+                rrca
+                and 31
+                add a,2
+                ld hl,pr_bw
+                cp (hl)
+                jr c,tp_np
+                ld (hl),a
+tp_np:          ld a,(wr_n)
                 add a,2
                 ld (pr_nr),a
                 ld b,a
@@ -1061,10 +1074,7 @@ wr_lp:          defw 0
 wr_tp:          defw 0
 wr_np:          defw 0
 wr_tl:          defb 0
-pr_bw:          defb 0
 pr_nr:          defb 0
-pr_top:         defb 0
-pr_cxl:         defb 0
 pr_l0:          defb 0
 pr_ln:          defb 0
 pr_l:           defb 0
@@ -1185,6 +1195,7 @@ t_setitem:      ld a,(mn_n)
                 ret nc
                 call mp_text
                 ret c
+                call mi_tag
                 ld a,(it_n)
                 ld l,a
                 ld h,0
@@ -1210,6 +1221,50 @@ t_setitem:      ld a,(mn_n)
                 inc hl
                 inc hl
                 inc (hl)
+                ret
+
+; el texto de la opcion lleva la tecla del PC (<F5>, <Alt-Z>...): F5 y F7 pasan a <2> y <3> (las teclas del ZX81); las demas se quitan, con los espacios que las separan
+mi_tag:         ld hl,(mp_last)
+mg_f:           ld a,(hl)
+                or a
+                ret z
+                cp '<'
+                jr z,mg_t
+                inc hl
+                jr mg_f
+mg_t:           ld d,h
+                ld e,l
+                inc hl
+                ld a,(hl)
+                cp 'F'
+                jr nz,mg_cut
+                inc hl
+                ld a,(hl)
+                ld c,'2'
+                cp '5'
+                jr z,mg_k
+                ld c,'3'
+                cp '7'
+                jr nz,mg_cut
+mg_k:           inc hl
+                ld a,(hl)
+                cp '>'
+                jr nz,mg_cut
+                ex de,hl
+                inc hl
+                ld (hl),c
+                inc hl
+                ld (hl),'>'
+                inc hl
+                ld (hl),0
+                ret
+mg_cut:         ex de,hl
+mg_s:           dec hl
+                ld a,(hl)
+                cp ' '
+                jr z,mg_s
+                inc hl
+                ld (hl),0
                 ret
 
 t_enable:       ld a,1

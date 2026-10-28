@@ -159,7 +159,12 @@ kk_t:           add hl,de
 
 ; A = caracter -> evento de tecla y, si se acepta entrada, edicion de la linea
 kb_emit:        ld c,a
+                bit 7,c
+                jr z,ke_txt
+                res 7,c                 ; tecla de funcion: solo el evento, sin editar la linea
                 ld a,1
+                jp kq_put
+ke_txt:         ld a,1
                 push bc
                 call kq_put
                 pop bc
@@ -317,7 +322,7 @@ kdl_p:          ret
 km_base:        defb 0,'z','x','c','v'
                 defb 'a','s','d','f','g'
                 defb 'q','w','e','r','t'
-                defb 0,0,0,0,0                  ; las cifras solas son funciones: 5/6/7/8 = direcciones (no dan caracter); 1 libre
+                defb 3,28,30,5,0                ; 1 = borrar linea (Ctrl-C), 2 = guardar (F5 = codigo 28), 3 = cargar (F7 = codigo 30), 4 = repetir orden (Ctrl-E); 5/6/7/8 = direcciones
                 defb 8,27,0,0,0                 ; 0 = borrar, 9 = ESC (la unica)
                 defb 'p','o','i','u','y'
                 defb 0,'l','k','j','h'

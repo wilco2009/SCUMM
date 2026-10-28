@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import agi2hr
 
 FONT = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'V2', 'ENGINE', 'font6.bin'), 'rb').read()
+FONT = FONT[:512] + bytes([0, 0b00100000, 0b00010000, 0, 0, 0, 0, 0]) + FONT[520:]      # ASCII 96: acento grave en vez de la libra (comillas ``asi'' de AGI)
 COLS, ROWS = 42, 24
 
 
@@ -124,11 +125,11 @@ def wrap(text, width):
     return lines[:MAXLINES]
 
 
-def box_geom(lines, row=None, col=None):
+def box_geom(lines, row=None, col=None, minw=0):
     """(fila de texto de arriba, celda de la izquierda, celdas de ancho, filas de alto) de la ventana de unas lineas. Una celda de relleno a cada lado y una fila
     arriba y otra abajo; centrada en la imagen (filas 1-21) o, con print.at, en (row, col * 6 pixeles) sin salirse de la imagen."""
     maxlen = max(len(l) for l in lines)
-    boxw = ((maxlen * 6 + 7) >> 3) + 2
+    boxw = max(((maxlen * 6 + 7) >> 3) + 2, minw)
     nrows = len(lines) + 2
     if row is None:
         top = 1 + ((21 - nrows) >> 1)
@@ -139,7 +140,7 @@ def box_geom(lines, row=None, col=None):
     return top, cxl, boxw, nrows
 
 
-def draw_box(bm, at, lines, geom):
+def draw_box(bm, at, lines, geom, pic=None):
     """Pinta la ventana en los planos de pantalla completa (192 lineas): blanco con letras negras y un marco rojo de un pixel."""
     top, cxl, boxw, nrows = geom
     white, red = agi2hr.to_chroma(15), agi2hr.to_chroma(4)
@@ -158,3 +159,19 @@ def draw_box(bm, at, lines, geom):
         line = top * 8 + k
         bm[line * 32 + cxl] |= 0x80
         bm[line * 32 + cxl + boxw - 1] |= 0x01
+
+    if pic:                                 # show.obj: mosaicos (tx, ty, color, dato, mascara) de la celda, centrados en la ventana
+        w, tiles = pic
+        c0 = cxl + 1 + ((boxw - 2 - ((w + 7) >> 3)) >> 1)
+        y0 = (top + 1) * 8
+        for tx, ty, col, pix, msk in tiles:
+            for r in range(8):
+                if not msk[r]:
+                    continue
+                i = (y0 + ty * 8 + r) * 32 + c0 + tx
+                if msk[r] == 255:
+                    bm[i] = pix[r]
+                    at[i] = ((col[r] << 4) | (col[r] >> 4)) & 255
+                else:
+                    bm[i] = pix[r] & msk[r]
+                    at[i] = 0xF0 | (col[r] >> 4)
