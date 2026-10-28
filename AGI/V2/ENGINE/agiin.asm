@@ -76,7 +76,11 @@ ev_dispatch:    ld a,(ev_kind)
                 cp 5
                 jr z,ev_dir
                 ret
-ev_text:        ld hl,EVBUF
+ev_text:        ld hl,EVBUF             ; la linea tambien se guarda para echo.line
+                ld de,LASTLN
+                ld bc,41
+                ldir
+                ld hl,EVBUF
                 call parse_text
                 xor a
                 ld (said_done),a
@@ -537,6 +541,48 @@ mn_dir:         defb 0
 mi_k:           defb 0
 mi_v:           defb 0
 mi_d:           defb 0
+
+; echo.line: la ultima orden vuelve a la linea de entrada; cancel.line la borra; set.cursor.char: el caracter del cursor (solo se ve en modo real)
+h_echo_line:    ld hl,LASTLN
+                ld de,INBUF
+                ld bc,41
+                ldir
+                ld hl,INBUF
+                ld b,0
+el_l:           ld a,(hl)
+                or a
+                jr z,el_d
+                inc hl
+                inc b
+                jr el_l
+el_d:           ld a,b
+                ld (il_n),a
+                ld a,1
+                ld (kb_dirty),a
+                ret
+h_cancel_line:  xor a
+                ld (il_n),a
+                ld (INBUF),a
+                inc a
+                ld (kb_dirty),a
+                ret
+h_set_cursor_char: ld a,(ARGS)
+                ld b,a
+                ld a,(curlg)
+                ld (bs_lg),a
+                ld de,TMPM
+                ld c,250
+                call build_str
+                ld a,(TMPM)
+                or a
+                jr nz,cc_s
+                ld a,' '
+cc_s:           ld (curchar),a
+                ld a,1
+                ld (kb_dirty),a
+                ret
+curchar:        defb '_'
+LASTLN:         defs 41
 
 h_accept_input: jp OVL_ACCEPT
 h_prevent_input: jp OVL_PREVENT

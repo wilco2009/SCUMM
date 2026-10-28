@@ -517,7 +517,7 @@ t_prompt:       ld a,23
                 call put_str
                 ld hl,INBUF
                 call put_str
-                ld a,'_'
+                ld a,(curchar)
                 call bs_put
                 ld a,15
                 call t_chroma

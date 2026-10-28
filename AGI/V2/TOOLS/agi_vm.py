@@ -994,6 +994,9 @@ class Interp:
         self.flags[2] = 1
 
     def c_prevent_input(self): self.accept = False
+    def c_echo_line(self): pass                 # solo cambian la linea de entrada (modo real), que el modelo no tiene
+    def c_cancel_line(self): pass
+    def c_set_cursor_char(self, m): self.cursor = self.msg(m)[:1] or ' '
     def c_accept_input(self): self.accept = True
     def c_set_key(self, a, s, c): self.keys[a if a else (s << 8)] = c
     # ------------------------------------------------------------ menus
