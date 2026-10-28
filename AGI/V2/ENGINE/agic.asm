@@ -22,7 +22,9 @@
 TXT             equ TMPM
 
 ; El estado del juego vuelve al del arranque (lo de init que no son ficheros ni los punteros de pruebas); la logica en curso se sale sola (exitall)
-t_restart:      xor a
+t_restart:      ld hl,$ACE1             ; la semilla de los numeros aleatorios, la del arranque: el reinicio repite lo mismo que la primera vez
+                ld (lfsr),hl
+                xor a
                 ld (ovl_on),a
                 call h_stop_sound
                 ld hl,LGSLOT

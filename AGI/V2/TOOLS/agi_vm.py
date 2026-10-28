@@ -991,7 +991,7 @@ class Interp:
     def c_show_obj_v(self, v): self.c_show_obj(self.vars[v])
 
     RESTART_FIELDS = ('vars', 'flags', 'strs', 'objs', 'inv', 'keys', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'horizon', 'blocks', 'pcontrol',
-                      'lastpic', 'ovl_n', 'status_on', 'st_last', 'tfg', 'tbg', 'accept', 'sound_flags', 'input', 'said_done', 'keyq', 'textq', 'ctl', 'wtext', 'ext_bm', 'ext_at', 'box')
+                      'lastpic', 'ovl_n', 'lfsr', 'status_on', 'st_last', 'tfg', 'tbg', 'accept', 'sound_flags', 'input', 'said_done', 'keyq', 'textq', 'ctl', 'wtext', 'ext_bm', 'ext_at', 'box')
 
     def c_restart_game(self):
         """Confirmacion (ENTER reinicia, ESC sigue); el estado vuelve al del arranque y se sale de la logica en curso."""
