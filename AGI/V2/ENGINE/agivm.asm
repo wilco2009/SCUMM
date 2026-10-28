@@ -106,6 +106,7 @@ OVC_OBJPIC      equ $2012
 OVC_DIST        equ $2018
 OVC_ANIM        equ $201B
 OVC_GETNUM      equ $201E
+OVC_PARSE       equ $2021
 OVC_TEXTSCR     equ $2015
 OVC_RESTART     equ $2000               ; overlay C (restart.game, status, show.obj): tambien con call_c
 OVC_INVTXT      equ $2003

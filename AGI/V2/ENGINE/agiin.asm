@@ -721,16 +721,8 @@ ws_e:           xor a
                 ld (de),a
                 ret
 
-h_parse:        ld a,(ARGS)
-                cp 12
-                ret nc
-                call strptr
-                call parse_text
-                xor a
-                ld (said_done),a
-                inc a
-                ld (FLAGS+2),a
-                ret
+h_parse:        ld hl,OVC_PARSE         ; en el overlay C (el nucleo no tiene sitio)
+                jp call_c
 
 ; HL = cadena -> DE (normalizada: minusculas, palabras separadas por un espacio)
 norm:           ld bc,0                 ; B = espacio pendiente, C = ya hay una palabra

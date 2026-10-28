@@ -17,6 +17,7 @@
                 jp t_distance           ; OVC_DIST
                 jp t_animate            ; OVC_ANIM
                 jp t_getnum             ; OVC_GETNUM
+                jp t_parse              ; OVC_PARSE
 
 TXT             equ TMPM
 
@@ -544,4 +545,21 @@ tg_ok:          ld a,(ARGS+1)
                 ld l,a
                 ld h,VARS>>8
                 ld (hl),b
+                ret
+
+; parse(s): la cadena como si se hubiera tecleado (bandera 2); una cadena vacia no es una orden (f2 a 0)
+t_parse:        ld a,(ARGS)
+                cp 12
+                ret nc
+                call strptr
+                ld a,(hl)
+                or a
+                jr nz,tpa_p
+                ld (FLAGS+2),a
+                ret
+tpa_p:          call parse_text
+                xor a
+                ld (said_done),a
+                inc a
+                ld (FLAGS+2),a
                 ret

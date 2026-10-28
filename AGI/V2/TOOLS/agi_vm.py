@@ -1132,6 +1132,9 @@ class Interp:
         self.strs[s] = (self.wtext[n] if n < len(self.wtext) else '')[:40]
 
     def c_parse(self, s):
+        if not self.strs[s]:                # una cadena vacia no es una orden
+            self.flags[2] = 0
+            return
         self.input = self.parse(self.strs[s])
         self.said_done = False
         self.flags[2] = 1
