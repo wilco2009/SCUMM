@@ -73,8 +73,13 @@ td_go:          ld b,a
                 ld (dl_bg),a
                 ld hl,TXT
 td_line:        ld a,(dl_row0)
-                cp 24
+                cp 25
                 ret nc
+                cp 24                   ; la fila 24 de AGI (la 25a) no cabe en las 24 del HiRes: va a la 23
+                jr c,td_ok
+                ld a,23
+                ld (dl_row0),a
+td_ok:
                 ld (dl_ptr),hl
                 ld b,0
 tl_c:           ld a,(hl)
@@ -126,7 +131,17 @@ t_chroma:       and 15
 ; ---------------------------------------------------------------------
 ;  Una linea de texto: dl_ptr, dl_n (1-42), dl_row, dl_col, dl_fg, dl_bg (codigos de Chroma)
 ; ---------------------------------------------------------------------
-draw_line:      ld a,(dl_col)
+draw_line:      ld a,(dl_col)           ; el texto no pasa de la columna 42 (con la suma de 8 bits de abajo, una barra de menu de 43 columnas dibujaba basura)
+                ld c,a
+                ld a,42
+                sub c
+                ret c
+                ret z
+                ld hl,dl_n
+                cp (hl)
+                jr nc,dl_fit
+                ld (hl),a
+dl_fit:         ld a,(dl_col)
                 ld b,a
                 add a,a
                 add a,b
@@ -343,7 +358,10 @@ t_srow:         ld l,a
 ;  clear.lines: filas A-B con el color C (EGA)
 ; ---------------------------------------------------------------------
 t_clear_lines:  ld a,(ARGS)
-                ld (cl_r),a
+                cp 24
+                jr c,cl_a
+                ld a,23
+cl_a:           ld (cl_r),a
                 ld a,(ARGS+1)
                 cp 24
                 jr c,cl_e
@@ -503,7 +521,7 @@ put_str:        ld a,(hl)
                 jr put_str
 
 ; Linea de entrada (fila 23): "> " + lo escrito + "_"; se pide desde kb_prompt (nucleo) cuando cambia
-t_prompt:       ld a,23
+t_prompt:       ld a,22                 ; la linea de entrada en la fila 22, como en AGI (la 23 queda para la fila 24 de los textos)
                 ld (dl_row),a
                 xor a
                 call fill_row
@@ -532,7 +550,7 @@ t_prompt:       ld a,23
                 ld (dl_ptr),hl
                 ld a,(bs_n)
                 ld (dl_n),a
-                ld a,23
+                ld a,22
                 ld (dl_row),a
                 xor a
                 ld (dl_col),a

@@ -629,7 +629,6 @@ class Interp:
         self.horizon = 36
         v[1] = old
         v[0] = n
-        v[3] = 0
         v[4] = 0
         v[5] = 0
         w, h = self.cell(ego) if ego.anim else (0, 0)
@@ -1065,11 +1064,11 @@ class Interp:
     def text_out(self, r, c, s):
         row = r
         for line in s.split(chr(10)):
-            if row >= agi_text.ROWS:
+            if row > agi_text.ROWS:                 # AGI tiene 25 filas de texto; la 24 va a la 23 (el HiRes tiene 24)
                 break
             t = agi_text.printable(line)[:max(0, agi_text.COLS - c)]
             if t:
-                self.text_line(row, c, t, self.tfg, self.tbg)
+                self.text_line(min(row, agi_text.ROWS - 1), c, t, self.tfg, self.tbg)
             row += 1
 
     def text_line(self, row, col, t, fg, bg):
@@ -1079,7 +1078,7 @@ class Interp:
             agi_text.put_line(self.ext_bm, self.ext_at, 0, row, col, t, fg, bg)
 
     def c_clear_lines(self, a, b, c):
-        for r in range(a, min(b, agi_text.ROWS - 1) + 1):
+        for r in range(min(a, agi_text.ROWS - 1), min(b, agi_text.ROWS - 1) + 1):
             if 1 <= r <= 21:
                 self.pic_ops.append(('f', r, c))
             else:

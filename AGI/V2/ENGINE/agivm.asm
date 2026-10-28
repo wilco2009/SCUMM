@@ -874,7 +874,6 @@ nr_u:           res 0,(ix+O_F1)
                 ld a,(nr_val)
                 ld (VARS+0),a
                 xor a
-                ld (VARS+3),a
                 ld (VARS+4),a
                 ld (VARS+5),a
                 ld de,0

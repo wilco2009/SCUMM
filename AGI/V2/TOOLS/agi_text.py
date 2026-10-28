@@ -42,6 +42,8 @@ def plot_hr(bm, at, y, x, c):
 
 def put_line(bm, at, base, row, col, text, fg, bg, x0=None):
     """Escribe `text` (sin saltos de linea) en la fila de texto `row`, columna `col`. base = linea de pantalla que es la linea 0 del plano."""
+    if x0 is None:
+        text = text[:max(0, COLS - col)]        # el texto no pasa de la ultima columna (como draw_line del Z80)
     n = len(text)
     if n == 0:
         return
