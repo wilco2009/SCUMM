@@ -307,6 +307,8 @@ h_graphics:     xor a
                 call rd_pic
                 jp sg_t
 txtm:           defb 0
+h_shake_screen: ld hl,OVC_SHAKE         ; shake.screen: overlay C
+                jp call_c
 h_clear_lines:  ld hl,OVB_CLEAR
                 jp call_b
 h_set_text_attribute: ld hl,OVB_ATTR

@@ -14,6 +14,7 @@
                 jp t_curchar            ; OVC_CURSOR
                 jp t_objpic             ; OVC_OBJPIC
                 jp t_textscr            ; OVC_TEXTSCR
+                jp t_shake              ; OVC_SHAKE
 
 TXT             equ TMPM
 
@@ -451,3 +452,41 @@ t_textscr:      ld hl,HR_BM+256
                 ld (hl),0
                 ldir
                 ret
+
+; shake.screen(n): n sacudidas de 8 fotogramas con el fino X (POKE 2090) y el fino Y (registro 8 del puerto $3FEF) del hardware; al acabar, a 0.
+; En las pruebas (ncyc > 0) no espera fotogramas.
+t_shake:        ld a,(ARGS)
+                or a
+                ret z
+                ld (sh_n),a
+sh_l:           ld hl,sh_pat
+                ld b,8
+sh_f:           ld a,(hl)
+                inc hl
+                ld (2090),a
+                ld a,(hl)
+                inc hl
+                push hl
+                push bc
+                call sh_y
+                ld hl,(ncyc)
+                ld a,h
+                or l
+                call z,wait_frame
+                pop bc
+                pop hl
+                djnz sh_f
+                ld hl,sh_n
+                dec (hl)
+                jr nz,sh_l
+                xor a
+                ld (2090),a
+sh_y:           ld d,a
+                ld bc,$3FEF
+                ld a,$40
+                out (c),a
+                ld a,d
+                out (c),a
+                ret
+sh_n:           defb 0
+sh_pat:         defb 4,2, 4,2, 0,0, 0,0, 2,3, 2,3, 0,0, 0,0

@@ -103,6 +103,7 @@ OVC_CANCEL      equ $200C
 OVC_CURSOR      equ $200F
 OVC_OBJPIC      equ $2012
 OVC_TEXTSCR     equ $2015
+OVC_SHAKE       equ $2018
 OVC_RESTART     equ $2000               ; overlay C (restart.game, status, show.obj): tambien con call_c
 OVC_INVTXT      equ $2003
 OVC_OBJDESC     equ $2006

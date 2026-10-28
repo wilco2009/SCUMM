@@ -415,7 +415,7 @@ int main(int argc, char** argv) {
     std::vector<std::pair<long long, std::string>> v; for (auto& kv : prof) v.push_back({kv.second, kv.first});
     std::sort(v.rbegin(), v.rend());
     printf("PERFIL de los fotogramas %d-%d: %lld T-estados (%zu vueltas)%c", prof_lo, prof_hi, prof_total, prof_loops.size(), 10);
-    for (size_t i = 0; i < v.size() && i < 25; i++) printf("  %-18s %9lld  %5.1f%%%c", v[i].second.c_str(), v[i].first, 100.0 * v[i].first / prof_total, 10);
+    for (size_t i = 0; i < v.size() && i < (getenv("TS_TOP") ? (size_t)atoi(getenv("TS_TOP")) : 25); i++) printf("  %-18s %9lld  %5.1f%%%c", v[i].second.c_str(), v[i].first, 100.0 * v[i].first / prof_total, 10);
     { std::vector<std::pair<long long, int>> w; for (auto& kv : prof_by_loop) { long long t = 0; for (auto& q : kv.second) t += q.second; w.push_back({t, kv.first}); }
       std::sort(w.rbegin(), w.rend());
       printf("las 8 vueltas mas pesadas (instrucciones):%c", 10);
