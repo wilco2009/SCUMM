@@ -14,6 +14,7 @@ if not exist ..\%G% (echo *** no hay datos de %G% en AGI\V2\%G% & goto error)
 python -I ..\TOOLS\gen_agitab.py agivm.asm agiobj.asm agiin.asm agipic.asm agitab.inc || goto error
 python -I ..\TOOLS\gen_sprtab.py sprtab.inc || goto error
 pasmo agivm.asm agivm.bin agivm.sym || goto error
+for %%A in (agivm.bin) do if %%~zA GTR 11008 (echo agivm.bin pasa de VARS: %%~zA bytes, maximo 11008 & goto error)
 python -I ..\TOOLS\gen_font.py font6.inc || goto error
 copy /y agivm.sym agires.inc >nul
 pasmo agia.asm agia.bin agia.sym || goto error

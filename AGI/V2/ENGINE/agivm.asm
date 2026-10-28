@@ -98,12 +98,15 @@ OVB_DLGLOAD     equ $2039
 OVB_DLGDONE     equ $203C
 OVB_MENURESET   equ $203F
 OVB_DLGINV      equ $2042
+OVB_GSDRAW      equ $2045
 OVC_ECHO        equ $2009
 OVC_CANCEL      equ $200C
 OVC_CURSOR      equ $200F
 OVC_OBJPIC      equ $2012
+OVC_DIST        equ $2018
+OVC_ANIM        equ $201B
+OVC_GETNUM      equ $201E
 OVC_TEXTSCR     equ $2015
-OVC_SHAKE       equ $2018
 OVC_RESTART     equ $2000               ; overlay C (restart.game, status, show.obj): tambien con call_c
 OVC_INVTXT      equ $2003
 OVC_OBJDESC     equ $2006
@@ -145,6 +148,8 @@ start:          di
 ;  El ciclo del interprete
 ; ---------------------------------------------------------------------
 main_loop:      in a,(ClkPort)          ; las tramas se cuentan desde aqui (ver pace)
+                ld hl,hk_seen
+                ld (hl),0
                 ld hl,CTL
                 ld de,CTL+1
                 ld bc,255
@@ -841,7 +846,10 @@ ts_end:         pop de
 ; ---------------------------------------------------------------------
 ;  Sala nueva, reloj, resumen, sonidos
 ; ---------------------------------------------------------------------
-do_new_room:    call OVL_SPCLR
+do_new_room:    xor a                   ; la logica 0 se reinicia sin la linea tecleada (bandera 2) ni la palabra desconocida (v9), como en AGI
+                ld (FLAGS+2),a
+                ld (VARS+9),a
+                call OVL_SPCLR
                 call h_stop_sound
                 ld a,(VARS+0)
                 ld (VARS+1),a

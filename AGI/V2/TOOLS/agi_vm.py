@@ -372,6 +372,7 @@ class Interp:
     wtext = []
     rs_keep = False
     txtm = False                # pantalla de texto (text.screen)
+    hk_seen = False             # have.key sin tecla ya llamado en este ciclo
 
     def msg(self, n):
         ms = self.stack[-1][1]
@@ -448,7 +449,10 @@ class Interp:
         if name == 'controller':
             return a[0] in self.ctl
         if name == 'have.key':
-            if not self.keyq and self.txtm:                 # en la pantalla de texto (ayuda) espera la tecla
+            if not self.keyq and self.txtm and not self.hk_seen:        # en la pantalla de texto un bucle apretado (2a llamada del ciclo sin tecla) espera la tecla
+                self.hk_seen = True
+                return False
+            if not self.keyq and self.txtm:
                 while not self.keyq:
                     self.cycle += 1
                     if self.cycle > self.max_cycles:
@@ -605,6 +609,8 @@ class Interp:
     def do_new_room(self, n):
         v = self.vars
         old = v[0]
+        self.flags[2] = 0               # la logica 0 se reinicia sin la linea tecleada ni la palabra desconocida, como en AGI
+        v[9] = 0
         self.snd_stop()
         self.spans = []
         self.span_rows = 0
@@ -1087,9 +1093,22 @@ class Interp:
 
     def c_set_string(self, s, m): self.strs[s] = self.msg(m)[:40]
 
+    gs_on = False               # get.string esperando: las lineas escritas van a la cola de cadenas
+
     def c_get_string(self, s, m, r, c, ln):
+        """Modal: cada vuelta es un ciclo (con sus eventos); acaba cuando llega una linea (evento `text` o `str`). Las teclas de la espera no llegan a la logica."""
         self.log('get.string: ' + self.msg(m))
-        self.strs[s] = (self.textq.pop(0) if self.textq else '')[:40]
+        n, v19 = len(self.keyq), self.vars[19]
+        self.gs_on = True
+        while not self.textq:
+            self.cycle += 1
+            if self.cycle > self.max_cycles:
+                raise Stop('fin de los ciclos en get.string')
+            self.apply_events(self.ev.get(self.cycle, []))
+            del self.keyq[n:]
+            self.vars[19] = v19
+        self.gs_on = False
+        self.strs[s] = self.textq.pop(0)[:40]
 
     def c_get_num(self, m, v):
         self.log('get.num: ' + self.msg(m))
@@ -1544,7 +1563,9 @@ class Interp:
     def apply_events(self, events):
         v = self.vars
         for kind, val in events:
-            if kind == 'text':
+            if kind == 'text' and self.gs_on:
+                self.textq.append(val)
+            elif kind == 'text':
                 self.input = self.parse(val)
                 self.said_done = False
                 self.flags[2] = 1
@@ -1565,6 +1586,7 @@ class Interp:
 
     def interpret_cycle(self, events):
         v = self.vars
+        self.hk_seen = False
         self.ctl = set()
         self.apply_events(events)
         if self.pcontrol:

@@ -33,6 +33,7 @@
                 jp t_dlgdone            ; OVB_DLGDONE
                 jp t_menureset          ; OVB_MENURESET
                 jp t_dlginv             ; OVB_DLGINV
+                jp t_gsdraw             ; OVB_GSDRAW
 
 TXT             equ TMPM
 
@@ -538,6 +539,47 @@ t_prompt:       ld a,23
                 jp draw_line
 
 s_prompt:       defb "> ",0
+
+; get.string: el mensaje (ARGS+1) y lo escrito (INBUF) con el cursor, en (fila ARGS+2, columna ARGS+3)
+t_gsdraw:       ld a,(ARGS+1)
+                ld b,a
+                ld a,(curlg)
+                ld (bs_lg),a
+                ld de,TXT+300
+                ld c,100
+                call build_str
+                ld hl,TXT
+                ld (bs_dp),hl
+                xor a
+                ld (bs_n),a
+                ld a,(ARGS+3)
+                ld c,a
+                ld a,42
+                sub c
+                ld (bs_max),a
+                ld hl,TXT+300
+                call put_str
+                ld hl,INBUF
+                call put_str
+                ld a,(curchar)
+                call bs_put
+                ld a,' '
+                call bs_put
+                ld a,(tfg)
+                call t_chroma
+                ld (dl_fg),a
+                ld a,(tbg)
+                call t_chroma
+                ld (dl_bg),a
+                ld hl,TXT
+                ld (dl_ptr),hl
+                ld a,(bs_n)
+                ld (dl_n),a
+                ld a,(ARGS+2)
+                ld (dl_row),a
+                ld a,(ARGS+3)
+                ld (dl_col),a
+                jp draw_line
 
 ; Texto escrito sobre la imagen (filas 1-21): dl_row, dl_ca, dl_nb pasan de la pantalla a la copia de fondo y los rotulos se recomponen
 text_bg:        ld a,(dl_nobg)

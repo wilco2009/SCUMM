@@ -134,3 +134,12 @@ Sonido: AGI solo reproduce un sonido a la vez (`sound()` para el que suene), asi
 - **Probado por el usuario y funciona:** echo.line y cancel.line (teclas 4 y 1), guardar/cargar (teclas 2 y 3), sonido on/off, show.obj con dibujo.
 - **restart.game / restore.game:** tras ellos las banderas 5 y 6 se conservan un ciclo (`rs_keep`): la logica 0 vuelve a la sala 2 sin la intro y la logica 104 vuelve a asignar las teclas; sin eso el menu no volvia a salir.
 - **Pendiente:** ayuda de KQ1, KQ2, PQ1, SQ2 y Larry1 (`agi_read.HELP`), revisar las teclas de esos juegos, shake.screen, overlay.pic, rotulos anchos (optimizacion).
+
+## get.string, shake.screen y rotulos (2026-10-28)
+
+- **get.string** es modal: dibuja el mensaje y lo escrito en (fila, columna) y acaba con ENTER (la linea va a la cola de cadenas: `ev_text` la redirige mientras `gs_on`). Antes devolvia vacio al instante y la pantalla del nombre no esperaba. El bucle esta en el nucleo (`pr_wait`); el dibujo, en el overlay B (`t_gsdraw`, solo en modo real). El largo maximo (ARGS+4) no se aplica.
+- **new.room** limpia la bandera 2 y v9 antes de reiniciar la logica 0 (como AGI): sin eso el nombre tecleado se volvia a tratar como una orden ("I don't understand ...").
+- **shake.screen** (nucleo, `h_shake_screen`): fino X (POKE 2090) y fino Y (registro 8 de $3FEF) durante 8 fotogramas por sacudida. Probado por el usuario.
+- **Rotulos anchos**: `spp_pl` (agisw.asm) lleva el estado de la celda en registros en vez de llamar a `plot` por pixel (mismo resultado): la intro de SQ1 baja un 18 % (17,5 -> 14,4 millones de T-estados en los ciclos 1-248); queda margen (el bucle por pixeles sigue siendo la mitad del coste de los rotulos).
+- **Regla de overlays**: un bucle que espera fotogramas o teclas (llama a `wait_frame`/`OVL_KPOLL`, del overlay A) no puede estar en B ni en C: se pierde (reinicio de la maquina). Va en el nucleo, que tiene un tope: `agivm.bin` <= 11008 bytes (lo comprueban `test_vm.sh` y `compilavm.bat`).
+

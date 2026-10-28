@@ -76,7 +76,10 @@ ev_dispatch:    ld a,(ev_kind)
                 cp 5
                 jr z,ev_dir
                 ret
-ev_text:        ld hl,EVBUF             ; la linea tambien se guarda para echo.line
+ev_text:        ld a,(gs_on)            ; get.string: la linea es la cadena pedida
+                or a
+                jr nz,ev_str
+                ld hl,EVBUF             ; la linea tambien se guarda para echo.line
                 ld de,LASTLN
                 ld bc,41
                 ldir
@@ -168,10 +171,16 @@ hc_controller:  ld a,(ARGS)
 hc_have_key:    ld a,(keyn)
                 or a
                 jr nz,hk_k
-                ld a,(txtm)             ; en la pantalla de texto (ayuda) espera la tecla
+                ld a,(txtm)             ; en la pantalla de texto, un bucle apretado (ayuda: la 2a llamada del ciclo sin tecla) espera la tecla
                 or a
                 jp z,ret_false
-                call pr_wait
+                ld a,(hk_seen)
+                or a
+                jr nz,hk_w
+                inc a
+                ld (hk_seen),a
+                jp ret_false
+hk_w:           call pr_wait
                 ld a,(stopf)
                 or a
                 jp nz,ret_false
@@ -307,8 +316,44 @@ h_graphics:     xor a
                 call rd_pic
                 jp sg_t
 txtm:           defb 0
-h_shake_screen: ld hl,OVC_SHAKE         ; shake.screen: overlay C
-                jp call_c
+hk_seen:        defb 0
+; shake.screen(n): n sacudidas de 8 fotogramas con el fino X (POKE 2090) y el fino Y (registro 8 del puerto $3FEF) del hardware; al acabar, a 0. Esta en el
+; nucleo porque wait_frame llama al overlay A (con otro overlay en el bloque 1 se perderia). En las pruebas (ncyc > 0) no espera fotogramas.
+h_shake_screen: ld a,(ARGS)
+                or a
+                ret z
+                ld (sh_n),a
+sh_l:           ld hl,sh_pat
+                ld b,8
+sh_f:           ld a,(hl)
+                inc hl
+                ld (2090),a
+                ld a,(hl)
+                inc hl
+                push hl
+                push bc
+                call sh_y
+                ld hl,(ncyc)
+                ld a,h
+                or l
+                call z,wait_frame
+                pop bc
+                pop hl
+                djnz sh_f
+                ld hl,sh_n
+                dec (hl)
+                jr nz,sh_l
+                xor a
+                ld (2090),a
+sh_y:           ld d,a
+                ld bc,$3FEF
+                ld a,$40
+                out (c),a
+                ld a,d
+                out (c),a
+                ret
+sh_n:           defb 0
+sh_pat:         defb 4,2, 4,2, 0,0, 0,0, 2,3, 2,3, 0,0, 0,0
 h_clear_lines:  ld hl,OVB_CLEAR
                 jp call_b
 h_set_text_attribute: ld hl,OVB_ATTR
@@ -398,7 +443,13 @@ pw_run:         call OVL_KDELIV
                 ld hl,pw_k
                 cp (hl)
                 jr nz,pw_d
-                ld hl,(ncyc)
+                ld a,(gs_on)            ; get.string: tambien acaba cuando llega una linea (aunque no sea por teclado)
+                or a
+                jr z,pw_nt
+                ld a,(tqn)
+                or a
+                ret nz
+pw_nt:          ld hl,(ncyc)
                 ld a,h
                 or l
                 call z,wait_frame
@@ -605,43 +656,49 @@ LASTLN:         defs 41
 h_accept_input: jp OVL_ACCEPT
 h_prevent_input: jp OVL_PREVENT
 
+; get.string(s, m, fila, columna, largo): modal. El mensaje y lo que se escribe salen en (fila, columna) (overlay B, solo en modo real); la linea que acaba con ENTER
+; va a la cola de cadenas (ev_text lo redirige mientras gs_on) y de ahi a la cadena s. Cada vuelta es un ciclo (como las ventanas: pr_wait).
 h_get_string:   ld a,(ARGS)
                 cp 12
                 ret nc
+                ld a,(accin)
+                ld (gs_acc),a
+                ld a,1
+                ld (accin),a
+                ld (gs_on),a
+                xor a
+                ld (il_n),a
+                ld (INBUF),a
+gs_l:           ld a,(tqn)
+                or a
+                jr nz,gs_d
+                ld hl,(ncyc)
+                ld a,h
+                or l
+                jr nz,gs_w
+                ld hl,OVB_GSDRAW
+                call call_b
+gs_w:           call pr_wait
+                ld a,(stopf)
+                or a
+                jr z,gs_l
+                ret
+gs_d:           ld a,(ARGS)
                 call strptr
                 ex de,hl
-                jp tq_pop
-
-h_get_num:      ld de,STMP
                 call tq_pop
-                ld hl,STMP              ; solo cifras (y no vacia) -> valor mod 256; si no, 0
-                ld a,(hl)
-                or a
-                jr z,gn_0
-                ld b,0
-gn_l:           ld a,(hl)
-                or a
-                jr z,gn_ok
-                sub '0'
-                cp 10
-                jr nc,gn_0
-                ld c,a
-                ld a,b
-                add a,a
-                ld d,a
-                add a,a
-                add a,a
-                add a,d
-                add a,c
-                ld b,a
-                inc hl
-                jr gn_l
-gn_0:           ld b,0
-gn_ok:          ld a,(ARGS+1)
-                ld l,a
-                ld h,VARS>>8
-                ld (hl),b
+                xor a
+                ld (gs_on),a
+                ld a,(gs_acc)
+                ld (accin),a
+                inc a
+                ld (kb_dirty),a
                 ret
+gs_on:          defb 0
+gs_acc:         defb 0
+
+h_get_num:      ld hl,OVC_GETNUM
+                jp call_c
 
 h_word_to_string: ld a,(ARGS+1)
                 cp 12

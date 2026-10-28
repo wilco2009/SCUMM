@@ -11,6 +11,7 @@ E=../../../V2/ENGINE/test
 python ../TOOLS/gen_agitab.py agivm.asm agiobj.asm agiin.asm agipic.asm agitab.inc
 python ../TOOLS/gen_sprtab.py sprtab.inc
 pasmo agivm.asm agivm.bin agivm.sym
+[ $(wc -c < agivm.bin) -le 11008 ] || { echo "agivm.bin pasa de VARS (\$6D00): $(wc -c < agivm.bin) bytes, maximo 11008"; exit 1; }
 python ../TOOLS/gen_font.py font6.inc
 cp agivm.sym agires.inc
 pasmo agia.asm agia.bin agia.sym

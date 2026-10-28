@@ -14,7 +14,9 @@
                 jp t_curchar            ; OVC_CURSOR
                 jp t_objpic             ; OVC_OBJPIC
                 jp t_textscr            ; OVC_TEXTSCR
-                jp t_shake              ; OVC_SHAKE
+                jp t_distance           ; OVC_DIST
+                jp t_animate            ; OVC_ANIM
+                jp t_getnum             ; OVC_GETNUM
 
 TXT             equ TMPM
 
@@ -453,40 +455,91 @@ t_textscr:      ld hl,HR_BM+256
                 ldir
                 ret
 
-; shake.screen(n): n sacudidas de 8 fotogramas con el fino X (POKE 2090) y el fino Y (registro 8 del puerto $3FEF) del hardware; al acabar, a 0.
-; En las pruebas (ncyc > 0) no espera fotogramas.
-t_shake:        ld a,(ARGS)
-                or a
-                ret z
-                ld (sh_n),a
-sh_l:           ld hl,sh_pat
-                ld b,8
-sh_f:           ld a,(hl)
-                inc hl
-                ld (2090),a
-                ld a,(hl)
-                inc hl
-                push hl
-                push bc
-                call sh_y
-                ld hl,(ncyc)
+; distance(o1, o2, v): distancia entre dos objetos (suma de |dx| y |dy|; 255 si alguno no esta dibujado o pasa de 254)
+t_distance:     call argobj
+                push ix
+                ld a,(ARGS+1)
+                call getobj
+                pop iy
+                ld b,255
+                bit 1,(iy+O_F1)
+                jr z,dd_put
+                bit 1,(ix+O_F1)
+                jr z,dd_put
+                ld a,(ix+O_X)
+                ld b,a
+                ld a,(iy+O_X)
+                call absd
+                ld e,a
+                ld d,0
+                ld a,(ix+O_Y)
+                ld b,a
+                ld a,(iy+O_Y)
+                call absd
+                ld l,a
+                ld h,0
+                add hl,de
+                ld b,255
                 ld a,h
-                or l
-                call z,wait_frame
-                pop bc
-                pop hl
-                djnz sh_f
-                ld hl,sh_n
-                dec (hl)
-                jr nz,sh_l
-                xor a
-                ld (2090),a
-sh_y:           ld d,a
-                ld bc,$3FEF
-                ld a,$40
-                out (c),a
-                ld a,d
-                out (c),a
+                or a
+                jr nz,dd_put
+                ld b,l
+dd_put:         ld a,(ARGS+2)
+                ld l,a
+                ld h,VARS>>8
+                ld (hl),b
                 ret
-sh_n:           defb 0
-sh_pat:         defb 4,2, 4,2, 0,0, 0,0, 2,3, 2,3, 0,0, 0,0
+
+; animate.obj(o)
+t_animate:  call argobj
+                bit 0,(ix+O_F1)
+                ret nz
+                ld a,(ix+O_F1)
+                and %00000010           ; conserva drawn
+                or %00011101            ; anim, upd, cycling, mon
+                ld (ix+O_F1),a
+                xor a
+                ld (ix+O_F2),a
+                ld (ix+O_MOTION),a
+                ld (ix+O_DIR),a
+                ld (ix+O_CTYPE),a
+                ld (ix+O_WATER),a
+                inc a
+                ld (ix+O_STEP),a
+                ld (ix+O_STIME),a
+                ld (ix+O_SCOUNT),a
+                ld (ix+O_CTIME),a
+                ld (ix+O_CCOUNT),a
+                ret
+
+; get.num(m, v): el numero de la cola de cadenas (solo cifras; si no, 0)
+t_getnum:      ld de,STMP
+                call tq_pop
+                ld hl,STMP              ; solo cifras (y no vacia) -> valor mod 256; si no, 0
+                ld a,(hl)
+                or a
+                jr z,tg_0
+                ld b,0
+tg_l:           ld a,(hl)
+                or a
+                jr z,tg_ok
+                sub '0'
+                cp 10
+                jr nc,tg_0
+                ld c,a
+                ld a,b
+                add a,a
+                ld d,a
+                add a,a
+                add a,a
+                add a,d
+                add a,c
+                ld b,a
+                inc hl
+                jr tg_l
+tg_0:           ld b,0
+tg_ok:          ld a,(ARGS+1)
+                ld l,a
+                ld h,VARS>>8
+                ld (hl),b
+                ret

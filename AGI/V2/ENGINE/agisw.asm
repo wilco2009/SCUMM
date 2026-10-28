@@ -918,38 +918,108 @@ sw_part:        ld a,(sp_m)
                 rrca                    ; papel * 16 + tinta
                 ld (hl),a
                 ret
-spp_pl:         ld hl,LBBM
-                ld (srow),hl
-                ld hl,LBAT
-                ld (sarow),hl
+; fila con huecos: los pixeles de la mascara, de izquierda a derecha, sobre la celda del bufer. Lleva el estado de la celda en registros (B = papel,
+; C = tinta, D = bitmap, E = bit) con la misma regla que `plot` (agispr.asm): celda de un color: el color igual deja el bit a 0, otro pasa a ser la tinta;
+; celda de dos: tinta -> bit a 1, papel -> bit a 0, un tercero va al mas cercano (si la tinta esta igual o mas cerca, la sustituye; si no, sustituye al papel)
+spp_pl:         ld a,(sp_col)
+                ld c,a
+                and 15
+                ld (sp_cp),a
+                ld a,c
+                rrca
+                rrca
+                rrca
+                rrca
+                and 15
+                ld (sp_ci),a
                 ld a,(sp_cell)
-                add a,a
-                add a,a
-                add a,a
-                ld (sp_hx),a
-                ld a,$80
-                ld (sp_bm),a
+                ld e,a
+                ld d,0
+                ld hl,LBAT
+                add hl,de
+                ld a,(hl)
+                and 15
+                ld c,a                  ; C = tinta de la celda
+                ld a,(hl)
+                rrca
+                rrca
+                rrca
+                rrca
+                and 15
+                ld b,a                  ; B = papel
+                ld hl,LBBM
+                add hl,de
+                ld d,(hl)               ; D = bitmap
+                ld e,$80                ; E = bit que toca
 spp_l:          ld a,(sp_m)
-                ld hl,sp_bm
-                and (hl)
+                and e
                 jr z,spp_n
                 ld a,(sp_p)
-                and (hl)
-                ld a,(sp_col)
-                jr z,spp_p
-                rrca
-                rrca
-                rrca
-                rrca
-spp_p:          and 15
-                ld (sch),a
-                ld a,(sp_hx)
-                call plot
-spp_n:          ld hl,sp_hx
-                inc (hl)
-                ld hl,sp_bm
-                srl (hl)
+                and e
+                ld a,(sp_cp)
+                jr z,spp_c
+                ld a,(sp_ci)
+spp_c:          ld h,a                  ; H = color nuevo
+                ld a,b
+                cp c
+                jr nz,spp_two
+                ld a,h                  ; celda de un solo color
+                cp c
+                jr z,spp_clr
+                ld c,h                  ; otro color: pasa a ser la tinta
+spp_set:        ld a,d
+                or e
+                ld d,a
+                jr spp_n
+spp_clr:        ld a,e
+                cpl
+                and d
+                ld d,a
+                jr spp_n
+spp_two:        ld a,h
+                cp c
+                jr z,spp_set
+                cp b
+                jr z,spp_clr
+                push bc                 ; un tercer color: distancias a la tinta y al papel
+                push de
+                ld a,b
+                ld b,h
+                call sd_get
+                ld (sp_dp),a
+                ld a,c
+                call sd_get
+                ld hl,sp_dp
+                cp (hl)
+                pop de
+                ld a,b
+                pop bc
+                jr z,spp_ri
+                jr c,spp_ri
+                ld b,a                  ; el papel esta mas lejos que la tinta: sustituye al papel
+                jr spp_clr
+spp_ri:         ld c,a                  ; sustituye a la tinta
+                jr spp_set
+spp_n:          srl e
                 jr nz,spp_l
+                ld a,d
+                ld (sp_bt),a
+                ld a,(sp_cell)
+                ld e,a
+                ld d,0
+                ld hl,LBAT
+                add hl,de
+                ld a,b
+                rlca
+                rlca
+                rlca
+                rlca
+                or c
+                ld (hl),a
+                ld hl,LBBM
+                add hl,de
+                ld a,(sp_bt)
+                ld (hl),a
                 ret
 
 sqs_n:          defb 0
@@ -992,8 +1062,10 @@ sp_cell:        defb 0
 sp_m:           defb 0
 sp_p:           defb 0
 sp_col:         defb 0
-sp_hx:          defb 0
-sp_bm:          defb 0
+sp_ci:          defb 0
+sp_cp:          defb 0
+sp_dp:          defb 0
+sp_bt:          defb 0
 SWL:            defs NOBJ
 LBBM:           defs 32
 LBAT:           defs 32

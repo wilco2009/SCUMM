@@ -175,26 +175,8 @@ sp_s:           ld (ix+O_PRI),a
 ; ---------------------------------------------------------------------
 ;  Comandos de objetos
 ; ---------------------------------------------------------------------
-h_animate_obj:  call argobj
-                bit 0,(ix+O_F1)
-                ret nz
-                ld a,(ix+O_F1)
-                and %00000010           ; conserva drawn
-                or %00011101            ; anim, upd, cycling, mon
-                ld (ix+O_F1),a
-                xor a
-                ld (ix+O_F2),a
-                ld (ix+O_MOTION),a
-                ld (ix+O_DIR),a
-                ld (ix+O_CTYPE),a
-                ld (ix+O_WATER),a
-                inc a
-                ld (ix+O_STEP),a
-                ld (ix+O_STIME),a
-                ld (ix+O_SCOUNT),a
-                ld (ix+O_CTIME),a
-                ld (ix+O_CCOUNT),a
-                ret
+h_animate_obj:  ld hl,OVC_ANIM          ; en el overlay C (el nucleo no tiene sitio)
+                jp call_c
 
 h_unanimate_all: ld ix,OBJ
                 ld de,32
@@ -468,39 +450,8 @@ h_unblock:      xor a
                 ld (blkf),a
                 ret
 
-h_distance:     call argobj
-                push ix
-                ld a,(ARGS+1)
-                call getobj
-                pop iy
-                ld b,255
-                bit 1,(iy+O_F1)
-                jr z,di_put
-                bit 1,(ix+O_F1)
-                jr z,di_put
-                ld a,(ix+O_X)
-                ld b,a
-                ld a,(iy+O_X)
-                call absd
-                ld e,a
-                ld d,0
-                ld a,(ix+O_Y)
-                ld b,a
-                ld a,(iy+O_Y)
-                call absd
-                ld l,a
-                ld h,0
-                add hl,de
-                ld b,255
-                ld a,h
-                or a
-                jr nz,di_put
-                ld b,l
-di_put:         ld a,(ARGS+2)
-                ld l,a
-                ld h,VARS>>8
-                ld (hl),b
-                ret
+h_distance:     ld hl,OVC_DIST          ; el calculo esta en el overlay C (el nucleo no tiene sitio)
+                jp call_c
 
 ; A = |A - B|
 absd:           ld c,a
