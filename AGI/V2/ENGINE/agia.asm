@@ -210,7 +210,11 @@ ed_bs:          ld a,(il_n)
                 jr ed_dirty
 ed_cr:          ld a,(il_n)
                 or a
+                jr nz,ed_go
+                ld a,(gs_on)            ; get.string: ENTER con la linea vacia tambien la entrega (asi se sale del archivo de KQ/SQ)
+                or a
                 ret z
+ed_go:
                 ld hl,INBUF
                 ld de,PTEXT
                 ld bc,41

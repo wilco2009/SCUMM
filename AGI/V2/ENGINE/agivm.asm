@@ -850,6 +850,7 @@ do_new_room:    xor a                   ; la logica 0 se reinicia sin la linea t
                 ld (FLAGS+2),a
                 ld (VARS+9),a
                 call OVL_SPCLR
+                call OVL_SPRINIT        ; los sprites se apagan hasta que los objetos de la sala nueva tengan su sitio (se vuelven a poner al acabar el ciclo)
                 call h_stop_sound
                 ld a,(VARS+0)
                 ld (VARS+1),a

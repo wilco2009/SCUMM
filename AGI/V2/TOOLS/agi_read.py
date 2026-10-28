@@ -142,6 +142,10 @@ def testboot(n, d):
         k, _, val = it.partition('=')
         if k == 'room':
             code += bytes((18, int(val)))
+        elif k == 'cmd':                    # cmd=nombre:arg:arg... (una orden cualquiera con argumentos literales)
+            import agi_logic
+            nm, *ar = val.split(':')
+            code += bytes([[c[0] for c in agi_logic.CMDS].index(nm)] + [int(x) for x in ar])
         elif k == 'ign':                    # ignore.blocks(o0)
             code += bytes((88, 0))
         elif k == 'pri':                    # set.priority(o0, val)
