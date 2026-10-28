@@ -127,3 +127,10 @@ Sonido: AGI solo reproduce un sonido a la vez (`sound()` para el que suene), asi
 ## Pantalla de ayuda (2026-10-28)
 
 `text.screen` (pantalla negra sin sprites) y `graphics` (redibuja la imagen) implementados; `have.key` espera la tecla en la pantalla de texto. Los textos de la ayuda se sustituyen por los del ZX81 con `agi_read.HELP` (solo SQ1 por ahora: la logica de ayuda de cada juego tiene otros mensajes y filas).
+
+## Decisiones y estado (2026-10-28, tras probar en el emulador)
+
+- **No se hace:** el volumen (+/-, v23) y las alternativas de sonido (sonidos cortos PEG, usar los dos AY, un solo canal).
+- **Probado por el usuario y funciona:** echo.line y cancel.line (teclas 4 y 1), guardar/cargar (teclas 2 y 3), sonido on/off, show.obj con dibujo.
+- **restart.game / restore.game:** tras ellos las banderas 5 y 6 se conservan un ciclo (`rs_keep`): la logica 0 vuelve a la sala 2 sin la intro y la logica 104 vuelve a asignar las teclas; sin eso el menu no volvia a salir.
+- **Pendiente:** ayuda de KQ1, KQ2, PQ1, SQ2 y Larry1 (`agi_read.HELP`), revisar las teclas de esos juegos, shake.screen, overlay.pic, rotulos anchos (optimizacion).

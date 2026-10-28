@@ -47,7 +47,7 @@ Controlador y tecla del PC segun la logica 104. "Texto" = se puede escribir la o
 |------|----------|--------|-----------|
 | c9 | F3, Ctrl-E | `echo.line`: repite la ultima orden en la linea de entrada | **util**: el comando ya esta hecho, falta una tecla |
 | c17 | Ctrl-C | `cancel.line`: borra la linea de entrada | **util** (hoy se borra con la tecla 0) |
-| c26 / c27 | `+` / `-` | volumen (v23, de 0 a 15) | opcional: hoy el volumen no llega al AY |
+| c26 / c27 | `+` / `-` | volumen (v23, de 0 a 15) | **no se hace** (decidido 2026-10-28): el volumen no se implementa |
 | c6 / c8 | F6 / F8 | ponen las banderas 128 / 130 (usos propios de SQ1) | no hace falta |
 | c29 | F10 | uso propio del juego | no hace falta |
 | c13 | Alt-1 | `show.mem` (depuracion) | no aplica |

@@ -370,6 +370,7 @@ class Interp:
         return re.sub(r'%([vmsgw])(\d+)(?:\|\d+)?', rep, s)
 
     wtext = []
+    rs_keep = False
     txtm = False                # pantalla de texto (text.screen)
 
     def msg(self, n):
@@ -989,6 +990,7 @@ class Interp:
             else:
                 setattr(self, k, nw)
         self.flags[6] = 1                       # como AGI: la logica 0 conserva los menus y vuelve a la sala 2
+        self.rs_keep = True
         self.exit_all = True
 
     def c_print(self, m): self.do_print(self.msg(m)[:250], None, None, 0)
@@ -1232,6 +1234,7 @@ class Interp:
         for k in ('horizon', 'blocks', 'pcontrol', 'lastpic', 'margins', 'status_on', 'tfg', 'tbg', 'accept', 'ticks'):
             setattr(self, k, st[k])
         self.flags[6] = 1
+        self.rs_keep = True
         for t, its in self.menus:
             for it in its:
                 it[2] = True
@@ -1582,7 +1585,11 @@ class Interp:
         v[2] = v[4] = v[5] = 0          # los codigos de borde se ponen a 0 antes de mover los objetos: el movimiento los pone y la logica del ciclo siguiente los ve
         self.update_objects()
         self.status_tick()
-        self.flags[2] = self.flags[4] = self.flags[5] = self.flags[6] = 0
+        self.flags[2] = self.flags[4] = 0
+        if self.rs_keep:                # tras restart.game / restore.game las banderas 5 y 6 las ve la logica 0 del ciclo siguiente
+            self.rs_keep = False
+        else:
+            self.flags[5] = self.flags[6] = 0
         self.input = None
         self.keyq = []
         self.tick_clock()

@@ -184,9 +184,15 @@ ml_end:         xor a                   ; los codigos de borde se ponen a 0 ante
                 ld (keyn),a
                 ld (FLAGS+2),a
                 ld (FLAGS+4),a
+                ld a,(rs_keep)          ; tras restart.game / restore.game las banderas 5 y 6 las ve la logica 0 del ciclo siguiente
+                or a
+                jr nz,ml_k6
                 ld (FLAGS+5),a
                 ld (FLAGS+6),a
-                call tick_clock
+                jr ml_k7
+ml_k6:          xor a
+                ld (rs_keep),a
+ml_k7:          call tick_clock
                 ld hl,(ncyc)
                 ld a,h
                 or l
@@ -1432,6 +1438,7 @@ h_restart_game: ld a,2
                 call call_c
                 ld a,1
                 ld (FLAGS+6),a          ; la logica 0 conserva los menus y vuelve a la sala 2
+                ld (rs_keep),a
                 call OVL_SPCLR
                 call ov_tail
                 ld a,1
@@ -1751,6 +1758,7 @@ sv_ret:         defw 0
 fh:             defb 0
 errc:           defb 0
 stopf:          defb 0
+rs_keep:        defb 0
 exitall:        defb 0
 lastpic:        defb 0                  ; la ultima imagen dibujada (para rehacerla al cargar una partida)
 nr_pend:        defb 0

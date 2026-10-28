@@ -2085,6 +2085,7 @@ sl_d:           ld a,(sf_h)
                 call f_close
                 ld a,1
                 ld (FLAGS+6),a          ; restore.game acaba de ejecutarse
+                ld (rs_keep),a
                 ld (sv_ok),a
                 xor a
                 ld (st_valid),a         ; la barra de estado se redibuja
