@@ -634,6 +634,8 @@ sg_go:          ld (sf_mode),a
                 ld a,(stopf)
                 or a
                 ret nz
+                ld hl,OVB_BOXCLOSE      ; la ventana de la descripcion se quita
+                call call_b
                 ld hl,gs_cust
                 ld a,(hl)
                 ld (hl),0

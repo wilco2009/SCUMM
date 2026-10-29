@@ -36,7 +36,6 @@
                 jp t_gsdraw             ; OVB_GSDRAW
 
 TXT             equ TMPM
-ROW_DSC         equ 8
 
 t_set_attr:     ld a,(ARGS)
                 and 15
@@ -560,29 +559,17 @@ t_prompt:       ld a,22                 ; la linea de entrada en la fila 22, com
 s_prompt:       defb "> ",0
 
 ; get.string: el mensaje (ARGS+1) y lo escrito (INBUF) con el cursor, en (fila ARGS+2, columna ARGS+3)
-t_gsdraw:       ld a,(gs_cust)          ; descripcion de una partida: el mensaje es fijo (dos lineas) y la linea de entrada va debajo
+t_gsdraw:       ld a,(gs_cust)          ; descripcion de una partida: ventana de mensaje con un cuadro negro de 32 caracteres para la linea
                 or a
-                jr z,gd_n
-                ld hl,s_dsc1
-                ld a,ROW_DSC
-                call gd_ln
-                ld hl,s_dsc2
-                ld a,ROW_DSC+1
-                call gd_ln
-                ld a,ROW_DSC+2
-                ld (ARGS+2),a
-                xor a
-                ld (ARGS+3),a
-                ld (TXT+300),a
-                jr gd_c
-gd_n:           ld a,(ARGS+1)
+                jr nz,t_gsdesc
+                ld a,(ARGS+1)
                 ld b,a
                 ld a,(curlg)
                 ld (bs_lg),a
                 ld de,TXT+300
                 ld c,100
                 call build_str
-gd_c:                ld hl,TXT
+                ld hl,TXT
                 ld (bs_dp),hl
                 xor a
                 ld (bs_n),a
@@ -615,28 +602,91 @@ gd_c:                ld hl,TXT
                 ld (dl_col),a
                 jp draw_line
 
-; HL = texto, A = fila: una linea del mensaje de la descripcion, desde la columna 0
-gd_ln:          ld (dl_row),a
-                ld de,TXT
-                ld (bs_dp),de
+; la ventana del mensaje (centrada, 32 de ancho: dos lineas de texto y una de 32 marcas), el cuadro negro encima de esta y la linea escrita (con el cursor) en el
+t_gsdesc:       ld a,(gs_cust)          ; la ventana se dibuja una vez (gs_cust 1 -> 3); despues solo el cuadro negro y la linea (si no, parpadea)
+                cp 1
+                jr nz,gb_go
+                ld a,3
+                ld (gs_cust),a
+                ld hl,s_dsc
+                call dg_cp
+                ld a,3
+                ld (pr_raw),a
+                ld a,255
+                ld (pr_row),a
+                ld a,32
+                ld (pr_w),a
+                call t_print
+                xor a
+                ld (pr_raw),a
+                ld (pr_w),a
+gb_go:          ld a,1
+                ld (dl_nobg),a
+                ld a,(pr_top)
+                add a,3
+                add a,a
+                add a,a
+                add a,a
+                ld (pr_l),a
+                ld a,8
+                ld (pr_k),a
+gb_l:           ld a,(pr_l)
+                call pr_addr
+                inc hl
+                push hl
+                ld de,HR_BM
+                add hl,de
+                ld b,24
+                xor a
+gb_b:           ld (hl),a
+                inc hl
+                djnz gb_b
+                pop hl
+                ld de,HR_ATT
+                add hl,de
+                ld b,24
+                ld a,$0F
+gb_a:           ld (hl),a
+                inc hl
+                djnz gb_a
+                ld hl,pr_l
+                inc (hl)
+                ld hl,pr_k
+                dec (hl)
+                jr nz,gb_l
+                ld hl,TXT
+                ld (bs_dp),hl
                 xor a
                 ld (bs_n),a
-                ld a,42
+                ld a,32
                 ld (bs_max),a
+                ld hl,INBUF
                 call put_str
+                ld a,(curchar)
+                call bs_put
                 ld hl,TXT
                 ld (dl_ptr),hl
                 ld a,(bs_n)
                 ld (dl_n),a
-                xor a
-                ld (dl_col),a
-                ld a,(tfg)
+                ld a,(pr_top)
+                add a,3
+                ld (dl_row),a
+                ld a,(pr_cxl)
+                inc a
+                add a,a
+                add a,a
+                add a,a
+                ld (dl_x0),a
+                ld a,15
                 call t_chroma
                 ld (dl_fg),a
-                ld a,(tbg)
+                xor a
                 call t_chroma
                 ld (dl_bg),a
-                jp draw_line
+                call draw_line_px
+                xor a
+                ld (dl_nobg),a
+                ret
 
 ; Texto escrito sobre la imagen (filas 1-21): dl_row, dl_ca, dl_nb pasan de la pantalla a la copia de fondo y los rotulos se recomponen
 text_bg:        ld a,(dl_nobg)
@@ -1748,8 +1798,15 @@ t_menunav:      ld a,(mn_dir)
                 cp b
                 jr c,nv_i
                 ld a,(m_start)
-nv_i:           ld (m_it),a
-                jp mn_drop
+nv_i:           ld hl,m_it              ; la geometria no cambia: solo se repintan el elemento que se deja y el nuevo
+                ld c,(hl)
+                ld (hl),a
+                ld a,c
+                ld (m_i),a
+                call mn_item
+                ld a,(m_it)
+                ld (m_i),a
+                jp mn_item
 nv_u:           ld a,(m_cnt)
                 or a
                 ret z
@@ -2117,8 +2174,7 @@ s_ins1:         defb "Use the arrow keys to select the",0,"slot in which you wis
                 defb "Press ENTER to save in the slot,",0,"ESC to not save a game.",0,0
 s_ins2:         defb "Use the arrow keys to select the",0,"game which you wish to restore.",0
                 defb "Press ENTER to restore the game,",0,"ESC to not restore a game.",0,0
-s_dsc1:         defb "How would you like to describe",0
-s_dsc2:         defb "this saved game?",0
+s_dsc:         defb "How would you like to describe this saved game?",10,"################################",0
 dg_i:           defb 0
 dg_ctl:         defb 0
 dg_en:          defb 0
