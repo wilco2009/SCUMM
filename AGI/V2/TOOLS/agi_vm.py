@@ -1443,6 +1443,7 @@ class Interp:
                 o.step = o.mstep or o.step
                 if k == EGO:
                     v[6] = 0
+                    self.pcontrol = True        # el ego que llega a su destino recupera el control del jugador
             self.set_pri(o)
             return
         if o.motion == 2:

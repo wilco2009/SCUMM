@@ -1052,6 +1052,8 @@ mo_s:           ld a,(curk)
                 or a
                 jr nz,mo_end
                 ld (VARS+6),a
+                inc a                   ; el ego que llega a su destino recupera el control del jugador (SQ1 no llama a player.control despues del move.obj)
+                ld (pctl),a
 mo_end:         jp set_pri
 
 ; bucle de la celda segun la direccion (vistas de 2 o mas bucles)
