@@ -771,7 +771,7 @@ class Interp:
             self.cell(o)
             if agi2spr.frozen(o.view):              # vista congelada (agi2spr.FREEZE_VIEWS): casi no cicla
                 o.ctime = o.ccount = 127
-            self.set_pri(o)
+            self.fix_position(o)
             self.log('draw o%d view %d at %d,%d' % (n, o.view, o.x, o.y))
 
     def c_erase(self, n): self.obj(n).drawn = False
@@ -786,15 +786,59 @@ class Interp:
         self.set_pri(o)
 
     def c_position_v(self, n, vx, vy): self.c_position(n, self.vars[vx], self.vars[vy])
-    def c_reposition_to(self, n, x, y): self.c_position(n, x, y)
-    def c_reposition_to_v(self, n, vx, vy): self.c_position(n, self.vars[vx], self.vars[vy])
+    def c_reposition_to(self, n, x, y):
+        self.c_position(n, x, y)
+        self.fix_position(self.obj(n))
+
+    def c_reposition_to_v(self, n, vx, vy): self.c_reposition_to(n, self.vars[vx], self.vars[vy])
+
+    def check_position(self, o, x, y):
+        """checkPosition de ScummVM: dentro de la pantalla y, si no ignora el horizonte, por debajo de el."""
+        w, h = self.cell(o)
+        if x < 0 or x + w > 160 or y - h < -1 or y >= 168:
+            return False
+        return o.ign_horizon or y > self.horizon
+
+    def fix_position(self, o):
+        """fixPosition de ScummVM: espiral (O, S, E, N) desde la posicion actual hasta un sitio valido (sin la zona de block, que no es de fixPosition).
+        La posicion de entrada hace de posicion previa para el cruce de lineas base de los objetos; si la espiral da la vuelta a toda la pantalla se deja como estaba."""
+        if not o.ign_horizon and o.y <= self.horizon:
+            o.y = self.horizon + 1
+        x0, y0 = o.x, o.y
+        x, y = x0, y0
+        blocks, self.blocks = self.blocks, None
+        d, count, size = 0, 1, 1
+        try:
+            while not (self.check_position(o, x, y) and self.can_be_here(o, x, y)):
+                if size > 170:
+                    x, y = x0, y0
+                    break
+                if d == 0:
+                    x -= 1
+                elif d == 1:
+                    y += 1
+                elif d == 2:
+                    x += 1
+                else:
+                    y -= 1
+                count -= 1
+                if count:
+                    continue
+                d = (d + 1) % 4
+                if d in (2, 0):
+                    size += 1
+                count = size
+        finally:
+            self.blocks = blocks
+        o.x, o.y = x, y
+        self.set_pri(o)
 
     def c_reposition(self, n, vx, vy):
         o = self.obj(n)
         dx, dy = self.vars[vx], self.vars[vy]
         o.x += dx - 256 if dx >= 128 else dx
         o.y += dy - 256 if dy >= 128 else dy
-        self.set_pri(o)
+        self.fix_position(o)
 
     def c_get_posn(self, n, vx, vy):
         o = self.obj(n)
@@ -1536,8 +1580,11 @@ class Interp:
         if self.can_be_here(o, nx, ny):
             o.x, o.y = nx, ny
             self.set_pri(o)
-        elif o.motion == 1:
-            o.wander = 0
+        else:
+            self.fix_position(o)
+            border = 0                        # updatePosition de ScummVM: si el paso se rechaza, el borde se descarta
+            if o.motion == 1:
+                o.wander = 0
         if border:
             if k == EGO:
                 v[2] = border

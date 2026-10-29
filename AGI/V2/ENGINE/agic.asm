@@ -19,6 +19,7 @@
                 jp t_getnum             ; OVC_GETNUM
                 jp t_parse              ; OVC_PARSE
                 jp t_draw               ; OVC_DRAW
+                jp t_fixpos             ; OVC_FIXPOS
 
 TXT             equ TMPM
 
@@ -601,4 +602,113 @@ t_draw:         call argobj
                 ld a,127
                 ld (ix+O_CTIME),a
                 ld (ix+O_CCOUNT),a
-td_nf:          jp set_pri
+td_nf:          jp t_fixpos
+
+; fixPosition de ScummVM para el objeto IX: si su sitio no vale (fuera de la pantalla, horizonte, objetos, lineas de control) busca el mas cercano en espiral O, S, E, N
+; (sin la zona de block); si la espiral cubre toda la pantalla lo deja como estaba. Acaba con set_pri. La posicion de entrada hace de posicion previa en la colision.
+t_fixpos:       ld a,(blkf)
+                push af
+                xor a
+                ld (blkf),a
+                bit 7,(ix+O_F1)         ; no ignora el horizonte: y <= horizonte -> y = horizonte + 1
+                jr nz,fx_a
+                ld a,(horizon)
+                cp (ix+O_Y)
+                jr c,fx_a
+                inc a
+                ld (ix+O_Y),a
+fx_a:           ld e,(ix+O_X)
+                ld d,0
+                ld (nx),de
+                ld e,(ix+O_Y)
+                ld (ny),de
+                xor a
+                ld (fxd),a
+                inc a
+                ld (fxc),a
+                ld (fxs),a
+fx_l:           call fx_ok
+                jr nz,fx_ok2
+                ld a,(fxs)
+                cp 171
+                jr nc,fx_end            ; vuelta a toda la pantalla: se queda donde estaba
+                ld a,(fxd)
+                ld hl,(nx)
+                ld de,(ny)
+                or a
+                jr z,fs0
+                dec a
+                jr z,fs1
+                dec a
+                jr z,fs2
+                dec de                  ; N
+                ld bc,$0001
+                jr fs_e
+fs0:            dec hl                  ; O
+                ld bc,$0100
+                jr fs_h
+fs1:            inc de                  ; S
+                ld bc,$0201
+                jr fs_e
+fs2:            inc hl                  ; E
+                ld bc,$0300
+fs_h:           ld (nx),hl
+fs_e:           ld (ny),de
+                ld a,(fxc)
+                dec a
+                ld (fxc),a
+                jr nz,fx_l
+                ld a,b
+                ld (fxd),a
+                ld a,(fxs)
+                add a,c
+                ld (fxs),a
+                ld (fxc),a
+                jr fx_l
+fx_ok2:         ld a,(nx)
+                ld (ix+O_X),a
+                ld a,(ny)
+                ld (ix+O_Y),a
+fx_end:         pop af
+                ld (blkf),a
+                jp set_pri
+
+; Z = no vale; checkPosition (dentro de la pantalla) y despues can_be_here (horizonte, objetos, lineas de control)
+fx_ok:          call obj_cell
+                ld a,d
+                ld (ow),a
+                ld hl,(nx)
+                bit 7,h
+                jr nz,fo_no
+                ld e,a
+                ld d,0
+                add hl,de
+                ld de,161
+                or a
+                sbc hl,de               ; x + w > 160
+                jr nc,fo_no
+                ld hl,(ny)
+                ld de,168
+                or a
+                sbc hl,de
+                jr nc,fo_no
+                ld hl,(ny)
+                bit 7,h
+                jr nz,fo_no
+                call obj_cell
+                ld d,0
+                ld hl,(ny)
+                or a
+                sbc hl,de               ; y - h < -1
+                inc hl
+                bit 7,h
+                jr nz,fo_no
+                call can_be_here
+                or a
+                ret
+fo_no:          xor a
+                ret
+
+fxd:            defb 0
+fxc:            defb 0
+fxs:            defb 0

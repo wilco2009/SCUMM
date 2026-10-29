@@ -178,3 +178,5 @@ Las ultimas salas de SQ1 han fallado una tras otra por reglas del interprete que
 4. **Comandos no implementados** (los que SQ1 no usa): copiar su logica de `op_cmd.cpp` en vez de inventarla. Hay que listarlos (`agi_vm.noop` y la tabla de `agiin/agiobj`).
 
 Pendiente de la sesion: push de los commits locales (11), `get.string` sin limite de largo (ARGS+4, 18 caracteres).
+
+- 2026-10-29: auditoria pasos 1-2 hechos (modelo y Z80): `move` descarta el borde si el paso se rechaza; `fix_position` (fixPosition de ScummVM, espiral O,S,E,N) en el overlay C (OVC_FIXPOS) llamada desde draw, reposition, reposition.to y al rechazar un paso; `position` ya no hace fix. Nucleo 10981/11008. runall: 5 OK.

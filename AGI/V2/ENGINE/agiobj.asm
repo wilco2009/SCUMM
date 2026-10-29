@@ -209,8 +209,11 @@ h_position_v:   call argobj
                 call getv
                 ld (ix+O_Y),a
                 jp set_pri
-h_reposition_to: jr h_position
-h_reposition_to_v: jr h_position_v
+h_reposition_to: call h_position
+                jr h_fixpos
+h_reposition_to_v: call h_position_v
+h_fixpos:       ld hl,OVC_FIXPOS        ; fixPosition de ScummVM, en el overlay C
+                jp call_c
 h_reposition:   call argobj
                 ld a,(ARGS+1)
                 call getv
@@ -220,7 +223,7 @@ h_reposition:   call argobj
                 call getv
                 add a,(ix+O_Y)
                 ld (ix+O_Y),a
-                jp set_pri
+                jr h_fixpos
 h_get_posn:     call argobj
                 ld a,(ARGS+1)
                 ld l,a
@@ -965,7 +968,11 @@ mg_p:           call pick_loop
                 ld (ix+O_Y),a
                 call set_pri
                 jr mg_b
-mg_no:          ld a,(ix+O_MOTION)
+mg_no:          xor a
+                ld (bdr),a              ; paso rechazado: el borde se descarta
+                ld hl,OVC_FIXPOS
+                call call_c             ; y se arregla el sitio por si el actual ya no vale (fixPosition)
+                ld a,(ix+O_MOTION)
                 cp 1
                 jr nz,mg_b
                 ld (ix+O_WANDER),0
