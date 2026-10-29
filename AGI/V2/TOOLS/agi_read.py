@@ -129,7 +129,7 @@ HELP = {
         8: '    5 6 7 8  left, down, up, right.',
         9: '    0  deletes the last character.',
         10: 'SHIFT + key: capitals and numbers.',
-        11: '  SHIFT + 0  jumps',
+        11: '  SHIFT + 0  jumps (ENTER + 0 types 0)',
         12: '  ENTER + J (-)  ducks',
         13: '  ENTER + L (=)  swims',
         14: 'ENTER + key: symbols:\n' + SYMTAB,

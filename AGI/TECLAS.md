@@ -18,6 +18,7 @@ tienen el mismo esquema con pequenas diferencias.
 | Base | letras en minuscula, espacio, `.`; cifras **solas** = funciones: `5`/`6`/`7`/`8` = izquierda/abajo/arriba/derecha del ego (se combinan en diagonal), `9` = **ESC** (la unica), `0` = borrar |
 | SHIFT | letras en mayuscula y cifras |
 | ENTER + tecla | simbolos (`: ; ? / \ ~ \` ' { } [ _ ! @ # \| % & " ) ( $ ] = + - ^`); ENTER solo = retorno de carro (al soltar) |
+| ENTER + 0 (2026-10-29) | el digito `0` **solo como texto**, sin el evento de tecla: KQ1 liga el `0` al salto, y SHIFT+0 salta (y tambien escribe un 0); ENTER+0 escribe el 0 sin saltar |
 | Funciones (2026-10-28) | `1` = borrar la linea de entrada (Ctrl-C, ASCII 3), `2` = guardar (F5), `3` = cargar (F7), `4` = repetir la orden (Ctrl-E, ASCII 5); solo generan el evento, no editan la linea. F5 y F7 son teclas de barrido que `set.key(0, 63/65, c)` liga a un controlador: el interprete las guarda en los codigos de control 28 y 30. El resto de teclas de funcion no se implementan: se usa el menu. Los textos de las opciones del menu pierden la tecla del PC (`<F5>`...), salvo F5/F7, que pasan a `<2>`/`<3>` (generico, para todos los juegos) |
 
 ## 3. Opciones del menu de SQ1 (ESC)

@@ -161,16 +161,20 @@ kk_t:           add hl,de
 
 ; A = caracter -> evento de tecla y, si se acepta entrada, edicion de la linea
 kb_emit:        ld c,a
+                cp 2
+                jr z,ke_zero            ; ENTER + 0: el digito 0 solo como texto, sin el evento de tecla (KQ1 lo tiene ligado al salto)
                 bit 7,c
                 jr z,ke_txt
                 res 7,c                 ; tecla de funcion: solo el evento, sin editar la linea
                 ld a,1
                 jp kq_put
+ke_zero:        ld c,'0'
+                jr ke_ed
 ke_txt:         ld a,1
                 push bc
                 call kq_put
                 pop bc
-                ld a,(accin)
+ke_ed:          ld a,(accin)
                 or a
                 ret z
                 ld a,c
@@ -345,7 +349,7 @@ km_sym:         defb 0,':',';','?','/'
                 defb 0,92,0,126,96              ; S = \  F = ~  G = `
                 defb 39,123,125,91,95           ; Q = '  W = {  E = }  R = [  T = _
                 defb '!',64,'#',124,'%'         ; 1 = !  2 = @  3 = #  4 = |  5 = %
-                defb 0,0,0,0,'&'                ; 6 = &
+                defb 2,0,0,0,'&'                ; 0 = (el digito 0 solo como texto)  6 = &
                 defb 34,')','(','$',93          ; P = "  O = )  I = (  U = $  Y = ]
                 defb 0,'=','+','-',94           ; L = =  K = +  J = -  H = ^
                 defb ' ',',','>','<','*'        ; . = ,  M = >  N = <  B = *
