@@ -232,38 +232,80 @@ pp_nx:          ld a,e
                 jr pp_l
 pp_end:         jp unmap_win
 
-; Margenes de add.to.pic (x, y, ancho, 0 o 1) que cruzan la fila ny entre nx y nx+ow-1: encienden pr_has0 / pr_has1
+; Cajas de add.to.pic (x, y, ancho, valor | alto << 2) que cruzan la fila ny entre nx y nx+ow-1: abajo y arriba toda la anchura, entre medias los dos lados;
+; encienden pr_has0 / pr_has1 / pr_sig segun el valor (0, 1, 2)
 mg_probe:       ld a,(mg_n)
                 or a
                 ret z
                 ld b,a
                 ld iy,mg_tab
-mg_l:           ld a,(ny)
-                cp (iy+1)
-                jr nz,mg_n2
-                ld a,(nx)
-                ld c,a                  ; C = nx
-                ld a,(ow)
-                add a,c
-                ld d,a                  ; D = nx + ow
-                ld a,(iy+0)
-                ld e,a                  ; E = mx
-                add a,(iy+2)            ; mx + mw
-                cp c
-                jr z,mg_n2
-                jr c,mg_n2              ; mx + mw <= nx
-                ld a,e
+mg_l:           ld a,(iy+3)
+                rrca
+                rrca
+                and 63
+                ld c,a                  ; C = alto
+                ld d,(iy+1)             ; D = y de abajo
+                ld a,(ny)
                 cp d
-                jr nc,mg_n2             ; mx >= nx + ow
-                ld a,1
-                bit 0,(iy+3)
-                jr nz,mg_1
-                ld (pr_has0),a
-                jr mg_n2
-mg_1:           ld (pr_has1),a
-mg_n2:          ld de,4
+                jr z,mq_row
+                ld a,c
+                cp 2
+                jr c,mq_nx              ; alto 1: solo la linea de abajo
+                ld a,d
+                sub c
+                inc a
+                ld e,a                  ; E = fila de arriba
+                ld a,(ny)
+                cp e
+                jr z,mq_row
+                jr c,mq_nx
+                cp d
+                jr nc,mq_nx
+                ld a,(iy+0)             ; entre medias: el lado izquierdo o el derecho dentro de [nx, nx+ow)
+                call mq_pt
+                jr nz,mq_hit
+                ld a,(iy+0)
+                add a,(iy+2)
+                dec a
+                call mq_pt
+                jr nz,mq_hit
+                jr mq_nx
+mq_row:         ld c,(iy+0)             ; la anchura entera: x < nx + ow  y  nx < x + w
+                ld hl,nx
+                ld a,(ow)
+                add a,(hl)
+                ld d,a
+                ld a,c
+                cp d
+                jr nc,mq_nx
+                add a,(iy+2)
+                ld e,a
+                ld a,(hl)
+                cp e
+                jr nc,mq_nx
+mq_hit:         ld a,(iy+3)
+                and 3
+                ld hl,pr_has0
+                jr z,mq_set
+                ld hl,pr_has1
+                dec a
+                jr z,mq_set
+                ld hl,pr_sig
+mq_set:         ld (hl),1
+mq_nx:          ld de,4
                 add iy,de
                 djnz mg_l
+                ret
+; NZ si nx <= A < nx + ow
+mq_pt:          ld hl,nx
+                sub (hl)
+                jr c,mq_pn
+                ld hl,ow
+                cp (hl)
+                jr nc,mq_pn
+                or 1
+                ret
+mq_pn:          xor a
                 ret
 
 ; Parte de can_be_here que mira la imagen -> A = 0 si el sitio no vale

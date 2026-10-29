@@ -423,15 +423,37 @@ ap_got:         push ix
                 ld a,(ARGS+4)
                 ld (ix+O_Y),a
                 ld a,(ARGS+5)
-                ld (ix+O_PRI),a
+                or a
+                jr nz,ap_q
+                ld a,(ARGS+4)           ; prioridad 0: la de la y
+                call pri_y
+ap_q:           ld (ix+O_PRI),a
                 call OVL_ADDPIC         ; lo que tapa a los sprites
                 ld a,(ARGS+6)
-                cp 2
-                ret nc                  ; solo los margenes 0 y 1
+                cp 3
+                ret nc                  ; solo las lineas 0, 1 y 2
                 ld a,(mg_n)
                 cp 8
                 ret nc
-                call obj_cell           ; D = ancho
+                call obj_cell           ; D = ancho, E = alto
+                ld a,(ix+O_Y)           ; alto de la caja: el de la banda de prioridad de y, acotado por el de la celda
+                cp 48
+                jr nc,aq_b
+                inc a
+                jr aq_h
+aq_b:           sub 48
+                ld b,12
+                call rem8
+                inc a
+aq_h:           cp e
+                jr c,aq_k
+                ld a,e
+aq_k:           cp 64
+                jr c,aq_k2
+                ld a,63
+aq_k2:          add a,a
+                add a,a
+                ld c,a                  ; C = alto << 2
                 ld a,(mg_n)
                 add a,a
                 add a,a
@@ -448,6 +470,7 @@ ap_got:         push ix
                 ld (hl),d
                 inc hl
                 ld a,(ARGS+6)
+                or c
                 ld (hl),a
                 ld hl,mg_n
                 inc (hl)

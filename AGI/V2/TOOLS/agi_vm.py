@@ -705,9 +705,15 @@ class Interp:
         o.upd = o.cycling = o.mon = False
         o.step = o.stime = o.scount = o.ctime = o.ccount = 0
         o.view, o.loop, o.cel, o.x, o.y, o.pri = view, loop, cel, x, y, pri
+        if pri == 0:                        # addToPic: prioridad 0 -> la de la y
+            o.pri = 4 if y < 48 else min(15, (y - 48) // 12 + 5)
         self.add_spans(o)
-        if margin < 2 and len(self.margins) < 8:
-            self.margins.append((x, y, self.cell(o)[0], margin))
+        if margin < 3 and len(self.margins) < 8:
+            # addToPicDrawPriorityBox: linea de control (0, 1 o 2) abajo, a los lados y arriba, con la altura de la banda de prioridad de y acotada por la de la celda;
+            # se guarda (x, y, ancho, valor | alto << 2). El valor 3 (agua) no se admite.
+            w, h = self.cell(o)
+            band = y + 1 if y < 48 else (y - 48) % 12 + 1
+            self.margins.append((x, y, w, margin | min(band, h, 63) << 2))
 
     def add_spans(self, o):
         """Lo que un objeto fijo tapa a los sprites: por cada fila de la celda, el rango de pixeles de AGI (5 * x // 8 del HiRes) del primer al ultimo pixel opaco."""
@@ -1528,10 +1534,19 @@ class Interp:
             one |= c == 1
             sig |= c == 2
             water += c == 3
-        for mx, my, mw, mc in self.margins:
-            if y == my and x < mx + mw and mx < x + w:
+        for mx, my, mw, mv in self.margins:
+            mc, mh = mv & 3, mv >> 2
+            top = my - mh + 1
+            if y == my or (mh > 1 and y == top):          # abajo y arriba: toda la anchura
+                hit = x < mx + mw and mx < x + w
+            elif mh > 1 and top < y < my:                  # entre medias: los dos lados
+                hit = x <= mx < x + w or x <= mx + mw - 1 < x + w
+            else:
+                hit = False
+            if hit:
                 zero |= mc == 0
                 one |= mc == 1
+                sig |= mc == 2
         if ego:
             self.flags[0] = 1 if water == w else 0
             self.flags[3] = 1 if sig else 0
