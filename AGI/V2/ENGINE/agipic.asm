@@ -145,13 +145,8 @@ m3_t:           inc b
                 ld (hl),a
                 ret
 
-; Mira la linea ny entre nx y nx+ow-1 de la prioridad: pr_has0 (hay un 0), pr_water (pixeles con 3), pr_land (los demas), pr_sig (hay un 2)
+; Mira la linea ny entre nx y nx+ow-1 de la prioridad y deja en ROWBUF el valor de cada pixel
 pri_probe:      xor a
-                ld (pr_has0),a
-                ld (pr_has1),a
-                ld (pr_water),a
-                ld (pr_land),a
-                ld (pr_sig),a
                 ld (pp_xs),a
                 ld a,PG_PRI
                 call map_page
@@ -203,37 +198,28 @@ pp_hi:          sub d
                 jr z,pp_nx
                 jr c,pp_nx
                 ld b,a                  ; B = pixeles del solape
+                push hl
+                push de
+                ld a,d
+                ld hl,pp_x0
+                sub (hl)
+                ld e,a
+                ld d,0
+                ld hl,ROWBUF
+                add hl,de
                 ld a,c
-                or a
-                jr nz,pp_a
-                inc a
-                ld (pr_has0),a
-pp_a:           ld a,c
-                cp 1
-                jr nz,pp_b
-                ld (pr_has1),a
-pp_b:           ld a,c
-                cp 3
-                jr nz,pp_land
-                ld a,(pr_water)
-                add a,b
-                ld (pr_water),a
-                jr pp_s
-pp_land:        ld a,(pr_land)
-                add a,b
-                ld (pr_land),a
-pp_s:           ld a,c
-                cp 2
-                jr nz,pp_nx
-                ld a,1
-                ld (pr_sig),a
+pp_f:           ld (hl),a
+                inc hl
+                djnz pp_f
+                pop de
+                pop hl
 pp_nx:          ld a,e
                 ld (pp_xs),a
                 jr pp_l
 pp_end:         jp unmap_win
 
 ; Cajas de add.to.pic (x, y, ancho, valor | alto << 2) que cruzan la fila ny entre nx y nx+ow-1: abajo y arriba toda la anchura, entre medias los dos lados;
-; encienden pr_has0 / pr_has1 / pr_sig segun el valor (0, 1, 2)
+; pintan su valor (0, 1, 2) en ROWBUF, encima de la imagen
 mg_probe:       ld a,(mg_n)
                 or a
                 ret z
@@ -261,51 +247,63 @@ mg_l:           ld a,(iy+3)
                 jr c,mq_nx
                 cp d
                 jr nc,mq_nx
-                ld a,(iy+0)             ; entre medias: el lado izquierdo o el derecho dentro de [nx, nx+ow)
+                ld a,(iy+0)             ; entre medias: el lado izquierdo y el derecho
                 call mq_pt
-                jr nz,mq_hit
                 ld a,(iy+0)
                 add a,(iy+2)
                 dec a
                 call mq_pt
-                jr nz,mq_hit
                 jr mq_nx
-mq_row:         ld c,(iy+0)             ; la anchura entera: x < nx + ow  y  nx < x + w
-                ld hl,nx
+mq_row:         ld hl,nx                ; la anchura entera: de max(x, nx) a min(x + w, nx + ow)
+                ld a,(iy+0)
+                cp (hl)
+                jr nc,mq_a
+                ld a,(hl)
+mq_a:           ld c,a                  ; C = inicio
+                ld a,(iy+0)
+                add a,(iy+2)
+                ld d,a
                 ld a,(ow)
                 add a,(hl)
-                ld d,a
-                ld a,c
                 cp d
-                jr nc,mq_nx
-                add a,(iy+2)
+                jr c,mq_b
+                ld a,d
+mq_b:           sub c                   ; A = cuantos
+                jr z,mq_nx
+                jr c,mq_nx
                 ld e,a
-                ld a,(hl)
-                cp e
-                jr nc,mq_nx
-mq_hit:         ld a,(iy+3)
+                ld a,c
+                sub (hl)
+                push bc
+                ld c,a
+                ld b,0
+                ld hl,ROWBUF
+                add hl,bc
+                ld a,(iy+3)
                 and 3
-                ld hl,pr_has0
-                jr z,mq_set
-                ld hl,pr_has1
-                dec a
-                jr z,mq_set
-                ld hl,pr_sig
-mq_set:         ld (hl),1
+                ld b,e
+mq_f:           ld (hl),a
+                inc hl
+                djnz mq_f
+                pop bc
 mq_nx:          ld de,4
                 add iy,de
                 djnz mg_l
                 ret
-; NZ si nx <= A < nx + ow
+; pinta el valor de la caja en el pixel A si cae dentro de [nx, nx + ow)
 mq_pt:          ld hl,nx
                 sub (hl)
-                jr c,mq_pn
+                ret c
                 ld hl,ow
                 cp (hl)
-                jr nc,mq_pn
-                or 1
-                ret
-mq_pn:          xor a
+                ret nc
+                ld e,a
+                ld d,0
+                ld hl,ROWBUF
+                add hl,de
+                ld a,(iy+3)
+                and 3
+                ld (hl),a
                 ret
 
 ; Parte de can_be_here que mira la imagen -> A = 0 si el sitio no vale
@@ -327,39 +325,53 @@ pk_p:           cp 15                   ; con 15 no se mira la imagen; las bande
                 jr pk_ok
 pk_s:           call pri_probe
                 call mg_probe
-                ld a,(curk)
+                ld hl,ROWBUF            ; checkPriority de ScummVM: de izquierda a derecha, cortando en el primer 0 (o 1 si observa bloques)
+                ld c,0                  ; C = bloqueado
+                ld d,1                  ; D = todo agua hasta ahora
+                ld e,0                  ; E = ha pisado una linea de aviso
+                ld a,(ow)
                 or a
-                jr nz,pk_0
-                ld a,(pr_water)         ; ego: bandera 0 = todo agua, bandera 3 = linea de aviso (tambien si se rechaza)
-                ld hl,ow
-                cp (hl)
-                ld a,0
-                jr nz,pk_f0
-                inc a
-pk_f0:          ld (FLAGS+0),a
-                ld a,(pr_sig)
-                ld (FLAGS+3),a
-pk_0:           ld a,(pr_has0)
+                jr z,ps_end
+                ld b,a
+pq_l:           ld a,(hl)
+                inc hl
                 or a
-                jr nz,pk_no             ; un 0 bloquea siempre (ignore.blocks solo salta los 1 y el rectangulo de block)
-                ld a,(pr_has1)
-                or a
-                jr z,pk_1b
-                bit 0,(ix+O_F2)         ; un 1 bloquea a todo objeto que no ignora bloques
-                jr z,pk_no
-pk_1b:          ld a,(ix+O_WATER)
-                cp 2
-                jr nz,pk_2
-                ld a,(pr_water)         ; on.land: no todo el ancho sobre agua
-                ld hl,ow
-                cp (hl)
-                jr z,pk_no
-pk_2:           ld a,(ix+O_WATER)
+                jr z,ps_blk
+                cp 3
+                jr z,ps_nx
+                ld d,0
                 cp 1
-                jr nz,pk_ok
-                ld a,(pr_water)         ; on.water: todo el ancho sobre agua
-                ld hl,ow
-                cp (hl)
+                jr nz,ps_t
+                bit 0,(ix+O_F2)
+                jr z,ps_blk
+                jr ps_nx
+ps_t:           cp 2
+                jr nz,ps_nx
+                ld e,1
+ps_nx:          djnz pq_l
+                jr ps_end
+ps_blk:         inc c
+ps_end:         ld a,(curk)             ; ego: bandera 0 = todo agua, bandera 3 = linea de aviso (tambien si se rechaza)
+                or a
+                jr nz,ps_nf
+                ld a,d
+                ld (FLAGS+0),a
+                ld a,e
+                ld (FLAGS+3),a
+ps_nf:          ld a,c
+                or a
+                jr nz,pk_no
+                ld a,(ix+O_WATER)
+                or a
+                jr z,pk_ok
+                cp 2
+                jr z,ps_land
+                ld a,d                  ; on.water: todo el ancho sobre agua
+                or a
+                jr z,pk_no
+                jr pk_ok
+ps_land:        ld a,d                  ; on.land: no todo sobre agua
+                or a
                 jr nz,pk_no
 pk_ok:          ld a,1
                 ret

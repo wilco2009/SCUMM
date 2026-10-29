@@ -27,6 +27,7 @@
                 jp clip_view            ; OVC_CLIP
                 jp t_cmpstr             ; OVC_CMPSTR
                 jp t_newroom            ; OVC_NEWROOM
+                jp mv_od                ; OVC_MVOD
 
 TXT             equ TMPM
 
@@ -1183,3 +1184,48 @@ tn_l:           set 2,(ix+O_F1)         ; (fUpdate)
                 ld (hl),a
                 ldir
                 ret
+
+; motionMoveObj de ScummVM: direccion hacia (tx, ty) con checkStep en cada eje (no aterriza exacto); con 0 acaba el move.obj
+mv_od:          ld a,(ix+O_TX)
+                sub (ix+O_X)
+                call mo_cs
+                ld b,a
+                ld a,(ix+O_TY)
+                sub (ix+O_Y)
+                call mo_cs
+                ld c,a
+                call setdir
+                ld a,(curk)
+                or a
+                ld a,(ix+O_DIR)
+                jr nz,mo_nv
+                ld (VARS+6),a
+mo_nv:          or a
+                ret nz
+                jp mv_stop
+
+; A = diferencia (8 bits sin signo con acarreo = negativa) -> A = checkStep(delta, paso): 0 si delta <= -paso, 2 si delta >= paso, 1 en otro caso
+mo_cs:          ld e,(ix+O_STEP)
+mo_cs2:         ld l,a                  ; (E = paso)
+                ld h,0
+                jr nc,cs_p
+                dec h
+cs_p:           ld d,0
+                push hl
+                add hl,de
+                bit 7,h
+                jr nz,cs_0
+                ld a,h
+                or l
+                jr z,cs_0
+                pop hl
+                or a
+                sbc hl,de
+                ld a,1
+                ret m
+                inc a
+                ret
+cs_0:           pop hl
+                xor a
+                ret
+

@@ -619,7 +619,8 @@ mo_1:           ld a,(ARGS+4)
                 or a
                 jr nz,mo_2
                 ld (pctl),a
-mo_2:           jp mv_od                ; cmdMoveObj: la direccion se calcula ya
+mo_2:           ld hl,OVC_MVOD          ; cmdMoveObj: la direccion se calcula ya (overlay C)
+                jp call_c
 h_move_obj_v:   call argobj
                 ld a,(ARGS+1)
                 call getv
@@ -990,50 +991,6 @@ mulstep:        ld l,(ix+O_STEP)
                 ret z
                 jp neg_hl
 ms_z:           ld hl,0
-                ret
-
-; motionMoveObj de ScummVM: direccion hacia (tx, ty) con checkStep en cada eje (no aterriza exacto); con 0 acaba el move.obj
-mv_od:          ld a,(ix+O_TX)
-                sub (ix+O_X)
-                call mo_cs
-                ld b,a
-                ld a,(ix+O_TY)
-                sub (ix+O_Y)
-                call mo_cs
-                ld c,a
-                call setdir
-                ld a,(curk)
-                or a
-                ld a,(ix+O_DIR)
-                jr nz,mo_nv
-                ld (VARS+6),a
-mo_nv:          or a
-                ret nz
-                jr mv_stop
-
-; A = diferencia (8 bits sin signo con acarreo = negativa) -> A = checkStep(delta, paso): 0 si delta <= -paso, 2 si delta >= paso, 1 en otro caso
-mo_cs:          ld e,(ix+O_STEP)
-mo_cs2:         ld l,a                  ; (E = paso)
-                ld h,0
-                jr nc,cs_p
-                dec h
-cs_p:           ld d,0
-                push hl
-                add hl,de
-                bit 7,h
-                jr nz,cs_0
-                ld a,h
-                or l
-                jr z,cs_0
-                pop hl
-                or a
-                sbc hl,de
-                ld a,1
-                ret m
-                inc a
-                ret
-cs_0:           pop hl
-                xor a
                 ret
 
 ; Acaba el move.obj del objeto IX (motionMoveObjStop): recupera el paso, pone la bandera y el ego recupera el control del jugador

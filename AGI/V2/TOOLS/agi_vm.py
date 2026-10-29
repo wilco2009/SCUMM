@@ -1567,43 +1567,46 @@ class Interp:
 
     def check_priority(self, o, x, y, w):
         """checkPriority de ScummVM: la prioridad sale de la y candidata (salvo fijada); con 15 no se mira la imagen. Las banderas 0 y 3 del ego se escriben
-        aunque el sitio se rechace. (Se mira la fila entera, sin cortar en el primer 0 o 1.)"""
+        aunque el sitio se rechace."""
         ego = o is self.objs.get(EGO)
         pri = o.pri if o.fixpri else (4 if y < 48 else min(15, (y - 48) // 12 + 5))
         if pri == 15:
             if ego:
                 self.flags[0] = self.flags[3] = 0
             return True
-        pr = self.pic.pri
-        water = 0
-        zero = one = sig = False
-        for i in range(w):
-            c = pr[y * ag.W + x + i]
-            zero |= c == 0
-            one |= c == 1
-            sig |= c == 2
-            water += c == 3
-        for mx, my, mw, mv in self.margins:
+        row = list(self.pic.pri[y * ag.W + x: y * ag.W + x + w])
+        for mx, my, mw, mv in self.margins:             # las cajas de add.to.pic van encima de la imagen
             mc, mh = mv & 3, mv >> 2
             top = my - mh + 1
             if y == my or (mh > 1 and y == top):          # abajo y arriba: toda la anchura
-                hit = x < mx + mw and mx < x + w
+                pix = range(max(mx, x), min(mx + mw, x + w))
             elif mh > 1 and top < y < my:                  # entre medias: los dos lados
-                hit = x <= mx < x + w or x <= mx + mw - 1 < x + w
+                pix = [p for p in (mx, mx + mw - 1) if x <= p < x + w]
             else:
-                hit = False
-            if hit:
-                zero |= mc == 0
-                one |= mc == 1
-                sig |= mc == 2
+                pix = []
+            for p in pix:
+                row[p - x] = mc
+        water, sig, blocked = True, False, False        # recorrido de ScummVM: de izquierda a derecha, cortando en el primer 0 (o 1 si observa bloques)
+        for c in row:
+            if c == 0:
+                blocked = True
+                break
+            if c != 3:
+                water = False
+                if c == 1:
+                    if not o.ign_blocks:
+                        blocked = True
+                        break
+                elif c == 2:
+                    sig = True
         if ego:
-            self.flags[0] = 1 if water == w else 0
+            self.flags[0] = 1 if water else 0
             self.flags[3] = 1 if sig else 0
-        if zero or (one and not o.ign_blocks):
+        if blocked:
             return False
-        if o.water == 1 and water != w:         # on.water: todo el ancho sobre agua
+        if o.water == 1 and not water:          # on.water: todo el ancho sobre agua
             return False
-        if o.water == 2 and water == w:         # on.land: no todo sobre agua
+        if o.water == 2 and water:              # on.land: no todo sobre agua
             return False
         return True
 

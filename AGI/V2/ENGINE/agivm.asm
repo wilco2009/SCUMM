@@ -41,6 +41,7 @@ KEYMAP          equ $7100               ; por tecla ASCII (0-127): controlador y
 CTL             equ $7200               ; controladores activos en este ciclo
 STRS            equ $7710               ; 12 cadenas de 41 bytes
 MSGBUF          equ $7900
+ROWBUF          equ MSGBUF              ; una fila de prioridad bajo el objeto (pic_check)
 TMPM            equ $7A00
 WTEXT           equ $7B00
 STMP            equ $7BC0
@@ -139,6 +140,7 @@ OVC_CYCLES      equ $2033
 OVC_CLIP        equ $2036
 OVC_CMPSTR      equ $2039
 OVC_NEWROOM     equ $203C
+OVC_MVOD        equ $203F
 OVC_TEXTSCR     equ $2015
 OVD_READ        equ $2000               ; overlay D (ficheros de guardar/cargar): con call_d
 OVD_PREP        equ $2003
@@ -1866,13 +1868,8 @@ ss_i:           defb 0
 picvalid:       defb 0
 prisz:          defw 0
 prisz2:         defw 0
-pr_has0:        defb 0
-pr_has1:        defb 0
 mg_n:           defb 0
 mg_tab:         defs 4*MG_MAX       ; x, y, ancho, valor | alto << 2
-pr_water:       defb 0
-pr_land:        defb 0
-pr_sig:         defb 0
 pp_xs:          defb 0
 pp_x0:          defb 0
 pp_x1:          defb 0
