@@ -1130,28 +1130,24 @@ cc_3b:          dec a
                 ld (ix+O_CEL),a
                 ret
 
-; A = 1 si la celda del objeto IX en (D, E) cae dentro de la zona de block: x1 <= x, x+w-1 <= x2, y1 <= y <= y2 (blk = x1, y1, x2, y2)
+; A = 1 si el punto (D, E) cae dentro de la zona de block, con los limites excluidos (checkBlock de ScummVM): x1 < x < x2 y y1 < y < y2 (blk = x1, y1, x2, y2)
 bk_in:          ld hl,blk
+                ld a,(hl)
+                cp d
+                jr nc,bk_no
+                inc hl
+                ld a,(hl)
+                cp e
+                jr nc,bk_no
+                inc hl
                 ld a,d
                 cp (hl)
-                jr c,bk_no
+                jr nc,bk_no
                 inc hl
                 ld a,e
                 cp (hl)
-                jr c,bk_no
-                inc hl
-                ld a,(ow)
-                add a,d
-                dec a
-                cp (hl)
-                jr z,bk_2
                 jr nc,bk_no
-bk_2:           inc hl
-                ld a,e
-                cp (hl)
-                jr z,bk_ok
-                jr nc,bk_no
-bk_ok:          ld a,1
+                ld a,1
                 ret
 bk_no:          xor a
                 ret
@@ -1184,10 +1180,7 @@ can_be_here:    call obj_cell
                 sbc hl,de               ; ny <= horizonte -> no
                 jp z,ret_false
                 jp c,ret_false
-cb_blk:         ld a,(curk)             ; la zona de bloqueo solo vale para el ego que no la ignora
-                or a
-                jr nz,cb_pic
-                ld a,(blkf)
+cb_blk:         ld a,(blkf)             ; la zona de bloqueo vale para todo objeto que no la ignora
                 or a
                 jr z,cb_pic
                 bit 0,(ix+O_F2)
