@@ -89,7 +89,8 @@ vscan:          ld (vclamp),a
                 ld a,9
                 call fatal
                 jp vs_zero
-vs_1:           ld hl,LWIN
+vs_1:           res 7,d                 ; bit 15 = vista congelada (agi2log.py)
+                ld hl,LWIN
                 add hl,de
                 ld a,(hl)
                 ld (ocn),a
@@ -187,12 +188,8 @@ ua_l:           res 0,(ix+O_F1)
                 djnz ua_l
                 ret
 
-h_draw:         call argobj
-                bit 1,(ix+O_F1)
-                ret nz
-                set 1,(ix+O_F1)
-                call obj_cell
-                jp set_pri
+h_draw:         ld hl,OVC_DRAW          ; en el overlay C (el nucleo no tiene sitio)
+                jp call_c
 
 h_erase:        call argobj
                 res 1,(ix+O_F1)

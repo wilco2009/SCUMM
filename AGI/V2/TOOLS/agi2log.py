@@ -11,6 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import agi_read as ag
+import agi2spr
 
 
 def convert(d, ov=None):
@@ -52,6 +53,7 @@ def main(argv):
         print(__doc__)
         return 1
     g = ag.Game(argv[1])
+    agi2spr.set_game(argv[1])
     os.makedirs(argv[2], exist_ok=True)
     sel = [int(a) for a in argv[3:]] or g.present('LOG')
     tot = 0
@@ -105,7 +107,7 @@ def main(argv):
             print('VIEW %d: %d bytes, no cabe en una pagina' % (n, len(d)))
         off = 512 + len(blob)
         idx[2 * n] = off & 255
-        idx[2 * n + 1] = off >> 8
+        idx[2 * n + 1] = (off >> 8) | (0x80 if agi2spr.frozen(n) else 0)       # bit 15: vista congelada (agi2spr.FREEZE_VIEWS)
         blob.append(len(loops))
         blob.extend(len(l) for l in loops)
         for l in loops:

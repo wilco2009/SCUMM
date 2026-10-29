@@ -18,6 +18,7 @@
                 jp t_animate            ; OVC_ANIM
                 jp t_getnum             ; OVC_GETNUM
                 jp t_parse              ; OVC_PARSE
+                jp t_draw               ; OVC_DRAW
 
 TXT             equ TMPM
 
@@ -565,3 +566,26 @@ tpa_p:          call parse_text
                 inc a
                 ld (FLAGS+2),a
                 ret
+
+; draw(o): el objeto pasa a dibujado; si su vista esta congelada (bit 15 de su desplazamiento en VIEWS.HDR), su tiempo de ciclo pasa a 127 (el maximo que no cicla enseguida)
+t_draw:         call argobj
+                bit 1,(ix+O_F1)
+                ret nz
+                set 1,(ix+O_F1)
+                call obj_cell
+                call map_views
+                ld l,(ix+O_VIEW)
+                ld h,0
+                add hl,hl
+                ld de,LWIN+1
+                add hl,de
+                ld a,(hl)
+                push af
+                call unmap_win
+                pop af
+                bit 7,a
+                jr z,td_nf
+                ld a,127
+                ld (ix+O_CTIME),a
+                ld (ix+O_CCOUNT),a
+td_nf:          jp set_pri

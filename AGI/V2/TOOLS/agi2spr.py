@@ -120,13 +120,23 @@ SW_TILES = 6
 # Vistas que se dibujan por software (como los rotulos anchos) aunque quepan en los sprites, porque en su sala pasan de los 12 sprites por linea y el hardware
 # deja sin dibujar a los de abajo del orden (una cupula y la mitad del ego): {juego: {vista}}. SQ1, sala 6: tres cupulas de 5 mosaicos por fila (vista 175) y el ego.
 FORCE_SW = {'SQ1': {175}}
+# Vistas cuya animacion se congela al dibujarlas (tiempo de ciclo 127: casi no cambian de celda y conservan la de set.cel): sus cambios de celda, dibujadas por
+# software, recomponen lineas cada ciclo y eran el 60 % del tiempo de la sala. SQ1, sala 6: las luces de las cupulas (vista 175).
+FREEZE_VIEWS = {'SQ1': {175}}
 _force = set()
+_freeze = set()
 
 
 def set_game(path):
     """Elige las vistas forzadas a software del juego (carpeta `path`)."""
-    global _force
-    _force = FORCE_SW.get(os.path.basename(os.path.normpath(path)).upper(), set())
+    global _force, _freeze
+    name = os.path.basename(os.path.normpath(path)).upper()
+    _force = FORCE_SW.get(name, set())
+    _freeze = FREEZE_VIEWS.get(name, set())
+
+
+def frozen(view):
+    return view in _freeze
 
 
 def meta(tiles, view=None):

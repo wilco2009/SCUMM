@@ -750,6 +750,8 @@ class Interp:
         if not o.drawn:
             o.drawn = True
             self.cell(o)
+            if agi2spr.frozen(o.view):              # vista congelada (agi2spr.FREEZE_VIEWS): casi no cicla
+                o.ctime = o.ccount = 127
             self.set_pri(o)
             self.log('draw o%d view %d at %d,%d' % (n, o.view, o.x, o.y))
 
