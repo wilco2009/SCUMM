@@ -270,35 +270,25 @@ mg_n2:          ld de,4
 pic_check:      ld a,(picvalid)
                 or a
                 jr z,pk_ok
-                call pri_probe
-                call mg_probe
-                ld a,(pr_has0)
-                or a
-                jr nz,pk_no             ; un 0 bloquea siempre (ignore.blocks solo salta los 1 y el rectangulo de block)
-pk_1:           ld a,(curk)             ; un 1 bloquea al ego que no ignora bloques
-                or a
-                jr nz,pk_1b
-                ld a,(pr_has1)
-                or a
-                jr z,pk_1b
-                bit 0,(ix+O_F2)
-                jr z,pk_no
-pk_1b:          ld a,(ix+O_WATER)
-                cp 2
-                jr nz,pk_2
-                ld a,(pr_water)         ; solo tierra: nada de agua
-                or a
-                jr nz,pk_no
-pk_2:           ld a,(ix+O_WATER)
-                cp 1
-                jr nz,pk_3
-                ld a,(pr_land)          ; solo agua: nada de tierra
-                or a
-                jr nz,pk_no
-pk_3:           ld a,(curk)
+                ld a,(ix+O_PRI)         ; prioridad: la fijada o la de la y candidata
+                bit 5,(ix+O_F1)
+                jr nz,pk_p
+                ld a,(ny)
+                call pri_y
+pk_p:           cp 15                   ; con 15 no se mira la imagen; las banderas 0 y 3 del ego se apagan
+                jr nz,pk_s
+                ld a,(curk)
                 or a
                 jr nz,pk_ok
-                ld a,(pr_water)         ; ego: bandera 0 = todo agua, bandera 3 = linea de aviso
+                ld (FLAGS+0),a
+                ld (FLAGS+3),a
+                jr pk_ok
+pk_s:           call pri_probe
+                call mg_probe
+                ld a,(curk)
+                or a
+                jr nz,pk_0
+                ld a,(pr_water)         ; ego: bandera 0 = todo agua, bandera 3 = linea de aviso (tambien si se rechaza)
                 ld hl,ow
                 cp (hl)
                 ld a,0
@@ -307,6 +297,28 @@ pk_3:           ld a,(curk)
 pk_f0:          ld (FLAGS+0),a
                 ld a,(pr_sig)
                 ld (FLAGS+3),a
+pk_0:           ld a,(pr_has0)
+                or a
+                jr nz,pk_no             ; un 0 bloquea siempre (ignore.blocks solo salta los 1 y el rectangulo de block)
+                ld a,(pr_has1)
+                or a
+                jr z,pk_1b
+                bit 0,(ix+O_F2)         ; un 1 bloquea a todo objeto que no ignora bloques
+                jr z,pk_no
+pk_1b:          ld a,(ix+O_WATER)
+                cp 2
+                jr nz,pk_2
+                ld a,(pr_water)         ; on.land: no todo el ancho sobre agua
+                ld hl,ow
+                cp (hl)
+                jr z,pk_no
+pk_2:           ld a,(ix+O_WATER)
+                cp 1
+                jr nz,pk_ok
+                ld a,(pr_water)         ; on.water: todo el ancho sobre agua
+                ld hl,ow
+                cp (hl)
+                jr nz,pk_no
 pk_ok:          ld a,1
                 ret
 pk_no:          xor a

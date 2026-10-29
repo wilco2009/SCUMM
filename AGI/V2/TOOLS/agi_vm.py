@@ -1476,42 +1476,49 @@ class Interp:
             # como changePos/checkBlock de ScummVM: la zona de block no se cruza ni hacia dentro ni hacia fuera (el punto x,y, limites excluidos)
             if (bx1 < x < bx2 and by1 < y < by2) != (bx1 < o.x < bx2 and by1 < o.y < by2):
                 return False
-        if self.pic and self.use_pic:
-            pri = self.pic.pri
-            water = land = 0
-            sig = False
-            for i in range(w):
-                c = pri[y * ag.W + x + i]
-                if c == 0:                      # la linea 0 bloquea siempre; ignore.blocks solo salta las 1 y el rectangulo
-                    return False
-                if c == 1 and not o.ign_blocks and o is self.objs.get(EGO):
-                    return False
-                if c == 3:
-                    water += 1
-                else:
-                    land += 1
-                if c == 2:
-                    sig = True
-            for mx, my, mw, mc in self.margins:
-                if y == my and x < mx + mw and mx < x + w:
-                    if mc == 0:
-                        return False
-                    if mc == 1 and not o.ign_blocks and o is self.objs.get(EGO):
-                        return False
-            if o.water == 2 and water:
-                return False
-            if o.water == 1 and land:
-                return False
-            if o is self.objs.get(EGO):
-                self.flags[0] = 1 if water == w else 0
-                self.flags[3] = 1 if sig else 0
         if not o.ign_objs:
             for k, q in self.objs.items():
                 if q is o or not (q.anim and q.drawn) or q.ign_objs:
                     continue
                 qw, qh = self.cell(q)
-                if x < q.x + qw and q.x < x + w and (y == q.y or (o.y < q.y <= y) or (y < q.y <= o.y)):
+                # checkCollision de ScummVM: solape en x inclusivo; misma y o cruce de la linea base
+                if x <= q.x + qw and q.x <= x + w and (y == q.y or (o.y < q.y <= y) or (y < q.y <= o.y)):
                     return False
+        if self.pic and self.use_pic:
+            return self.check_priority(o, x, y, w)
+        return True
+
+    def check_priority(self, o, x, y, w):
+        """checkPriority de ScummVM: la prioridad sale de la y candidata (salvo fijada); con 15 no se mira la imagen. Las banderas 0 y 3 del ego se escriben
+        aunque el sitio se rechace. (Se mira la fila entera, sin cortar en el primer 0 o 1.)"""
+        ego = o is self.objs.get(EGO)
+        pri = o.pri if o.fixpri else (4 if y < 48 else min(15, (y - 48) // 12 + 5))
+        if pri == 15:
+            if ego:
+                self.flags[0] = self.flags[3] = 0
+            return True
+        pr = self.pic.pri
+        water = 0
+        zero = one = sig = False
+        for i in range(w):
+            c = pr[y * ag.W + x + i]
+            zero |= c == 0
+            one |= c == 1
+            sig |= c == 2
+            water += c == 3
+        for mx, my, mw, mc in self.margins:
+            if y == my and x < mx + mw and mx < x + w:
+                zero |= mc == 0
+                one |= mc == 1
+        if ego:
+            self.flags[0] = 1 if water == w else 0
+            self.flags[3] = 1 if sig else 0
+        if zero or (one and not o.ign_blocks):
+            return False
+        if o.water == 1 and water != w:         # on.water: todo el ancho sobre agua
+            return False
+        if o.water == 2 and water == w:         # on.land: no todo sobre agua
+            return False
         return True
 
     def pick_loop(self, o):

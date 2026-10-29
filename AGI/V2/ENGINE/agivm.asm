@@ -117,6 +117,7 @@ OVC_GETNUM      equ $201E
 OVC_PARSE       equ $2021
 OVC_DRAW        equ $2024
 OVC_FIXPOS      equ $2027
+OVC_FOLLOW      equ $202A
 OVC_TEXTSCR     equ $2015
 OVD_READ        equ $2000               ; overlay D (ficheros de guardar/cargar): con call_d
 OVD_PREP        equ $2003

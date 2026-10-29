@@ -20,6 +20,7 @@
                 jp t_parse              ; OVC_PARSE
                 jp t_draw               ; OVC_DRAW
                 jp t_fixpos             ; OVC_FIXPOS
+                jp t_follow             ; OVC_FOLLOW
 
 TXT             equ TMPM
 
@@ -712,3 +713,53 @@ fo_no:          xor a
 fxd:            defb 0
 fxc:            defb 0
 fxs:            defb 0
+
+; follow.ego del objeto IX: llega si |dx| <= 2*paso y |dy| <= paso (Z, con la bandera puesta y el movimiento parado); si no pone la direccion hacia el ego (NZ)
+t_follow:
+                ld a,(ix+O_X)           ; follow.ego: llega si |dx| <= 2*paso y |dy| <= paso
+                ld b,a
+                ld a,(OBJ+O_X)
+                call absd
+                ld e,a
+                ld d,0
+                ld l,(ix+O_STEP)
+                ld h,0
+                add hl,hl
+                or a
+                sbc hl,de
+                jr c,tf_2
+                ld a,(ix+O_Y)
+                ld b,a
+                ld a,(OBJ+O_Y)
+                call absd
+                ld c,a
+                ld a,(ix+O_STEP)
+                cp c
+                jr c,tf_2
+                ld a,(ix+O_MFLAG)
+                ld l,a
+                ld h,FLAGS>>8
+                ld (hl),1
+                xor a
+                ld (ix+O_MOTION),a
+                ld (ix+O_DIR),a
+                ret
+tf_2:          ld a,(OBJ+O_X)
+                push ix
+                pop hl
+                ld de,O_X
+                add hl,de
+                call sign3
+                ld b,a
+                ld a,(OBJ+O_Y)
+                push bc
+                push ix
+                pop hl
+                ld de,O_Y
+                add hl,de
+                call sign3
+                pop bc
+                ld c,a
+                call setdir
+                or 1                    ; NZ: sigue con el paso
+                ret

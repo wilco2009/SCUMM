@@ -154,10 +154,13 @@ vs_zero:        ld de,0
 set_pri:        bit 5,(ix+O_F1)
                 ret nz
                 ld a,(ix+O_Y)
-                cp 48
+                call pri_y
+                ld (ix+O_PRI),a
+                ret
+pri_y:          cp 48                   ; A = y -> A = prioridad por la posicion
                 jr nc,sp_1
                 ld a,4
-                jr sp_s
+                ret
 sp_1:           sub 48
                 ld c,0
 sp_l:           cp 12
@@ -168,9 +171,8 @@ sp_l:           cp 12
 sp_d:           ld a,c
                 add a,5
                 cp 16
-                jr c,sp_s
+                ret c
                 ld a,15
-sp_s:           ld (ix+O_PRI),a
                 ret
 
 ; ---------------------------------------------------------------------
@@ -808,51 +810,9 @@ move:           ld a,(ix+O_MOTION)
                 jp z,mv_obj
                 cp 2
                 jr nz,mv_w
-                ld a,(ix+O_X)           ; follow.ego: llega si |dx| <= 2*paso y |dy| <= paso
-                ld b,a
-                ld a,(OBJ+O_X)
-                call absd
-                ld e,a
-                ld d,0
-                ld l,(ix+O_STEP)
-                ld h,0
-                add hl,hl
-                or a
-                sbc hl,de
-                jr c,mv_f2
-                ld a,(ix+O_Y)
-                ld b,a
-                ld a,(OBJ+O_Y)
-                call absd
-                ld c,a
-                ld a,(ix+O_STEP)
-                cp c
-                jr c,mv_f2
-                ld a,(ix+O_MFLAG)
-                ld l,a
-                ld h,FLAGS>>8
-                ld (hl),1
-                xor a
-                ld (ix+O_MOTION),a
-                ld (ix+O_DIR),a
-                ret
-mv_f2:          ld a,(OBJ+O_X)
-                push ix
-                pop hl
-                ld de,O_X
-                add hl,de
-                call sign3
-                ld b,a
-                ld a,(OBJ+O_Y)
-                push bc
-                push ix
-                pop hl
-                ld de,O_Y
-                add hl,de
-                call sign3
-                pop bc
-                ld c,a
-                call setdir
+                ld hl,OVC_FOLLOW        ; follow.ego (direccion o llegada) en el overlay C: Z = ha llegado
+                call call_c
+                ret z
                 jr mv_gen
 mv_w:           cp 1
                 jr nz,mv_gen
@@ -1163,13 +1123,9 @@ bk_no:          xor a
 can_be_here:    call obj_cell
                 ld a,d
                 ld (ow),a
-                ld a,e
-                ld (oh),a
                 ; y - h < -1  ->  se deja pasar (los bordes se tratan aparte)
                 ld hl,(ny)
-                ld a,(oh)
-                ld e,a
-                ld d,0
+                ld d,0                  ; E = alto
                 or a
                 sbc hl,de
                 inc hl
@@ -1189,9 +1145,9 @@ can_be_here:    call obj_cell
                 jp c,ret_false
 cb_blk:         ld a,(blkf)             ; la zona de bloqueo vale para todo objeto que no la ignora
                 or a
-                jr z,cb_pic
+                jr z,cb_obj
                 bit 0,(ix+O_F2)
-                jr nz,cb_pic
+                jr nz,cb_obj
                 ld a,(nx)               ; la zona de bloqueo no se cruza ni hacia dentro ni hacia fuera: el sitio nuevo tiene que estar dentro si el de ahora lo esta
                 ld d,a
                 ld a,(ny)
@@ -1203,11 +1159,8 @@ cb_blk:         ld a,(blkf)             ; la zona de bloqueo vale para todo obje
                 call bk_in
                 cp c
                 jp nz,ret_false
-cb_pic:         call pic_check
-                or a
-                jp z,ret_false
 cb_obj:         bit 1,(ix+O_F2)         ; ignora a los demas objetos
-                jp nz,ret_true
+                jp nz,cb_pic
                 push ix
                 ld iy,OBJ
                 ld b,NOBJ
@@ -1239,7 +1192,8 @@ cb_l:           push bc
                 ld l,a
                 ld h,0
                 add hl,de
-                ex de,hl                ; DE = qx + qw
+                ex de,hl                ; DE = qx + qw + 1 (solape inclusivo)
+                inc de
                 ld hl,(nx)
                 or a
                 sbc hl,de
@@ -1252,8 +1206,7 @@ cb_l:           push bc
                 ld e,(iy+O_X)
                 ld d,0
                 or a
-                sbc hl,de               ; (nx + w) - qx > 0  <=>  qx < nx + w
-                jr z,cb_skip
+                sbc hl,de               ; (nx + w) - qx >= 0  <=>  qx <= nx + w
                 jp m,cb_skip
                 ; y == qy  o  oy < qy <= ny  o  ny < qy <= oy
                 ld hl,(ny)
@@ -1283,6 +1236,9 @@ cb_skip:        pop bc
                 dec b
                 jp nz,cb_l
                 pop ix
+cb_pic:         call pic_check          ; la imagen se mira despues de los objetos (checkCollision antes que checkPriority)
+                or a
+                jp z,ret_false
                 jp ret_true
 cb_hit:         pop bc
                 pop ix
