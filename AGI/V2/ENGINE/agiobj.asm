@@ -212,8 +212,10 @@ h_position_v:   call argobj
                 ld (ix+O_Y),a
                 jp set_pri
 h_reposition_to: call h_position
+                set 5,(ix+O_F2)
                 jr h_fixpos
 h_reposition_to_v: call h_position_v
+                set 5,(ix+O_F2)
 h_fixpos:       ld a,(ARGS)
                 ld (curk),a             ; can_be_here distingue al ego por curk
                 ld hl,OVC_FIXPOS        ; fixPosition de ScummVM, en el overlay C
@@ -221,13 +223,36 @@ h_fixpos:       ld a,(ARGS)
 h_reposition:   call argobj
                 ld a,(ARGS+1)
                 call getv
-                add a,(ix+O_X)
-                ld (ix+O_X),a
+                push ix
+                pop hl
+                ld de,O_X
+                add hl,de
+                call rp_add
                 ld a,(ARGS+2)
                 call getv
-                add a,(ix+O_Y)
-                ld (ix+O_Y),a
+                push ix
+                pop hl
+                ld de,O_Y
+                add hl,de
+                call rp_add
+                set 5,(ix+O_F2)         ; fUpdatePos: el paso de este ciclo no avanza
                 jr h_fixpos
+; (HL) += A (con signo); un desplazamiento negativo que pasa de 0 lo deja en 0 (cmdReposition)
+rp_add:         bit 7,a
+                jr z,rpa_p
+                neg
+                ld b,a
+                ld a,(hl)
+                cp b
+                jr nc,rpa_s
+                ld (hl),0
+                ret
+rpa_s:          sub b
+                ld (hl),a
+                ret
+rpa_p:          add a,(hl)
+                ld (hl),a
+                ret
 h_get_posn:     call argobj
                 ld a,(ARGS+1)
                 ld l,a
@@ -249,7 +274,7 @@ sv_set:         ld (ix+O_VIEW),a
                 jr nz,sv_nv
                 ld a,c                  ; v16 = la vista del ego
                 ld (VARS+16),a
-sv_nv:          jp obj_cell             ; el bucle y la celda se conservan (obj_cell los ajusta si la vista nueva no los tiene), como en AGI: SQ1 pone set.loop y luego set.view
+sv_nv:          jp clipv             ; el bucle y la celda se conservan (obj_cell los ajusta si la vista nueva no los tiene), como en AGI: SQ1 pone set.loop y luego set.view
 h_set_view_v:   call argobj
                 ld a,(ARGS+1)
                 call getv
@@ -257,7 +282,7 @@ h_set_view_v:   call argobj
 h_set_loop:     call argobj
                 ld a,(ARGS+1)
 sl_set:         ld (ix+O_LOOP),a
-                jp obj_cell
+                jp clipv
 h_set_loop_v:   call argobj
                 ld a,(ARGS+1)
                 call getv
@@ -272,11 +297,14 @@ h_set_cel:      call argobj
                 ld a,(ARGS+1)
 sc_set:         ld (ix+O_CEL),a
                 res 4,(ix+O_F2)         ; set.cel quita el fDontUpdate
-                jp obj_cell
+                jp clipv
 h_set_cel_v:    call argobj
                 ld a,(ARGS+1)
                 call getv
                 jr sc_set
+clipv:          call obj_cell           ; y clipViewCoordinates (overlay C)
+                ld hl,OVC_CLIP
+                jp call_c
 h_last_cel:     call argobj
                 call obj_cell
                 ld a,(occ)
@@ -481,6 +509,7 @@ eol_set:        call argobj
                 set 3,(ix+O_F1)
                 set 2,(ix+O_F1)         ; cmdEndOfLoop: fDontUpdate | fUpdate | fCycling
                 set 4,(ix+O_F2)
+                res 6,(ix+O_F2)         ; (cyclerActivated: el ignoreLoopFlag se quita)
                 ld l,a
                 ld h,FLAGS>>8
                 ld (hl),0
@@ -542,7 +571,10 @@ h_move_obj:     call argobj
                 ld a,(ARGS+2)
                 ld c,a
                 ld a,(ARGS+3)
-mo_go:          ld (ix+O_MOTION),3
+mo_go:          push af
+                call motact
+                pop af
+                ld (ix+O_MOTION),3
                 ld (ix+O_TX),b
                 ld (ix+O_TY),c
                 ld d,a                  ; paso pedido
@@ -575,6 +607,7 @@ h_move_obj_v:   call argobj
                 call getv
                 jr mo_go
 h_follow_ego:   call argobj
+                call motact
                 ld (ix+O_MOTION),2
                 ld a,(ARGS+2)
                 ld (ix+O_MFLAG),a
@@ -591,12 +624,24 @@ fe_1:           ld (ix+O_MSTEP),a
                 set 4,(ix+O_F1)
                 ret
 h_wander:       call argobj
+                call motact
                 ld (ix+O_MOTION),1
                 set 4,(ix+O_F1)
                 ld a,(ARGS)
                 or a
                 ret nz
                 ld (pctl),a
+                ret
+; motionActivated: si hay un end.of.loop / reverse.loop en curso, su bandera se pierde (ignoreLoopFlag, F2 bit 6)
+motact:         res 6,(ix+O_F2)
+                bit 3,(ix+O_F1)
+                ret z
+                ld a,(ix+O_CTYPE)
+                cp 1
+                jr z,ma_s
+                cp 2
+                ret nz
+ma_s:           set 6,(ix+O_F2)
                 ret
 h_normal_motion: call argobj
                 ld (ix+O_MOTION),0
@@ -697,59 +742,38 @@ DYTAB:          defb 0,255,255,0,1,1,1,0,255
 LOOP4:          defb 4,3,0,0,0,2,1,1,1
 LOOP2:          defb 4,4,0,0,0,4,1,1,1
 
-update_objects: ld ix,OBJ
+update_objects: ld hl,OVC_CYCLES        ; por objeto: bucle y ciclo (overlay C)
+                call call_c
+                ld ix,OBJ               ; y despues la posicion de todos (updatePosition)
                 xor a
                 ld (curk),a
                 ld (uo_chg),a
 uo_l:           ld a,(ix+O_F1)
                 and 7
                 cp 7
-                jp nz,uo_next
+                jr nz,uo_next
                 ld (uo_chg),a           ; hay algun objeto que actualizar
-                ld a,(curk)
-                or a
-                jr nz,uo_m
-                ld a,(pctl)             ; ego: con el jugador al mando la direccion es v6; si no, v6 es la del ego
-                or a
-                jr z,uo_m
-                ld a,(VARS+6)
-                ld (ix+O_DIR),a
-uo_m:           bit 4,(ix+O_F1)
-                jr z,uo_c
+                ld a,(ix+O_SCOUNT)
+                cp 2
+                jr c,uo_mv
                 dec (ix+O_SCOUNT)
-                jr z,uo_mv
-                jp p,uo_c
+                jr uo_next
 uo_mv:          ld a,(ix+O_STIME)
                 ld (ix+O_SCOUNT),a
                 ld e,(ix+O_X)
                 ld d,(ix+O_Y)
                 push de
-                call move
+                call mv_pos
                 pop de
+                res 5,(ix+O_F2)         ; fUpdatePos gastado
                 res 3,(ix+O_F2)         ; fDidntMove: el paso no lo movio
                 ld a,(ix+O_X)
                 cp e
-                jr nz,uo_c
+                jr nz,uo_next
                 ld a,(ix+O_Y)
                 cp d
-                jr nz,uo_c
+                jr nz,uo_next
                 set 3,(ix+O_F2)
-uo_c:           bit 3,(ix+O_F1)
-                jr z,uo_e
-                dec (ix+O_CCOUNT)
-                jr z,uo_cy
-                jp p,uo_e
-uo_cy:          ld a,(ix+O_CTIME)
-                ld (ix+O_CCOUNT),a
-                call cycle_cel
-uo_e:           ld a,(curk)
-                or a
-                jr nz,uo_next
-                ld a,(pctl)
-                or a
-                jr nz,uo_next
-                ld a,(ix+O_DIR)
-                ld (VARS+6),a
 uo_next:        ld de,32
                 add ix,de
                 ld a,(curk)
@@ -798,35 +822,12 @@ setdir:         ld a,c
                 ld (ix+O_DIR),a
                 ret
 
-; Mueve el objeto IX un paso (curk = su numero)
-move:           ld a,(ix+O_MOTION)
-                cp 3
-                jp z,mv_obj
-                cp 2
-                jr nz,mv_w
-                ld hl,OVC_FOLLOW        ; follow.ego (direccion o llegada) en el overlay C
-                call call_c
-                jr mv_gen
-mv_w:           cp 1
-                jr nz,mv_gen
-                dec (ix+O_WANDER)
-                jr z,mv_wr
-                jp m,mv_wr
-                ld a,(ix+O_DIR)
-                or a
-                jr nz,mv_gen
-mv_wr:          call rand8
-                and 7                   ; 1 + rand % 8
-                inc a
-                ld (ix+O_DIR),a
-                call rand8
-                ld b,10
-                call rem8
-                add a,4
-                ld (ix+O_WANDER),a
-mv_gen:         ld a,(ix+O_DIR)
-                or a
-                ret z
+; updatePosition de ScummVM para el objeto IX que da su paso (curk = su numero): avanza (salvo fUpdatePos), recorta en los bordes y mira si vale el sitio
+mv_pos:         ld a,(ix+O_DIR)
+                bit 5,(ix+O_F2)         ; fUpdatePos: este paso no avanza
+                jr z,mg_d
+                xor a
+mg_d:           ld (mgd),a
                 ld e,a                  ; nx = x + DX*paso, ny = y + DY*paso (16 bits con signo)
                 ld d,0
                 ld hl,DXTAB
@@ -837,7 +838,7 @@ mv_gen:         ld a,(ix+O_DIR)
                 ld d,0
                 add hl,de
                 ld (nx),hl
-                ld a,(ix+O_DIR)
+                ld a,(mgd)
                 ld e,a
                 ld d,0
                 ld hl,DYTAB
@@ -848,9 +849,11 @@ mv_gen:         ld a,(ix+O_DIR)
                 ld d,0
                 add hl,de
                 ld (ny),hl
-                call obj_cell           ; D = ancho
+                call obj_cell           ; D = ancho, E = alto
                 ld a,d
                 ld (ow),a
+                ld a,e
+                ld (oh),a
                 xor a
                 ld (bdr),a
                 ld hl,(nx)
@@ -878,7 +881,21 @@ mg_x2:          ld a,(ow)
                 ld (nx),hl
                 ld a,2
                 ld (bdr),a
-mg_y:           ld hl,(ny)              ; ny > 167 ?
+mg_y:           ld hl,(ny)              ; ny - alto < -1 ?
+                inc hl
+                ld a,(oh)
+                ld e,a
+                ld d,0
+                or a
+                sbc hl,de
+                jp p,mg_y2
+                dec e
+                ld d,0
+                ld (ny),de              ; y = alto - 1
+                ld a,1
+                ld (bdr),a
+                jr mg_p
+mg_y2:          ld hl,(ny)              ; ny > 167 ?
                 bit 7,h
                 jr nz,mg_hz
                 ld de,167
@@ -911,8 +928,7 @@ mg_h1:          ld a,(horizon)
                 ld (ny),hl
                 ld a,1
                 ld (bdr),a
-mg_p:           call pick_loop
-                call can_be_here
+mg_p:           call can_be_here
                 or a
                 jr z,mg_no
                 ld a,(nx)
@@ -925,10 +941,6 @@ mg_no:          xor a
                 ld (bdr),a              ; paso rechazado: el borde se descarta
                 ld hl,OVC_FIXPOS
                 call call_c             ; y se arregla el sitio por si el actual ya no vale (fixPosition)
-                ld a,(ix+O_MOTION)
-                cp 1
-                jr nz,mg_b
-                ld (ix+O_WANDER),0
 mg_b:           ld a,(bdr)
                 or a
                 ret z
@@ -955,13 +967,6 @@ mulstep:        ld l,(ix+O_STEP)
                 jp neg_hl
 ms_z:           ld hl,0
                 ret
-
-; move.obj: un paso hacia (tx, ty)
-mv_obj:         call mv_od
-                ld a,(ix+O_MOTION)
-                cp 3
-                ret nz                  ; el move.obj ha acabado
-                jp mv_gen
 
 ; motionMoveObj de ScummVM: direccion hacia (tx, ty) con checkStep en cada eje (no aterriza exacto); con 0 acaba el move.obj
 mv_od:          ld a,(ix+O_TX)
@@ -1057,63 +1062,6 @@ pk_t:           add hl,de
                 ret
 
 ; siguiente celda segun el tipo de ciclo
-cycle_cel:      call obj_info
-                ld a,(occ)
-                or a
-                ret z
-                ld b,a                  ; B = celdas del bucle
-                bit 4,(ix+O_F2)         ; fDontUpdate: se come este paso
-                jr z,cc_nd
-                res 4,(ix+O_F2)
-                ret
-cc_nd:          ld a,(ix+O_CTYPE)
-                or a
-                jr z,cc_0
-                cp 3
-                jr z,cc_3
-                cp 1
-                jr z,cc_1
-                ld a,(ix+O_CEL)         ; 2: reverse.loop (la bandera se pone al llegar a la celda 0)
-                or a
-                jr z,cc_end
-                dec a
-                ld (ix+O_CEL),a
-                ret nz
-                jr cc_end
-cc_1:           ld a,(ix+O_CEL)
-                inc a
-                cp b
-                jr nc,cc_end
-                ld (ix+O_CEL),a
-                inc a
-                cp b
-                ret nz                  ; end.of.loop: la bandera se pone al llegar a la ultima celda
-cc_end:         ld a,(ix+O_CFLAG)
-                ld l,a
-                ld h,FLAGS>>8
-                ld (hl),1
-                res 3,(ix+O_F1)
-                xor a
-                ld (ix+O_CTYPE),a
-                ld (ix+O_DIR),a
-                ret
-cc_0:           ld a,(ix+O_CEL)
-                inc a
-                call rem8
-                ld (ix+O_CEL),a
-                ret
-cc_3:           ld a,(ix+O_CEL)
-                or a
-                jr nz,cc_3b
-                ld a,b
-                dec a
-                ld (ix+O_CEL),a
-                ret
-cc_3b:          dec a
-                call rem8
-                ld (ix+O_CEL),a
-                ret
-
 ; A = 1 si el punto (D, E) cae dentro de la zona de block, con los limites excluidos (checkBlock de ScummVM): x1 < x < x2 y y1 < y < y2 (blk = x1, y1, x2, y2)
 bk_in:          ld hl,blk
                 ld a,(hl)
@@ -1160,22 +1108,7 @@ can_be_here:    call obj_cell
                 sbc hl,de               ; ny <= horizonte -> no
                 jp z,ret_false
                 jp c,ret_false
-cb_blk:         ld a,(blkf)             ; la zona de bloqueo vale para todo objeto que no la ignora
-                or a
-                jr z,cb_obj
-                bit 0,(ix+O_F2)
-                jr nz,cb_obj
-                ld a,(nx)               ; la zona de bloqueo no se cruza ni hacia dentro ni hacia fuera: el sitio nuevo tiene que estar dentro si el de ahora lo esta
-                ld d,a
-                ld a,(ny)
-                ld e,a
-                call bk_in
-                ld c,a
-                ld d,(ix+O_X)
-                ld e,(ix+O_Y)
-                call bk_in
-                cp c
-                jp nz,ret_false
+cb_blk:
 cb_obj:         bit 1,(ix+O_F2)         ; ignora a los demas objetos
                 jp nz,cb_pic
                 push ix

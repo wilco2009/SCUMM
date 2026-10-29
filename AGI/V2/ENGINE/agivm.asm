@@ -118,6 +118,10 @@ OVC_PARSE       equ $2021
 OVC_DRAW        equ $2024
 OVC_FIXPOS      equ $2027
 OVC_FOLLOW      equ $202A
+OVC_CYCEL       equ $202D
+OVC_PRE         equ $2030
+OVC_CYCLES      equ $2033
+OVC_CLIP        equ $2036
 OVC_TEXTSCR     equ $2015
 OVD_READ        equ $2000               ; overlay D (ficheros de guardar/cargar): con call_d
 OVD_PREP        equ $2003
@@ -184,6 +188,8 @@ main_loop:      in a,(ClkPort)          ; las tramas se cuentan desde aqui (ver 
 ml_np:          call snd_due
                 xor a
                 ld (exitall),a
+                ld hl,OVC_PRE           ; interpretCycle: la direccion del ego, y la de cada objeto segun su movimiento (checkAllMotions)
+                call call_c
 ml_run:         xor a
                 call run_logic          ; la logica 0
                 ld a,(stopf)
@@ -194,7 +200,9 @@ ml_run:         xor a
                 jr z,ml_end
                 call do_new_room
                 jr ml_run
-ml_end:         xor a                   ; los codigos de borde se ponen a 0 antes de mover los objetos (el movimiento los pone y la logica del ciclo siguiente los ve)
+ml_end:         ld a,(VARS+6)           ; despues de la logica la direccion del ego es v6
+                ld (OBJ+O_DIR),a
+                xor a                   ; los codigos de borde se ponen a 0 antes de mover los objetos (el movimiento los pone y la logica del ciclo siguiente los ve)
                 ld (VARS+2),a
                 ld (VARS+4),a
                 ld (VARS+5),a
@@ -1819,6 +1827,7 @@ horizon:        defb 36
 blk:            defs 4
 blkf:           defb 0
 curk:           defb 0
+mgd:            defb 0
 nx:             defw 0
 ny:             defw 0
 ow:             defb 0

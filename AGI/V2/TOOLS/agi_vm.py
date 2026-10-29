@@ -64,6 +64,8 @@ class Obj:
         self.static = False             # add.to.pic: objeto fijo
         self.dm = False                 # fDidntMove: el ultimo paso no lo movio
         self.dontupd = False            # fDontUpdate: el siguiente paso de ciclo se salta
+        self.upos = False               # fUpdatePos: el proximo paso no avanza (reposition, recorte de la celda, zona de block)
+        self.nolf = False               # ignoreLoopFlag: el end.of.loop / reverse.loop en curso no pone su bandera
 
 
 class Interp:
@@ -767,7 +769,7 @@ class Interp:
             o.ctype = 0
             o.water = 0
             o.static = False
-            o.dm = o.dontupd = False
+            o.dm = o.dontupd = o.upos = o.nolf = False
 
     def c_unanimate_all(self):
         for o in self.objs.values():
@@ -798,6 +800,7 @@ class Interp:
     def c_position_v(self, n, vx, vy): self.c_position(n, self.vars[vx], self.vars[vy])
     def c_reposition_to(self, n, x, y):
         self.c_position(n, x, y)
+        self.obj(n).upos = True
         self.fix_position(self.obj(n))
 
     def c_reposition_to_v(self, n, vx, vy): self.c_reposition_to(n, self.vars[vx], self.vars[vy])
@@ -816,38 +819,37 @@ class Interp:
             o.y = self.horizon + 1
         x0, y0 = o.x, o.y
         x, y = x0, y0
-        blocks, self.blocks = self.blocks, None
         d, count, size = 0, 1, 1
-        try:
-            while not (self.check_position(o, x, y) and self.can_be_here(o, x, y)):
-                if size > 170:
-                    x, y = x0, y0
-                    break
-                if d == 0:
-                    x -= 1
-                elif d == 1:
-                    y += 1
-                elif d == 2:
-                    x += 1
-                else:
-                    y -= 1
-                count -= 1
-                if count:
-                    continue
-                d = (d + 1) % 4
-                if d in (2, 0):
-                    size += 1
-                count = size
-        finally:
-            self.blocks = blocks
+        while not (self.check_position(o, x, y) and self.can_be_here(o, x, y)):
+            if size > 170:
+                x, y = x0, y0
+                break
+            if d == 0:
+                x -= 1
+            elif d == 1:
+                y += 1
+            elif d == 2:
+                x += 1
+            else:
+                y -= 1
+            count -= 1
+            if count:
+                continue
+            d = (d + 1) % 4
+            if d in (2, 0):
+                size += 1
+            count = size
         o.x, o.y = x, y
         self.set_pri(o)
 
     def c_reposition(self, n, vx, vy):
         o = self.obj(n)
         dx, dy = self.vars[vx], self.vars[vy]
-        o.x += dx - 256 if dx >= 128 else dx
-        o.y += dy - 256 if dy >= 128 else dy
+        dx = dx - 256 if dx >= 128 else dx
+        dy = dy - 256 if dy >= 128 else dy
+        o.upos = True                       # cmdReposition: el paso de este ciclo no avanza; un desplazamiento negativo que pasa de 0 se queda en 0
+        o.x = 0 if dx < 0 and o.x < -dx else o.x + dx
+        o.y = 0 if dy < 0 and o.y < -dy else o.y + dy
         self.fix_position(o)
 
     def c_get_posn(self, n, vx, vy):
@@ -861,6 +863,7 @@ class Interp:
             self.vars[16] = view            # v16 = la vista del ego (la logica 0 la vuelve a poner con set.view.v en cada sala nueva)
         self.loops(view)
         self.cell(o)                    # el bucle y la celda se conservan (cell los ajusta si la vista nueva no los tiene), como en AGI
+        self.clip_view(o)
 
     def c_set_view_v(self, n, v): self.c_set_view(n, self.vars[v])
 
@@ -868,6 +871,7 @@ class Interp:
         o = self.obj(n)
         o.loop = l
         self.cell(o)
+        self.clip_view(o)
 
     def c_set_loop_v(self, n, v): self.c_set_loop(n, self.vars[v])
     def c_fix_loop(self, n): self.obj(n).fixloop = True
@@ -878,6 +882,7 @@ class Interp:
         o.cel = c
         o.dontupd = False
         self.cell(o)
+        self.clip_view(o)
 
     def c_set_cel_v(self, n, v): self.c_set_cel(n, self.vars[v])
 
@@ -939,12 +944,14 @@ class Interp:
         o = self.obj(n)
         o.ctype, o.cflag, o.cycling = 1, f, True
         o.upd = o.dontupd = True            # cmdEndOfLoop: fDontUpdate | fUpdate | fCycling
+        o.nolf = False
         self.flags[f] = 0
 
     def c_reverse_loop(self, n, f):
         o = self.obj(n)
         o.ctype, o.cflag, o.cycling = 2, f, True
         o.upd = o.dontupd = True
+        o.nolf = False
         self.flags[f] = 0
 
     def c_reverse_cycle(self, n):
@@ -972,6 +979,7 @@ class Interp:
     def c_move_obj(self, n, x, y, step, f):
         o = self.obj(n)
         o.motion, o.tx, o.ty, o.mflag = 3, x, y, f
+        o.nolf = o.cycling and o.ctype in (1, 2)
         o.mstep = o.step
         if step:
             o.step = step
@@ -986,6 +994,7 @@ class Interp:
     def c_follow_ego(self, n, step, f):
         o = self.obj(n)
         o.motion, o.mflag = 2, f
+        o.nolf = o.cycling and o.ctype in (1, 2)        # motionActivated: la bandera de un end.of.loop en curso se pierde
         o.mstep = o.step if step <= o.step else step      # follow_stepSize
         o.wander = 255                                    # follow_count
         self.flags[f] = 0
@@ -994,6 +1003,7 @@ class Interp:
     def c_wander(self, n):
         o = self.obj(n)
         o.motion = 1
+        o.nolf = o.cycling and o.ctype in (1, 2)
         o.mon = True
         if n == EGO:
             self.pcontrol = False
@@ -1488,11 +1498,6 @@ class Interp:
             return True                       # los bordes se tratan aparte
         if not o.ign_horizon and y <= self.horizon:
             return False
-        if self.blocks and not o.ign_blocks:
-            bx1, by1, bx2, by2 = self.blocks
-            # como changePos/checkBlock de ScummVM: la zona de block no se cruza ni hacia dentro ni hacia fuera (el punto x,y, limites excluidos)
-            if (bx1 < x < bx2 and by1 < y < by2) != (bx1 < o.x < bx2 and by1 < o.y < by2):
-                return False
         if not o.ign_objs:
             for k, q in self.objs.items():
                 if q is o or not (q.anim and q.drawn) or q.ign_objs:
@@ -1539,14 +1544,27 @@ class Interp:
         return True
 
     def pick_loop(self, o):
-        if o.fixloop or o.dir == 0:
+        """updateScreenObjTable de ScummVM: con 2 o 3 bucles manda loopTable2, con 4 loopTable4 (5 o mas: ninguno); solo en el ciclo en que el objeto da su paso."""
+        if o.fixloop:
             return
         n = len(self.loops(o.view))
-        if n < 2:
-            return
-        t = LOOP4[o.dir] if n >= 4 else LOOP2[o.dir]
-        if t != 4 and t < n:
+        t = LOOP4[o.dir] if n == 4 else LOOP2[o.dir] if n in (2, 3) else 4
+        if t != 4 and t != o.loop and o.scount == 1:
             o.loop = t
+            self.clip_view(o)
+
+    def clip_view(self, o):
+        """clipViewCoordinates de ScummVM (tras cambiar de celda): dentro de la pantalla y por debajo del horizonte; cada correccion activa fUpdatePos."""
+        w, h = self.cell(o)
+        if o.x + w > 160:
+            o.upos = True
+            o.x = 160 - w
+        if o.y - h + 1 < 0:
+            o.upos = True
+            o.y = h - 1
+        if o.y <= self.horizon and not o.ign_horizon:
+            o.upos = True
+            o.y = self.horizon + 1
 
     @staticmethod
     def check_step(delta, step):
@@ -1601,53 +1619,74 @@ class Interp:
             self.vars[6] = 0
             self.pcontrol = True                # el ego que acaba su move.obj recupera el control del jugador
 
-    def move(self, k, o):
-        v = self.vars
-        if o.motion == 3:
-            self.move_obj_dir(k, o)
-            if o.motion != 3:
-                return
-        if o.motion == 2:
+    def check_motion(self, k, o):
+        """checkMotion de ScummVM (antes de la logica): decide la direccion del objeto y la zona de block (changePos) la anula si se cruza."""
+        if o.motion == 1:                          # motionWander
+            orig = o.wander
+            o.wander = (o.wander - 1) & 255
+            if orig == 0 or o.dm:
+                o.dir = self.rand8() % 9
+                if k == EGO:
+                    self.vars[6] = o.dir
+                while o.wander < 6:
+                    o.wander = self.rand8() % 51
+        elif o.motion == 2:
             self.follow_dir(o)
-        if o.motion == 1:
-            o.wander -= 1
-            if o.wander <= 0 or o.dir == 0:
-                o.dir = 1 + self.rand8() % 8
-                o.wander = 4 + self.rand8() % 10
-        d = o.dir
-        if d == 0:
-            return
-        nx, ny = o.x + DX[d] * o.step, o.y + DY[d] * o.step
+        elif o.motion == 3:
+            self.move_obj_dir(k, o)
+        if self.blocks and not o.ign_blocks and o.dir:
+            bx1, by1, bx2, by2 = self.blocks
+            ins = lambda x, y: bx1 < x < bx2 and by1 < y < by2
+            if ins(o.x, o.y) != ins(o.x + o.step * DX[o.dir], o.y + o.step * DY[o.dir]):
+                o.dir = 0
+                if k == EGO:
+                    self.vars[6] = 0
+
+    def check_all_motions(self):
+        for k in sorted(self.objs):
+            o = self.objs[k]
+            if o.anim and o.drawn and o.upd and o.scount == 1:
+                self.check_motion(k, o)
+
+    def update_position(self, k, o):
+        """updatePosition de ScummVM para un objeto que da su paso: avanza, recorta en los bordes, y si el sitio no vale lo deja donde estaba y lo arregla (fixPosition)."""
+        v = self.vars
         w, h = self.cell(o)
+        x, y = o.x, o.y
+        ox, oy = x, y
+        if not o.upos:
+            x += DX[o.dir] * o.step
+            y += DY[o.dir] * o.step
         border = 0
-        if nx < 0:
-            nx, border = 0, 4
-        elif nx + w > 160:
-            nx, border = 160 - w, 2
-        if ny > 167:
-            ny, border = 167, 3
-        elif not o.ign_horizon and ny <= self.horizon:
-            ny, border = self.horizon + 1, 1
-        self.pick_loop(o)
-        if self.can_be_here(o, nx, ny):
-            o.x, o.y = nx, ny
+        if x < 0:
+            x, border = 0, 4
+        if not border and x + w > 160:
+            x, border = 160 - w, 2
+        if y - h < -1:
+            y, border = h - 1, 1
+        elif y > 167:
+            y, border = 167, 3
+        elif not o.ign_horizon and y <= self.horizon:
+            y, border = self.horizon + 1, 1
+        if self.can_be_here(o, x, y):
+            o.x, o.y = x, y
             self.set_pri(o)
         else:
             self.fix_position(o)
-            border = 0                        # updatePosition de ScummVM: si el paso se rechaza, el borde se descarta
-            if o.motion == 1:
-                o.wander = 0
-        if border and o.motion == 3:
-            self.move_obj_stop(k, o)            # motionMoveObjStop: tocar el borde acaba el move.obj
+            border = 0                        # si el paso se rechaza, el borde se descarta
         if border:
             if k == EGO:
                 v[2] = border
             else:
                 v[4], v[5] = k, border
+            if o.motion == 3:
+                self.move_obj_stop(k, o)            # motionMoveObjStop: tocar el borde acaba el move.obj
+        o.upos = False
+        o.dm = (o.x, o.y) == (ox, oy)               # fDidntMove (showSprites)
 
     def cycle_cel(self, o):
-        """updateView de ScummVM: end.of.loop / reverse.loop ponen la bandera en el mismo paso en que llegan al extremo y dejan el objeto sin ciclar, con direccion 0;
-        un fDontUpdate pendiente se come el primer paso."""
+        """updateView de ScummVM: end.of.loop / reverse.loop ponen la bandera en el mismo paso en que llegan al extremo (salvo ignoreLoopFlag) y dejan el objeto sin ciclar,
+        con direccion 0; un fDontUpdate pendiente se come el primer paso."""
         if o.dontupd:
             o.dontupd = False
             return
@@ -1663,52 +1702,45 @@ class Interp:
             if o.ctype == 1 and o.cel < last:
                 o.cel += 1
                 if o.cel != last:
+                    self.clip_view(o)
                     return
             elif o.ctype == 2 and o.cel:
                 o.cel -= 1
                 if o.cel:
+                    self.clip_view(o)
                     return
-            self.flags[o.cflag] = 1
+            if not o.nolf:
+                self.flags[o.cflag] = 1
             o.cycling = False
             o.dir = 0
             o.ctype = 0
+        self.clip_view(o)
 
     def update_objects(self):
-        v = self.vars
-        changed = False
-        for k in sorted(self.objs):
-            o = self.objs[k]
-            if not (o.anim and o.drawn and o.upd):
-                continue
-            changed = True
-            if k == EGO:
-                if self.pcontrol:
-                    o.dir = v[6]
-                else:
-                    v[6] = o.dir
-            if o.mon:
-                o.scount -= 1
-                if o.scount <= 0:
-                    o.scount = o.stime
-                    old = o.x, o.y
-                    self.move(k, o)
-                    o.dm = (o.x, o.y) == old        # fDidntMove (showSprites)
-            if o.cycling:
+        """updateScreenObjTable de ScummVM: por objeto, elegir bucle y ciclar; despues, una vez, la posicion de todos."""
+        objs = [(k, self.objs[k]) for k in sorted(self.objs) if self.objs[k].anim and self.objs[k].drawn and self.objs[k].upd]
+        for k, o in objs:
+            self.pick_loop(o)
+            if o.cycling and o.ccount:
                 o.ccount -= 1
-                if o.ccount <= 0:
-                    o.ccount = o.ctime
+                if o.ccount == 0:
                     self.cycle_cel(o)
-            if k == EGO and not self.pcontrol:
-                v[6] = o.dir
-        if changed:
-            self.obj(EGO).water = 0         # updateScreenObjTable: el ego deja de observar agua / tierra al acabar el ciclo
+                    o.ccount = o.ctime
+        for k, o in objs:
+            if o.scount > 1:
+                o.scount -= 1
+                continue
+            o.scount = o.stime
+            self.update_position(k, o)
+        if objs:
+            self.obj(EGO).water = 0         # el ego deja de observar agua / tierra al acabar el ciclo
 
     NOBJ = 32
 
     def objbytes(self, o):
         b = lambda x: 1 if x else 0
         f1 = b(o.anim) | b(o.drawn) << 1 | b(o.upd) << 2 | b(o.cycling) << 3 | b(o.mon) << 4 | b(o.fixpri) << 5 | b(o.fixloop) << 6 | b(o.ign_horizon) << 7
-        f2 = b(o.ign_blocks) | b(o.ign_objs) << 1 | b(o.static) << 2 | b(o.dm) << 3 | b(o.dontupd) << 4
+        f2 = b(o.ign_blocks) | b(o.ign_objs) << 1 | b(o.static) << 2 | b(o.dm) << 3 | b(o.dontupd) << 4 | b(o.upos) << 5 | b(o.nolf) << 6
         return [f1, f2, o.view, o.loop, o.cel, o.x & 255, o.y & 255, o.pri & 255, o.ctype, o.ctime & 255, o.ccount & 255, o.cflag,
                 o.motion, o.step & 255, o.stime & 255, o.scount & 255, o.dir, o.water, o.tx & 255, o.ty & 255, o.mstep & 255, o.mflag,
                 o.wander & 255]
@@ -1781,6 +1813,12 @@ class Interp:
                 self.flags[f] = 1
                 self.sound_flags.remove((t, f))
         self.exit_all = False
+        ego = self.obj(EGO)
+        if self.pcontrol:                   # interpretCycle: con el jugador al mando la direccion del ego es v6; si no, v6 es la suya
+            ego.dir = v[6]
+        else:
+            v[6] = ego.dir
+        self.check_all_motions()
         while True:
             self.run(0)
             if self.stop:
@@ -1789,6 +1827,7 @@ class Interp:
                 self.do_new_room(self.newroom)
                 continue
             break
+        ego.dir = v[6]
         v[2] = v[4] = v[5] = 0          # los codigos de borde se ponen a 0 antes de mover los objetos: el movimiento los pone y la logica del ciclo siguiente los ve
         self.update_objects()
         self.status_tick()

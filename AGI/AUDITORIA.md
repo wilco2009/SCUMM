@@ -8,7 +8,7 @@ Gravedad: **A** puede romper una sala; **M** probable efecto visible/temporizaci
 
 | Regla | ScummVM | Nuestro modelo | Veredicto |
 |---|---|---|---|
-| Orden del ciclo | `interpretCycle`: sincroniza dir del ego ↔ v6 → `checkAllMotions` (decide dirección de move.obj/follow/wander) → `runLogic(0)` en bucle (re-ejecuta tras new.room) → dir ego ← v6 → `updateScreenObjTable` (por objeto: elegir bucle, ciclar celdas; luego UNA vez `updatePosition` para todos) | `interpret_cycle` (1644): lógica 0 → `update_objects` (1554) que por objeto hace move + cycle | DIFERENTE (B). La dirección de move.obj/follow se calcula tras la lógica en vez de antes; ver §2 por el efecto en la posición final |
+| Orden del ciclo | `interpretCycle`: sincroniza dir del ego ↔ v6 → `checkAllMotions` (decide dirección de move.obj/follow/wander) → `runLogic(0)` en bucle (re-ejecuta tras new.room) → dir ego ← v6 → `updateScreenObjTable` (por objeto: elegir bucle, ciclar celdas; luego UNA vez `updatePosition` para todos) | `interpret_cycle` (1644): lógica 0 → `update_objects` (1554) que por objeto hace move + cycle | CORREGIDO (2026-10-29: checkAllMotions antes de la lógica; ciclos y bucles, y después la posición de todos). Antes: DIFERENTE (B). La dirección de move.obj/follow se calcula tras la lógica en vez de antes; ver §2 por el efecto en la posición final |
 | Borde v2/v4/v5 | `updatePosition` los pone a 0 al empezar y también en cada pasada de la lógica 0 | (1664) a 0 antes de mover | IGUAL |
 | Bandera 2 (ENTERED_CLI) y 4 (SAID_ACCEPTED) | se limpian cada ciclo | (1667) | IGUAL |
 | Banderas 5 (NEW_ROOM_EXEC), 6 (RESTART), 12 (RESTORE_JUST_RAN) | se limpian al final del ciclo | 5 y 6 sí (1671); la 12 no se toca en `interpret_cycle` (¿la maneja save_load?) | verificar (B) |
@@ -123,9 +123,9 @@ Implementadas distinto:
 8. **CORREGIDO (con fDontUpdate en end.of.loop/reverse.loop, borrado por set.cel y draw)** **`cycle_cel` (1530)** — end.of.loop/reverse.loop: bandera en la misma llamada al llegar al extremo, `cycling=False`, **`dir=0`**, `ctype=0`; opcional DontUpdate del primer tick.
 9. **CORREGIDO** **`interpret_cycle` (1644)** — `v[9]=v[19]=0` al final del ciclo.
 10. **CORREGIDO** **`do_new_room` (613)** — `step=stime=scount=ctime=ccount=1` en todos los objetos (incluido el ego).
-11. **`pick_loop` (1456)** — bucle automático solo con 2, 3 (LOOP2) o 4 (LOOP4) bucles; ejecutarlo para todo objeto animated+update+drawn cada ciclo (antes de mover), no solo al moverse.
+11. **CORREGIDO** **`pick_loop` (1456)** — bucle automático solo con 2, 3 (LOOP2) o 4 (LOOP4) bucles; ejecutarlo para todo objeto animated+update+drawn cada ciclo (antes de mover), no solo al moverse.
 12. **CORREGIDO** **`c_distance` (850)** — centros en x, `y` base, tope 254.
-13. **`c_set_view/set_loop/set_cel` (786-810)** — `clipViewCoordinates` tras cambiar de celda.
+13. **CORREGIDO** **`c_set_view/set_loop/set_cel` (786-810)** — `clipViewCoordinates` tras cambiar de celda.
 14. **`c_add_to_pic` (671)** — bordes 2 y 3, caja completa (lados y techo) y `pri==0` → `priorityFromY`; no usar ranuras de objeto.
 15. **Menores**: recorte superior de `move`, `wander` (dir 0..8, contador 6..49), `reposition` con recorte a 0, `compare.strings` con puntuación, bandera 11 (ego invisible), `set.scan.start`, `shake.screen`, `clear.text.rect`.
 

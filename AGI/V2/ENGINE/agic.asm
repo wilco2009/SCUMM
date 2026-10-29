@@ -21,6 +21,10 @@
                 jp t_draw               ; OVC_DRAW
                 jp t_fixpos             ; OVC_FIXPOS
                 jp t_follow             ; OVC_FOLLOW
+                jp cycle_cel            ; OVC_CYCEL
+                jp t_pre                ; OVC_PRE
+                jp t_cycles             ; OVC_CYCLES
+                jp clip_view            ; OVC_CLIP
 
 TXT             equ TMPM
 
@@ -833,3 +837,263 @@ tf_ey:          defb 0
 tf_ox:          defb 0
 tf_oy:          defb 0
 tf_d:           defb 0
+
+; updateView de ScummVM: un paso de ciclo del objeto IX
+cycle_cel:      call obj_info
+                ld a,(occ)
+                or a
+                ret z
+                ld b,a                  ; B = celdas del bucle
+                ld a,(ix+O_CTYPE)
+                or a
+                jr z,cc_0
+                cp 3
+                jr z,cc_3
+                cp 1
+                jr z,cc_1
+                ld a,(ix+O_CEL)         ; 2: reverse.loop (la bandera se pone al llegar a la celda 0)
+                or a
+                jr z,cc_end
+                dec a
+                ld (ix+O_CEL),a
+                ret nz
+                jr cc_end
+cc_1:           ld a,(ix+O_CEL)
+                inc a
+                cp b
+                jr nc,cc_end
+                ld (ix+O_CEL),a
+                inc a
+                cp b
+                ret nz                  ; end.of.loop: la bandera se pone al llegar a la ultima celda
+cc_end:         bit 6,(ix+O_F2)         ; ignoreLoopFlag: no se pone la bandera
+                jr nz,cc_nf
+                ld a,(ix+O_CFLAG)
+                ld l,a
+                ld h,FLAGS>>8
+                ld (hl),1
+cc_nf:                res 3,(ix+O_F1)
+                xor a
+                ld (ix+O_CTYPE),a
+                ld (ix+O_DIR),a
+                ret
+cc_0:           ld a,(ix+O_CEL)
+                inc a
+                call rem8
+                ld (ix+O_CEL),a
+                ret
+cc_3:           ld a,(ix+O_CEL)
+                or a
+                jr nz,cc_3b
+                ld a,b
+                dec a
+                ld (ix+O_CEL),a
+                ret
+cc_3b:          dec a
+                call rem8
+                ld (ix+O_CEL),a
+                ret
+
+
+; interpretCycle (antes de la logica): la direccion del ego sale de v6 con el jugador al mando (si no, v6 es la suya) y checkAllMotions
+t_pre:          ld a,(pctl)
+                or a
+                jr z,ov_tp_a
+                ld a,(VARS+6)
+                ld (OBJ+O_DIR),a
+                jr ov_tp_b
+ov_tp_a:           ld a,(OBJ+O_DIR)
+                ld (VARS+6),a
+ov_tp_b:           ld ix,OBJ
+                xor a
+                ld (curk),a
+ov_tp_l:           ld a,(ix+O_F1)
+                and 7
+                cp 7
+                jr nz,ov_tp_n
+                ld a,(ix+O_SCOUNT)
+                cp 1
+                call z,t_motion         ; solo en el ciclo en que el objeto da su paso
+ov_tp_n:           ld de,32
+                add ix,de
+                ld a,(curk)
+                inc a
+                ld (curk),a
+                cp NOBJ
+                jr c,ov_tp_l
+                ret
+
+; checkMotion de ScummVM para el objeto IX: wander / follow.ego / move.obj, y la zona de block (changePos) anula la direccion si se cruza
+t_motion:       ld a,(ix+O_MOTION)
+                or a
+                jr z,ov_tm_blk
+                cp 3
+                jr z,ov_tm_3
+                cp 2
+                jr z,ov_tm_2
+                ld a,(ix+O_WANDER)      ; motionWander
+                ld c,a
+                dec a
+                ld (ix+O_WANDER),a
+                ld a,c
+                or a
+                jr z,ov_tm_wr
+                bit 3,(ix+O_F2)
+                jr z,ov_tm_blk
+ov_tm_wr:          call rand8
+                ld b,9
+                call rem8
+                ld (ix+O_DIR),a
+                ld c,a
+                ld a,(curk)
+                or a
+                jr nz,ov_tm_wl
+                ld a,c
+                ld (VARS+6),a
+ov_tm_wl:          ld a,(ix+O_WANDER)
+                cp 6
+                jr nc,ov_tm_blk
+                call rand8
+                ld b,51
+                call rem8
+                ld (ix+O_WANDER),a
+                jr ov_tm_wl
+ov_tm_2:           call t_follow
+                jr ov_tm_blk
+ov_tm_3:           call mv_od
+ov_tm_blk:         ld a,(blkf)
+                or a
+                ret z
+                bit 0,(ix+O_F2)
+                ret nz
+                ld a,(ix+O_DIR)
+                or a
+                ret z
+                ld e,(ix+O_X)
+                ld d,0
+                push de
+                ld a,(ix+O_DIR)
+                ld e,a
+                ld d,0
+                ld hl,DXTAB
+                add hl,de
+                ld a,(hl)
+                call mulstep
+                pop de
+                add hl,de
+                ld a,l
+                push af
+                ld a,(ix+O_DIR)
+                ld e,a
+                ld d,0
+                ld hl,DYTAB
+                add hl,de
+                ld a,(hl)
+                call mulstep
+                ld e,(ix+O_Y)
+                ld d,0
+                add hl,de
+                ld e,l                  ; E = y nueva
+                pop af
+                ld d,a                  ; D = x nueva
+                call bk_in
+                ld c,a
+                ld d,(ix+O_X)
+                ld e,(ix+O_Y)
+                call bk_in
+                cp c
+                ret z
+                xor a                   ; se cruza: direccion 0 (y v6 si es el ego)
+                ld (ix+O_DIR),a
+                ld a,(curk)
+                or a
+                ret nz
+                ld (VARS+6),a
+                ret
+
+; updateScreenObjTable (primera mitad): por cada objeto, elegir bucle y ciclar
+t_cycles:       ld ix,OBJ
+                xor a
+                ld (curk),a
+ov_tc_l:           ld a,(ix+O_F1)
+                and 7
+                cp 7
+                jr nz,ov_tc_n
+                call t_pick
+                bit 3,(ix+O_F1)
+                jr z,ov_tc_n
+                ld a,(ix+O_CCOUNT)
+                or a
+                jr z,ov_tc_n
+                dec a
+                ld (ix+O_CCOUNT),a
+                jr nz,ov_tc_n
+                bit 4,(ix+O_F2)         ; fDontUpdate: se come este paso
+                jr z,ov_tc_c
+                res 4,(ix+O_F2)
+                jr ov_tc_t
+ov_tc_c:           call cycle_cel
+                call clip_view
+ov_tc_t:           ld a,(ix+O_CTIME)
+                ld (ix+O_CCOUNT),a
+ov_tc_n:           ld de,32
+                add ix,de
+                ld a,(curk)
+                inc a
+                ld (curk),a
+                cp NOBJ
+                jr c,ov_tc_l
+                ret
+
+; bucle segun la direccion: 2 o 3 bucles -> LOOP2, 4 -> LOOP4, mas: ninguno; solo si el objeto da su paso este ciclo
+t_pick:         bit 6,(ix+O_F1)
+                ret nz
+                ld a,(ix+O_SCOUNT)
+                cp 1
+                ret nz
+                call obj_info
+                ld a,(ocn)
+                cp 4
+                ld hl,LOOP4
+                jr z,ov_tpk_t
+                ret nc
+                cp 2
+                ret c
+                ld hl,LOOP2
+ov_tpk_t:          ld e,(ix+O_DIR)
+                ld d,0
+                add hl,de
+                ld a,(hl)
+                cp 4
+                ret z
+                cp (ix+O_LOOP)
+                ret z
+                ld (ix+O_LOOP),a
+; clipViewCoordinates (tras cambiar de celda): dentro de la pantalla y por debajo del horizonte; cada correccion pone fUpdatePos
+clip_view:      call obj_cell           ; D = ancho, E = alto
+                ld a,(ix+O_X)
+                add a,d
+                jr c,ov_cv_x
+                cp 161
+                jr c,ov_cv_y
+ov_cv_x:           set 5,(ix+O_F2)
+                ld a,160
+                sub d
+                ld (ix+O_X),a
+ov_cv_y:           ld a,e
+                dec a
+                ld b,a                  ; B = alto - 1
+                ld a,(ix+O_Y)
+                cp b
+                jr nc,ov_cv_h
+                set 5,(ix+O_F2)
+                ld (ix+O_Y),b
+ov_cv_h:           bit 7,(ix+O_F1)
+                ret nz
+                ld a,(horizon)
+                cp (ix+O_Y)
+                ret c
+                inc a
+                ld (ix+O_Y),a
+                set 5,(ix+O_F2)
+                ret
