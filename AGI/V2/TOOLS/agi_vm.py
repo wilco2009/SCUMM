@@ -614,6 +614,7 @@ class Interp:
         v = self.vars
         old = v[0]
         self.flags[2] = 0               # la logica 0 se reinicia sin la linea tecleada ni la palabra desconocida, como en AGI
+        self.flags[0] = self.flags[3] = 0       # agua y linea de aviso: las de la sala anterior no valen
         v[9] = 0
         self.snd_stop()
         self.spans = []

@@ -850,6 +850,8 @@ ts_end:         pop de
 ; ---------------------------------------------------------------------
 do_new_room:    xor a                   ; la logica 0 se reinicia sin la linea tecleada (bandera 2) ni la palabra desconocida (v9), como en AGI
                 ld (FLAGS+2),a
+                ld (FLAGS+0),a          ; banderas 0 y 3 (agua, linea de aviso): las de la sala anterior no valen (la sala nueva las vuelve a calcular al mover el ego)
+                ld (FLAGS+3),a
                 ld (VARS+9),a
                 call OVL_SPCLR
                 call OVL_SPRINIT        ; los sprites se apagan hasta que los objetos de la sala nueva tengan su sitio (se vuelven a poner al acabar el ciclo)
