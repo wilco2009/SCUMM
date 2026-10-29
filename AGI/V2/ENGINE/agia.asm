@@ -17,14 +17,19 @@ HQ_FIX          equ $2040
                 jp t_force              ; OVL_FORCE
                 jp t_addpic             ; OVL_ADDPIC
                 jp t_spclr              ; OVL_SPCLR
+                jp t_addhdr             ; OVL_ADDHDR
 
 ; El orden de los objetos que deja t_sort: el overlay A2 (que se mapea en lugar de este) lo lee de aqui, por el bloque 7, asi que va en una direccion fija
                 defs HQ_FIX-$
 hq_cnt:         defb 0
 ORD:            defs NOBJ
 VPG:            defs NOBJ
-sp_n:           defb 0                  ; objetos fijos (add.to.pic): cuantos y sus cabeceras (agihws.asm)
-SPH:            defs 64                 ; 8 * SP_MAX
+sp_n:           defb 0                  ; add.to.pic: cuantas cabeceras de rangos de prioridad hay y cuales (agihws.asm)
+SPH:            defs 8*SP_MAX
+                defs ST_FIX-$           ; el nucleo usa por su direccion el registro de add.to.pic (st_n, STL) y SCR
+                defs ST_LEN
+                defs SCR-$
+                defs 33                 ; SCR y SCR_PG
 
 ; ---------------------------------------------------------------------
 ;  Teclado del ZX81

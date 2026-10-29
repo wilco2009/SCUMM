@@ -665,21 +665,25 @@ sg_cf:          ld hl,OVD_CONF
                 ld (exitall),a
 sg_t:           call OVL_SPRINIT
                 jp OVL_FORCE
-; la imagen y los objetos fijos otra vez (cargar partida, graphics)
+; la imagen y los add.to.pic otra vez (cargar partida, graphics)
 rd_pic:         call OVL_SPCLR
                 ld a,(lastpic)
                 call dp_num
-                ld ix,OBJ+24*32
-                ld b,8
-rp_l:           bit 2,(ix+O_F2)
-                jr z,rp_n
-                bit 0,(ix+O_F1)
-                jr z,rp_n
-                push bc
-                call OVL_ADDPIC
+                ld a,(st_n)
+                or a
+                ret z
+                ld b,a
+                ld hl,STL
+rp_l:           push bc
+                push hl
+                ld de,SCR+O_VIEW
+                ld bc,6
+                ldir
+                call add_pic_go
+                pop hl
+                ld de,6
+                add hl,de
                 pop bc
-rp_n:           ld de,32
-                add ix,de
                 djnz rp_l
                 ret
 mn_dir:         defb 0

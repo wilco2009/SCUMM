@@ -12,6 +12,7 @@ SPH_FIX         equ SPN_FIX+1
 
                 jp t_bgsave             ; OVE_BGSAVE
                 jp sw_run               ; OVE_RUN
+                jp t_bake               ; OVE_BAKE
 
 ; Tras t_sort (A1): el orden de los objetos (hq_cnt, ORD) se copia de la pagina del A1, que se asoma por el bloque 7; despues se arma el dibujo por software
 sw_run:         ld a,PG_OVL
@@ -31,7 +32,12 @@ hw_end:         jp unmap_win
 cel_open:       ld a,(ix+O_X)
                 cp 160
                 jp nc,co_no
-                push ix
+                ld a,(bk_on)            ; add.to.pic (t_bake): la pagina del bucle la busco el A1
+                or a
+                jr z,co_vp
+                ld a,(bk_pg)
+                jp cel_rd
+co_vp:          push ix
                 pop hl
                 ld a,l
                 rlca

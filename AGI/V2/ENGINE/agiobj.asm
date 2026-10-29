@@ -381,8 +381,10 @@ h_ignore_blocks: call argobj
 h_observe_blocks: call argobj
                 res 0,(ix+O_F2)
                 ret
-; add.to.pic(vista, bucle, celda, x, y, prioridad, margen): un objeto fijo (O_F2 bit 2: no se mueve, no se cicla, no choca ni bloquea) en el ultimo hueco
-; libre de 31 a 24; desaparece con draw.pic o new.room. Un margen 0 o 1 pone una linea de control bajo la celda (can_be_here la mira: mg_probe).
+; add.to.pic(vista, bucle, celda, x, y, prioridad, margen): como addToPic de ScummVM, la celda se pinta en la imagen (en la copia de fondo, t_bake del overlay A2) y su
+; prioridad queda en los rangos (t_addhdr del A1): no ocupa un objeto, asi que no hay limite de 8. Se recuerda en el registro STL (lo que se guarda y lo que rehacen
+; graphics y cargar partida) hasta draw.pic o new.room. Un margen 0, 1 o 2 pone una linea de control bajo la celda (can_be_here la mira: mg_probe).
+; SCR es el objeto de trabajo (en la pagina del A1): vista, bucle, celda, x, y y prioridad en el mismo orden que los argumentos.
 h_add_to_pic_v: ld hl,ARGS
                 ld b,7
 atv_l:          ld a,(hl)
@@ -394,48 +396,27 @@ atv_l:          ld a,(hl)
                 ld (hl),a
                 inc hl
                 djnz atv_l
-h_add_to_pic:   ld ix,OBJ+31*32
-                ld b,8
-ap_f:           bit 0,(ix+O_F1)
-                jr z,ap_got
-                ld de,-32
-                add ix,de
-                djnz ap_f
-                ret
-ap_got:         push ix
-                pop hl
-                ld d,h
-                ld e,l
-                inc de
-                ld (hl),0
-                ld bc,31
+h_add_to_pic:   ld a,(st_n)
+                cp ST_MAX
+                ret nc
+                ld hl,ARGS
+                ld de,SCR+O_VIEW
+                ld bc,5
                 ldir
-                ld (ix+O_F1),%10100011  ; anim, drawn, prioridad fija, ignora el horizonte
-                ld (ix+O_F2),7          ; ignora bloques y objetos; fijo
-                ld a,(ARGS)
-                ld (ix+O_VIEW),a
-                ld a,(ARGS+1)
-                ld (ix+O_LOOP),a
-                ld a,(ARGS+2)
-                ld (ix+O_CEL),a
-                ld a,(ARGS+3)
-                ld (ix+O_X),a
-                ld a,(ARGS+4)
-                ld (ix+O_Y),a
                 ld a,(ARGS+5)
                 or a
                 jr nz,ap_q
                 ld a,(ARGS+4)           ; prioridad 0: la de la y
                 call pri_y
-ap_q:           ld (ix+O_PRI),a
-                call OVL_ADDPIC         ; lo que tapa a los sprites
+ap_q:           ld (SCR+O_PRI),a
+                ld ix,SCR
+                call obj_cell           ; bucle y celda ajustados a la vista; D = ancho, E = alto
                 ld a,(ARGS+6)
                 cp 3
-                ret nc                  ; solo las lineas 0, 1 y 2
+                jr nc,ap_log            ; solo las lineas 0, 1 y 2
                 ld a,(mg_n)
-                cp 8
-                ret nc
-                call obj_cell           ; D = ancho, E = alto
+                cp MG_MAX
+                jr nc,ap_log
                 ld a,(ix+O_Y)           ; alto de la caja: el de la banda de prioridad de y, acotado por el de la celda
                 cp 48
                 jr nc,aq_b
@@ -459,8 +440,10 @@ aq_k2:          add a,a
                 add a,a
                 ld l,a
                 ld h,0
+                push bc
                 ld bc,mg_tab
                 add hl,bc
+                pop bc
                 ld a,(ix+O_X)
                 ld (hl),a
                 inc hl
@@ -474,23 +457,41 @@ aq_k2:          add a,a
                 ld (hl),a
                 ld hl,mg_n
                 inc (hl)
-                ret
+ap_log:         ld a,(st_n)
+                ld l,a
+                ld h,0
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,de
+                add hl,hl               ; 6 * n
+                ld de,STL
+                add hl,de
+                ex de,hl
+                ld hl,SCR+O_VIEW
+                ld bc,6
+                ldir
+                ld hl,st_n
+                inc (hl)
+                jp add_pic_go
 
-; draw.pic: los objetos fijos y los margenes de add.to.pic se van con la imagen
+; SCR con los datos de un add.to.pic -> pintado en la imagen y sus rangos de prioridad (A1: busca la pagina de la vista, A2: pinta, A1: cabecera)
+add_pic_go:     ld a,7
+                ld (SCR+O_F2),a         ; fijo: ignora bloques y objetos; es un rotulo para el dibujo por software
+                ld a,(picvalid)
+                or a
+                ret z
+                call OVL_ADDPIC
+                ret c
+                ld hl,OVE_BAKE
+                call call_e
+                jp OVL_ADDHDR
+
+; draw.pic: los add.to.pic y sus margenes se van con la imagen
 clr_static:     xor a
                 ld (mg_n),a
-                call OVL_SPCLR
-                ld ix,OBJ
-                ld de,32
-                ld b,NOBJ
-cst_l:           bit 2,(ix+O_F2)
-                jr z,cst_n
-                res 0,(ix+O_F1)
-                res 1,(ix+O_F1)
-                res 2,(ix+O_F2)
-cst_n:           add ix,de
-                djnz cst_l
-                ret
+                ld (st_n),a
+                jp OVL_SPCLR
 
 h_block:        ld hl,ARGS
                 ld de,blk

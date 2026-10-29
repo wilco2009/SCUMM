@@ -195,7 +195,13 @@ sw_l:           ld e,(hl)
                 call f_write_n
                 pop hl
                 jr sw_l
-sw_d:           ld a,(sf_h)
+sw_d:           ld a,PG_OVL             ; y los add.to.pic, que estan en la pagina del A1
+                call map_page
+                ld a,(sf_h)
+                ld hl,LWIN+ST_FIX-$2000
+                ld bc,ST_LEN
+                call f_write_n
+                ld a,(sf_h)
                 call f_close
                 jp unmap_win
 
@@ -227,7 +233,13 @@ sl_l:           ld e,(hl)
                 call f_read_n
                 pop hl
                 jr sl_l
-sl_d:           ld a,(sf_h)
+sl_d:           ld a,PG_OVL
+                call map_page
+                ld a,(sf_h)
+                ld hl,LWIN+ST_FIX-$2000
+                ld bc,ST_LEN
+                call f_read_n
+                ld a,(sf_h)
                 call f_close
                 ld a,1
                 ld (FLAGS+6),a          ; restore.game acaba de ejecutarse
@@ -311,7 +323,7 @@ s_sv2:          defb 10,"in file:",10,0
 s_ld2:          defb 10,"from file:",10,0
 s_end:          defb 10,10,"Press ENTER to continue.",10,"Press ESC to cancel.",0
 sf_tab:         defw VARS,256, FLAGS,256, INV,256, KEYMAP,256, OBJ,1024, STRS,492
-                defw horizon,1, blk,5, pctl,1, lastpic,2, mg_n,33, st_on,1, tfg,2, accin,1, ticks,1
+                defw horizon,1, blk,5, pctl,1, lastpic,2, mg_n,1+4*MG_MAX, st_on,1, tfg,2, accin,1, ticks,1
                 defw 0
 d_i:           defb 0
 sf_h:           defb 0

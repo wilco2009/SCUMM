@@ -19,6 +19,7 @@ pasmo agib.asm agib.bin agib.sym
 pasmo agic.asm agic.bin agic.sym
 pasmo agid.asm agid.bin agid.sym
 pasmo agie.asm agie.bin agie.sym
+[ $(wc -c < agie.bin) -le 4096 ] || { echo "agie.bin pasa de SPP (\$3000)"; exit 1; }
 mkdir -p ../dump/$G
 rm -rf ../dump/$G/log
 python ../TOOLS/agi2log.py ../$G ../dump/$G/log > /dev/null

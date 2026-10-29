@@ -1037,7 +1037,6 @@ SHD:            defs 8*64
 ;  t_addpic sube PG_PMX. SPH: cabeceras de 8 bytes (fila de la imagen de la fila 0 de la celda, word con signo; filas; prioridad; puntero a los pares; 2 libres);
 ;  SPP: un par (ax0, ax1) por fila, vacio = (255, 0). Se vacian con draw.pic y new.room.
 ; ---------------------------------------------------------------------
-SP_ROWS         equ 512
 
 t_spclr:        xor a
                 ld (sp_n),a
@@ -1071,8 +1070,27 @@ ap_ax:          ld e,a
                 add hl,de
                 jp hx2ax
 
-; IX = el objeto fijo recien puesto: sus rangos por fila
-t_addpic:       ld a,(sp_n)
+; SCR = el add.to.pic que se va a pintar -> NC con SCR_PG = la pagina del bucle de su vista (para t_bake, del A2), o C si no se puede pintar
+t_addpic:       ld ix,SCR
+                ld a,(ix+O_X)
+                cp 160
+                jr nc,ap_nov
+                ld a,(ix+O_VIEW)
+                ld b,(ix+O_LOOP)
+                call vc_get
+                cp $FF
+                jr z,ap_nov
+                ld (SCR_PG),a
+                or a
+                ret
+ap_nov:         ld a,$FF
+                ld (SCR_PG),a
+                scf
+                ret
+
+; SCR = el add.to.pic ya pintado: sus rangos por fila
+t_addhdr:       ld ix,SCR
+                ld a,(sp_n)
                 cp SP_MAX
                 ret nc
                 call cel_open
@@ -1241,9 +1259,7 @@ ap_n1:          ld (ap_n),a             ; filas
                 add hl,de
                 ld (iy+4),l
                 ld (iy+5),h
-                ex de,hl                ; DE = pares de esta celda
-                ld hl,ex_min
-                ld bc,ex_max
+                ld de,ap_pairs          ; los pares de esta celda, antes de pasarlos a la pagina del A2
                 ld a,(ap_n)
                 ld (ap_k),a
                 ld hl,0
@@ -1287,9 +1303,22 @@ ap_p2:          ld c,a
                 ld (sp_u),hl
                 ld hl,sp_n
                 inc (hl)
-                ; sube PG_PMX: por cada fila con rango, los bloques de 8 pixeles que toca
+                ld a,PG_OVE             ; los pares, a su sitio (SPP) en la pagina del A2
+                call map7
                 ld l,(iy+4)
                 ld h,(iy+5)
+                ld de,$C000
+                add hl,de
+                ex de,hl
+                ld hl,ap_pairs
+                ld a,(ap_n)
+                ld c,a
+                ld b,0
+                sla c
+                rl b
+                ldir
+                ; sube PG_PMX: por cada fila con rango, los bloques de 8 pixeles que toca
+                ld hl,ap_pairs
                 ld (ap_pp),hl
                 ld a,PG_PMX
                 call map7
@@ -1370,6 +1399,9 @@ pd_patch:       ld a,(sp_n)
                 or a
                 ret z
                 push iy
+                ld a,PG_OVE             ; los pares estan en la pagina del A2 (el llamante vuelve a poner la del bloque 7)
+                call map7
+                ld a,(sp_n)
                 ld b,a
                 ld iy,SPH
 ps_l:           push bc
@@ -1393,6 +1425,8 @@ ps_l:           push bc
                 add hl,hl
                 ld e,(iy+4)
                 ld d,(iy+5)
+                add hl,de
+                ld de,$C000             ; direccion del A2 -> su pagina en el bloque 7
                 add hl,de
                 ld a,(hl)               ; ax0
                 inc hl
@@ -1438,4 +1472,4 @@ ap_r0:          defw 0
 ap_pp:          defw 0
 ex_min:         defs 128
 ex_max:         defs 128
-SPP:            defs 2*SP_ROWS
+ap_pairs:       defs 256

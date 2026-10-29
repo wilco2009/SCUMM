@@ -37,7 +37,7 @@ sqb_l:          ld (ix+O_SDR),0
                 djnz sqb_l
                 ld hl,SWR
                 ld de,SWR+1
-                ld bc,16*NOBJ-1
+                ld bc,16*(NOBJ+1)-1
                 ld (hl),0
                 ldir
                 xor a
@@ -374,7 +374,7 @@ sq_jn:          ld hl,sq_j
 sq_in:          ld hl,sq_i
                 inc (hl)
                 ld a,(hl)
-                cp NOBJ
+                cp NOBJ+1
                 jr c,sq_i1
                 ld a,(sq_chg)
                 or a
@@ -406,7 +406,7 @@ sc_y:           ld a,(sqs_n)
 sc_yn:          ld hl,sqs_n
                 inc (hl)
                 ld a,(hl)
-                cp NOBJ
+                cp NOBJ+1
                 jr c,sc_y
                 ld a,(sc_yv)
                 or a
@@ -544,6 +544,11 @@ sc_sn:          ld de,32
                 ld a,(hl)
                 cp NOBJ
                 jr c,sc_s
+                ld hl,SWR+16*NOBJ       ; el rectangulo sucio de t_bake ya esta en la pantalla
+                ld de,SWR+16*NOBJ+1
+                ld bc,15
+                ld (hl),0
+                ldir
                 xor a
                 ld (sw_force),a
                 ret
@@ -625,7 +630,7 @@ sp_o:           ld a,(sqs_n)
 sp_on:          ld hl,sqs_n
                 inc (hl)
                 ld a,(hl)
-                cp NOBJ
+                cp NOBJ+1
                 jr c,sp_o
                 ret
 sp_one:         push hl
@@ -649,6 +654,140 @@ sp_a:           ld a,(sp_hi)
                 ret nc
                 ld a,b
                 ld (sp_hi),a
+                ret
+
+; ---------------------------------------------------------------------
+;  add.to.pic: la celda de SCR (objeto de trabajo del A1) se pinta en la copia de fondo (PG_BGB / PG_BGA) linea a linea, con el mismo bufer y la misma regla que un
+;  rotulo y contra la prioridad de la imagen y de los add.to.pic anteriores (sw_prow: su cabecera aun no esta); la zona pasa a ser el rectangulo sucio (objeto NOBJ
+;  de SWR) y sw_comp la copia a la pantalla con los rotulos encima. Mismo resultado que Interp.render() de TOOLS/agi_vm.py (pasos 's' de pic_ops).
+; ---------------------------------------------------------------------
+t_bake:         ld a,PG_OVL
+                call map7
+                ld hl,$E000+SCR-$2000
+                ld de,BKO
+                ld bc,33
+                ldir
+                call map7_back
+                ld a,(bk_pg)
+                cp $FF
+                ret z
+                ld a,1
+                ld (bk_on),a
+                ld ix,BKO
+                ld hl,BKR
+                ld (sqs_r),hl
+                call cel_open
+                jp c,bk_end
+                call unmap_win
+                call sw_geom            ; BKR+4... = cx0, nb, y0, y1
+                ld a,(BKR+5)
+                or a
+                jp z,bk_end
+                ld hl,BKR+4
+                ld a,(hl)
+                ld (sp_lo),a
+                inc hl
+                add a,(hl)
+                dec a
+                ld (sp_hi),a
+                inc hl
+                ld a,(hl)
+                ld (sw_y),a
+                inc hl
+                ld a,(hl)
+                ld (bk_y1),a
+bk_l:           call lb_load
+                call sw_prow
+                ld ix,BKO
+                call sw_apply_ix
+                call lb_store
+                ld a,(sw_y)
+                ld hl,bk_y1
+                cp (hl)
+                jr nc,bk_d
+                inc a
+                ld (sw_y),a
+                jr bk_l
+bk_d:           ld a,(SWR+16*NOBJ+8)    ; rectangulo sucio: el primero, o la union con el que habia
+                or a
+                jr nz,bk_u
+                ld hl,BKR+4
+                ld de,SWR+16*NOBJ+4
+                ld bc,4
+                ldir
+                ld a,1
+                ld (SWR+16*NOBJ+8),a
+                jr bk_end
+bk_u:           ld a,(BKR+4)
+                ld b,a                  ; B = cx0 nueva
+                ld a,(BKR+5)
+                add a,b
+                ld c,a                  ; C = fin nuevo
+                ld a,(SWR+16*NOBJ+4)
+                ld d,a                  ; D = cx0 que habia
+                ld a,(SWR+16*NOBJ+5)
+                add a,d
+                ld e,a                  ; E = fin que habia
+                ld a,b
+                cp d
+                jr c,bk_u1
+                ld b,d
+bk_u1:          ld a,c
+                cp e
+                jr nc,bk_u2
+                ld c,e
+bk_u2:          ld a,b
+                ld (SWR+16*NOBJ+4),a
+                ld a,c
+                sub b
+                ld (SWR+16*NOBJ+5),a
+                ld a,(BKR+6)
+                ld hl,SWR+16*NOBJ+6
+                cp (hl)
+                jr nc,bk_u3
+                ld (hl),a
+bk_u3:          ld a,(BKR+7)
+                inc hl
+                cp (hl)
+                jr c,bk_end
+                ld (hl),a
+bk_end:         xor a
+                ld (bk_on),a
+                ret
+
+; El bufer (sp_lo..sp_hi) a la linea sw_y de la copia de fondo
+lb_store:       ld a,PG_BGB
+                ld de,LBBM
+                call ls_plane
+                ld a,PG_BGA
+                ld de,LBAT
+                call ls_plane
+                jp map7_back
+ls_plane:       push de
+                call map7
+                ld a,(sw_y)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld a,(sp_lo)
+                ld c,a
+                ld b,0
+                add hl,bc
+                ld de,$DF00             ; la fila 0 de la imagen es la linea 8
+                add hl,de               ; destino en la pagina
+                pop de
+                ex de,hl
+                add hl,bc               ; origen en el bufer
+                ld a,(sp_hi)
+                sub c
+                inc a
+                ld c,a
+                ld b,0
+                ldir
                 ret
 
 ; La linea sw_y de la imagen limpia (sp_lo..sp_hi) al bufer
@@ -749,7 +888,7 @@ sw_apply:       ld a,(sa_n)
                 add hl,de
                 push hl
                 pop ix
-                call cel_open
+sw_apply_ix:    call cel_open
                 ret c
                 ld a,(ix+O_PRI)
                 ld (hw_pri),a
@@ -921,9 +1060,7 @@ swp_l:          push bc
                 add hl,hl
                 ld e,(iy+4)
                 ld d,(iy+5)
-                add hl,de
-                ld de,$C000             ; direccion del A1 -> su pagina en el bloque 7
-                add hl,de
+                add hl,de               ; los pares estan en esta pagina (SPP)
                 ld a,(hl)               ; ax0
                 inc hl
                 ld c,a
@@ -1192,4 +1329,9 @@ sp_bt:          defb 0
 SWL:            defs NOBJ
 LBBM:           defs 32
 LBAT:           defs 32
-SWR:            defs 16*NOBJ
+SWR:            defs 16*(NOBJ+1)        ; el ultimo es el rectangulo sucio de t_bake
+BKO:            defs 32                 ; copia de SCR (A1) y la pagina de su bucle: el add.to.pic que se pinta
+bk_pg:          defb 0
+bk_on:          defb 0
+bk_y1:          defb 0
+BKR:            defs 16

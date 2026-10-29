@@ -105,6 +105,11 @@ rs_s:           ld (hl),$FF
                 ld (blkf),a
                 ld (nr_pend),a
                 ld (keyn),a
+                ld a,PG_OVL             ; sin add.to.pic (esta en la pagina del A1, que se asoma por el bloque 7)
+                call map7
+                xor a
+                ld (st_n+$C000),a
+                call map7_back
                 ld hl,nm_inv
                 ld de,INV
                 ld bc,256

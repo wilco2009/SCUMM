@@ -91,6 +91,7 @@ class Interp:
         self.scan = {}                  # set.scan.start: por donde empieza cada logica (offset en su codigo)
         self.spans = []                 # add.to.pic: (fila 0 de la celda, prioridad, [(ax0, ax1) por fila])
         self.span_rows = 0
+        self.statics = []               # add.to.pic: (vista, bucle, celda, x, y, prioridad) de cada uno desde draw.pic (ST_MAX); estan pintados en la imagen
         self.pics_used = set()
         self.ovl_pairs = set()
         self.use_pic = os.environ.get('AGI_NOPIC') != '1'     # AGI_NOPIC=1: sin el plano de prioridad (lo que modela el Z80 por etapas)
@@ -206,13 +207,8 @@ class Interp:
         import agi2hr
         pri2 = agi2hr.sprite_priority(self.pic.pri) if self.pic is not None else None
         if pri2 is not None:
-            for row0, pri, pairs in self.spans:
-                for i, (a0, a1) in enumerate(pairs):
-                    row = row0 + i
-                    if 0 <= row < 168 and a0 <= a1:
-                        for ax in range(a0, a1 + 1):
-                            if pri2[row * 160 + ax] < pri:
-                                pri2[row * 160 + ax] = pri
+            for span in self.spans:
+                self.raise_pri(pri2, span)
         return pri2
 
     def hw_sprites(self):
@@ -302,62 +298,70 @@ class Interp:
         desplazada s a la derecha (A) y, si s > 0, a la siguiente la que se sale (B). Una parte con las 8 posiciones opacas escribe el bitmap y el atributo de la
         celda tal cual; si no, pone sus pixeles uno a uno (agi_text.plot_hr) sobre lo que haya. Los pixeles que tapa la prioridad de la imagen no se ponen (pri_plane, como hw_sprites, con los rangos de los objetos fijos). (agisw.asm lo hace por lineas, con un bufer, sin borrar nada.)"""
         import agi2spr
-        import agi2hr
         pri2 = self.pri_plane()
         for n in self.draw_order():
-            if True:
-                o = self.objs[n]
-                if o.x >= 160:
+            o = self.objs[n]
+            c = self.cel_of(o)
+            if c is None or not agi2spr.meta(c[2], o.view)[0]:
+                continue
+            self.blit_cel(sb, sa, 0, o, c, pri2)
+
+    def cel_of(self, o):
+        """(ancho, alto, mosaicos) de la celda de un objeto que se pinta en el bitmap, o None (fuera de la pantalla, sin vista o bucle demasiado grande para el Z80)."""
+        import agi2spr
+        if o.x >= 160:
+            return None
+        d = self.g.resource('VIEW', o.view)
+        if d is None:
+            return None
+        key = (o.view, o.loop)
+        if key not in self.spr_big:
+            try:
+                self.spr_big[key] = o.loop < d[2] and len(agi2spr.build_loop(d, o.loop)) > 8190
+            except (IndexError, ValueError):
+                self.spr_big[key] = True
+        if self.spr_big[key]:
+            return None
+        return agi2spr.cel_tiles(d, o.loop, o.cel)
+
+    def blit_cel(self, sb, sa, off, o, c, pri2):
+        """La celda c de o al bitmap sb / sa, cuya linea 0 es la `off` de la pantalla (0 la pantalla, 8 el plano de la imagen)."""
+        import agi2spr
+        hrw, h, tiles = c
+        x0 = agi2spr.lo(o.x)
+        cx0, s = x0 >> 3, x0 & 7
+        top = o.y - h + 9
+        for tx, ty, col, pix, msk in tiles:
+            for r in range(8):
+                line = top + ty * 8 + r
+                m = msk[r]
+                if line < 8 or line > 175 or m == 0:
                     continue
-                d = self.g.resource('VIEW', o.view)
-                if d is None:
-                    continue
-                key = (o.view, o.loop)
-                if key not in self.spr_big:
-                    try:
-                        self.spr_big[key] = o.loop < d[2] and len(agi2spr.build_loop(d, o.loop)) > 8190
-                    except (IndexError, ValueError):
-                        self.spr_big[key] = True
-                if self.spr_big[key]:
-                    continue
-                c = agi2spr.cel_tiles(d, o.loop, o.cel)
-                if c is None or not (agi2spr.meta(c[2], o.view)[0] or o.static):
-                    continue
-                hrw, h, tiles = c
-                x0 = agi2spr.lo(o.x)
-                cx0, s = x0 >> 3, x0 & 7
-                top = o.y - h + 9
-                for tx, ty, col, pix, msk in tiles:
-                    for r in range(8):
-                        line = top + ty * 8 + r
-                        m = msk[r]
-                        if line < 8 or line > 175 or m == 0:
+                ink, paper = col[r] >> 4, col[r] & 15
+                if s == 0:
+                    parts = [(cx0 + tx, m, pix[r])]
+                else:
+                    parts = [(cx0 + tx, m >> s, pix[r] >> s), (cx0 + tx + 1, (m << (8 - s)) & 255, (pix[r] << (8 - s)) & 255)]
+                for cell, pm, pp in parts:
+                    if pm == 0 or cell > 31:
+                        continue
+                    if pri2 is not None and 8 <= line < 176:
+                        ok = 0      # el fondo tapa los pixeles de prioridad mayor (como en los sprites)
+                        for bit in range(8):
+                            hx = cell * 8 + bit
+                            if pri2[(line - 8) * 160 + ((5 * hx) >> 3)] <= o.pri:
+                                ok |= 0x80 >> bit
+                        pm &= ok
+                        if pm == 0:
                             continue
-                        ink, paper = col[r] >> 4, col[r] & 15
-                        if s == 0:
-                            parts = [(cx0 + tx, m, pix[r])]
-                        else:
-                            parts = [(cx0 + tx, m >> s, pix[r] >> s), (cx0 + tx + 1, (m << (8 - s)) & 255, (pix[r] << (8 - s)) & 255)]
-                        for cell, pm, pp in parts:
-                            if pm == 0 or cell > 31:
-                                continue
-                            if pri2 is not None and 8 <= line < 176:
-                                ok = 0      # el fondo tapa los pixeles de prioridad mayor (como en los sprites)
-                                for bit in range(8):
-                                    hx = cell * 8 + bit
-                                    if pri2[(line - 8) * 160 + ((5 * hx) >> 3)] <= o.pri:
-                                        ok |= 0x80 >> bit
-                                pm &= ok
-                                if pm == 0:
-                                    continue
-                            i = line * 32 + cell
-                            if pm == 255:
-                                sb[i] = pp
-                                sa[i] = (paper << 4) | ink
-                            else:
-                                for bit in range(8):
-                                    if pm & (0x80 >> bit):
-                                        plot_hr(sb, sa, line, cell * 8 + bit, ink if pp & (0x80 >> bit) else paper)
+                    i = (line - off) * 32 + cell
+                    if pm == 255:
+                        sb[i] = pp
+                        sa[i] = (paper << 4) | ink
+                    else:
+                        for bit in range(8):
+                            if pm & (0x80 >> bit):
+                                plot_hr(sb, sa, line - off, cell * 8 + bit, ink if pp & (0x80 >> bit) else paper)
 
     def render(self):
         """Plano de 168x32: la imagen con el texto que se le ha escrito encima."""
@@ -369,12 +373,34 @@ class Interp:
             bm, at, _, _ = agi2hr.convert(self.pic)
             bm = bytearray(bm)
             at = bytearray(at)
+        pri2 = agi2hr.sprite_priority(self.pic.pri) if self.pic is not None else None
         for op in self.pic_ops:
             if op[0] == 't':
                 agi_text.put_line(bm, at, 8, *op[1:])
+            elif op[0] == 's':
+                # add.to.pic: pintado en la imagen (la copia de fondo del Z80) contra la prioridad de la imagen y de los anteriores, que luego sube
+                o = Obj()
+                o.view, o.loop, o.cel, o.x, o.y, o.pri = op[1]
+                c = self.cel_of(o)
+                if c is not None:
+                    self.blit_cel(bm, at, 8, o, c, pri2)
+                if op[2] is not None and pri2 is not None:
+                    self.raise_pri(pri2, op[2])
+            elif op[0] == 'z':
+                pri2 = agi2hr.sprite_priority(self.pic.pri) if self.pic is not None else None       # new.room: los rangos de los fijos se olvidan
             else:
                 agi_text.fill_row(bm, at, 8, op[1], op[2])
         return bm, at
+
+    @staticmethod
+    def raise_pri(pri2, span):
+        row0, pri, pairs = span
+        for i, (a0, a1) in enumerate(pairs):
+            row = row0 + i
+            if 0 <= row < 168 and a0 <= a1:
+                for ax in range(a0, a1 + 1):
+                    if pri2[row * 160 + ax] < pri:
+                        pri2[row * 160 + ax] = pri
 
     def fmt(self, s, lognum):
         def rep(m):
@@ -644,6 +670,8 @@ class Interp:
         self.snd_stop()
         self.spans = []
         self.span_rows = 0
+        self.statics = []
+        self.pic_ops.append(('z',))
         for k in range(self.NOBJ):
             if k not in self.objs:
                 self.objs[k] = Obj()
@@ -695,37 +723,47 @@ class Interp:
         self.margins = []
         self.spans = []
         self.span_rows = 0
-        for o in self.objs.values():
-            if o.static:
-                o.anim = o.drawn = o.static = False
+        self.statics = []
+
+    ST_MAX = 48                         # add.to.pic que se recuerdan por imagen (el Z80: STL)
+    MG_MAX = 12                         # cajas de linea de control (mg_tab)
+    SP_MAX = 48                         # cabeceras de rangos de prioridad (SPH)
+    SP_ROWS = 2048                      # filas de rangos (SPP)
 
     def c_add_to_pic(self, view, loop, cel, x, y, pri, margin):
-        """Un objeto fijo en el ultimo hueco libre de 31 a 24 (no se mueve, no se cicla, no choca ni bloquea); un margen 0 o 1 pone una linea de control bajo la celda."""
-        slot = next((k for k in range(31, 23, -1) if not (k in self.objs and self.objs[k].anim)), None)
-        if slot is None:
+        """addToPic de ScummVM: la celda se pinta en la imagen (y su prioridad) sin ocupar un objeto, asi que no hay limite de 8; el Z80 la pinta en la copia de fondo y
+        la recuerda en STL (se rehace con graphics y al cargar). Un margen 0, 1 o 2 pone ademas una linea de control bajo la celda."""
+        if len(self.statics) >= self.ST_MAX:
             return
-        o = self.objs[slot] = Obj()
-        o.anim = o.drawn = o.fixpri = o.ign_horizon = o.ign_blocks = o.ign_objs = o.static = True
-        o.upd = o.cycling = o.mon = False
-        o.step = o.stime = o.scount = o.ctime = o.ccount = 0
-        o.view, o.loop, o.cel, o.x, o.y, o.pri = view, loop, cel, x, y, pri
         if pri == 0:                        # addToPic: prioridad 0 -> la de la y
-            o.pri = 4 if y < 48 else min(15, (y - 48) // 12 + 5)
-        self.add_spans(o)
-        if margin < 3 and len(self.margins) < 8:
+            pri = 4 if y < 48 else min(15, (y - 48) // 12 + 5)
+        rec = (view, loop, cel, x, y, pri)
+        self.statics.append(rec)
+        o = Obj()
+        o.view, o.loop, o.cel, o.x, o.y, o.pri = rec
+        self.add_static_op(rec)
+        if margin < 3 and len(self.margins) < self.MG_MAX:
             # addToPicDrawPriorityBox: linea de control (0, 1 o 2) abajo, a los lados y arriba, con la altura de la banda de prioridad de y acotada por la de la celda;
             # se guarda (x, y, ancho, valor | alto << 2). El valor 3 (agua) no se admite.
             w, h = self.cell(o)
             band = y + 1 if y < 48 else (y - 48) % 12 + 1
             self.margins.append((x, y, w, margin | min(band, h, 63) << 2))
 
+    def add_static_op(self, rec):
+        """El paso de pic_ops de un add.to.pic (con su rango de prioridad, si cabe) y el rango en spans; sin imagen no se pinta nada."""
+        if self.pic is None:
+            return
+        o = Obj()
+        o.view, o.loop, o.cel, o.x, o.y, o.pri = rec
+        span = self.add_spans(o)
+        self.pic_ops.append(('s', rec, span))
+
     def add_spans(self, o):
         """Lo que un objeto fijo tapa a los sprites: por cada fila de la celda, el rango de pixeles de AGI (5 * x // 8 del HiRes) del primer al ultimo pixel opaco."""
         import agi2spr
-        d = self.g.resource('VIEW', o.view)
-        c = agi2spr.cel_tiles(d, o.loop, o.cel) if d is not None else None
-        if c is None or len(self.spans) >= 8:
-            return
+        c = self.cel_of(o)
+        if c is None or len(self.spans) >= self.SP_MAX:
+            return None
         h, tiles = c[1], c[2]
         ex_min = [255] * 128
         ex_max = [0] * 128
@@ -741,14 +779,16 @@ class Interp:
                 ex_min[row] = min(ex_min[row], min(255, (5 * (bx + f)) >> 3))
                 ex_max[row] = max(ex_max[row], min(255, (5 * (bx + l)) >> 3))
         n = min(h, 128)
-        if self.span_rows + n > 512:
-            return
+        if self.span_rows + n > self.SP_ROWS:
+            return None
         pairs = []
         for i in range(n):
             a0, a1 = ex_min[i], min(ex_max[i], 159)
             pairs.append((255, 0) if a0 > 159 else (a0, a1))
         self.span_rows += n
-        self.spans.append((o.y - h + 1, o.pri, pairs))
+        span = (o.y - h + 1, o.pri, pairs)
+        self.spans.append(span)
+        return span
 
     def c_add_to_pic_v(self, *a): self.c_add_to_pic(*[self.vars[i] for i in a])
 
@@ -1092,7 +1132,7 @@ class Interp:
 
     def c_show_obj_v(self, v): self.c_show_obj(self.vars[v])
 
-    RESTART_FIELDS = ('scan', 'vars', 'flags', 'strs', 'objs', 'inv', 'keys', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'horizon', 'blocks', 'pcontrol',
+    RESTART_FIELDS = ('scan', 'vars', 'flags', 'strs', 'objs', 'inv', 'keys', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'statics', 'horizon', 'blocks', 'pcontrol',
                       'lastpic', 'ovl_n', 'lfsr', 'status_on', 'st_last', 'tfg', 'tbg', 'accept', 'sound_flags', 'input', 'said_done', 'keyq', 'textq', 'ctl', 'wtext', 'ext_bm', 'ext_at', 'box')
 
     def c_restart_game(self):
@@ -1152,10 +1192,8 @@ class Interp:
         self.pic_ops = []
         self.spans = []
         self.span_rows = 0
-        for k in sorted(self.objs):
-            o = self.objs[k]
-            if k >= 24 and o.static and o.anim:
-                self.add_spans(o)
+        for rec in self.statics:
+            self.add_static_op(rec)
 
     def c_display(self, r, c, m):
         s = self.msg(m)[:250]
@@ -1363,7 +1401,7 @@ class Interp:
     def snapshot(self):
         import copy
         return copy.deepcopy(dict(vars=self.vars, flags=self.flags, strs=self.strs, inv=self.inv, keys=self.keys, objs=self.objs, horizon=self.horizon, blocks=self.blocks,
-                                  pcontrol=self.pcontrol, lastpic=self.lastpic, ovl_n=self.ovl_n, margins=self.margins, status_on=self.status_on, tfg=self.tfg, tbg=self.tbg,
+                                  pcontrol=self.pcontrol, lastpic=self.lastpic, ovl_n=self.ovl_n, margins=self.margins, statics=self.statics, status_on=self.status_on, tfg=self.tfg, tbg=self.tbg,
                                   accept=self.accept, ticks=self.ticks))
 
     def c_save_game(self): self.save_load(False)
@@ -1412,7 +1450,7 @@ class Interp:
         self.inv[:] = st['inv']
         self.keys = st['keys']
         self.objs = st['objs']
-        for k in ('horizon', 'blocks', 'pcontrol', 'lastpic', 'ovl_n', 'margins', 'status_on', 'tfg', 'tbg', 'accept', 'ticks'):
+        for k in ('horizon', 'blocks', 'pcontrol', 'lastpic', 'ovl_n', 'margins', 'statics', 'status_on', 'tfg', 'tbg', 'accept', 'ticks'):
             setattr(self, k, st[k])
         self.flags[6] = 1
         self.rs_keep = True
@@ -1425,10 +1463,8 @@ class Interp:
         self.pic_ops = []
         self.spans = []
         self.span_rows = 0
-        for k in sorted(self.objs):
-            o = self.objs[k]
-            if k >= 24 and o.static and o.anim:
-                self.add_spans(o)
+        for rec in self.statics:
+            self.add_static_op(rec)
         self.exit_all = True
 
     def draw_menu(self, sb, sa):

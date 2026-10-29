@@ -69,6 +69,7 @@ PG_OVD          equ 46
 PG_OVE          equ 48                  ; overlay A2 (rotulos por software), con call_e
 OVE_BGSAVE      equ $2000
 OVE_RUN         equ $2003
+OVE_BAKE        equ $2006
 PG_SAV          equ 47                  ; las ranuras de guardar/cargar (datos), en la ventana
 SAV_EX          equ $8000               ; 12 bytes: la ranura existe
 SAV_DESC        equ $8010               ; 12 descripciones de 32 bytes
@@ -83,6 +84,19 @@ OVL_SORT        equ $2012
 OVL_FORCE       equ $2015
 OVL_ADDPIC      equ $2018
 OVL_SPCLR       equ $201B
+OVL_ADDHDR      equ $201E
+; add.to.pic: los datos viven en la pagina del A1 (bloque 1) tras sus cabeceras de prioridad (SPH); los pares de rangos (SPP), en la del A2
+SP_MAX          equ 48                  ; cabeceras de rangos de prioridad
+SP_ROWS         equ 2048                ; filas de rangos (2 bytes cada una: 4 KB, toda la pagina del A2 desde SPP)
+ST_MAX          equ 48                  ; add.to.pic que se recuerdan desde draw.pic
+MG_MAX          equ 12                  ; cajas de linea de control (en el nucleo: can_be_here las mira con otro overlay en el bloque 1)
+SPP             equ $3000
+ST_FIX          equ $2040+1+NOBJ+NOBJ+1+8*SP_MAX
+st_n            equ ST_FIX              ; st_n y STL se guardan juntos (ST_LEN bytes)
+STL             equ st_n+1              ; vista, bucle, celda, x, y, prioridad de cada add.to.pic
+SCR             equ STL+6*ST_MAX        ; objeto de trabajo de add.to.pic (32 bytes) y la pagina de su bucle
+SCR_PG          equ SCR+32
+ST_LEN          equ SCR-ST_FIX
 OVB_DISPLAY     equ $2000               ; overlay B (texto): se mapea con call_b
 OVB_DISPLAY_V   equ $2003
 OVB_CLEAR       equ $2006
@@ -864,6 +878,7 @@ do_new_room:    xor a                   ; la logica 0 se reinicia sin la linea t
                 ld (FLAGS+0),a          ; banderas 0 y 3 (agua, linea de aviso): las de la sala anterior no valen (la sala nueva las vuelve a calcular al mover el ego)
                 ld (FLAGS+3),a
                 ld (VARS+9),a
+                ld (st_n),a             ; los add.to.pic se olvidan (siguen pintados en la imagen hasta draw.pic)
                 call OVL_SPCLR
                 call OVL_SPRINIT        ; los sprites se apagan hasta que los objetos de la sala nueva tengan su sitio (se vuelven a poner al acabar el ciclo)
                 call h_stop_sound
@@ -1472,6 +1487,8 @@ h_restart_game: ld a,2
                 ld a,1
                 ld (FLAGS+6),a          ; la logica 0 conserva los menus y vuelve a la sala 2
                 ld (rs_keep),a
+                xor a
+                ld (st_n),a
                 call OVL_SPCLR
                 call ov_tail
                 ld a,1
@@ -1852,7 +1869,7 @@ prisz2:         defw 0
 pr_has0:        defb 0
 pr_has1:        defb 0
 mg_n:           defb 0
-mg_tab:         defs 32
+mg_tab:         defs 4*MG_MAX       ; x, y, ancho, valor | alto << 2
 pr_water:       defb 0
 pr_land:        defb 0
 pr_sig:         defb 0
