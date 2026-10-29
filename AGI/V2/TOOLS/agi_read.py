@@ -203,20 +203,6 @@ def help_override(path, n, msgs):
     return msgs
 
 
-# Correcciones al codigo de las logicas de un juego: (juego, logica) -> codigo AGI que se antepone (como testboot).
-# SQ1, sala 9: v31 es el estado de las luces de la consola (0,1,2 con el traje puesto) y la sala 8 lo usa como cuenta atras de su muerte
-# (decrement(v31) y a 1 se muere), asi que entrar en la sala 8 con v31 = 2 mataba al jugador un tercio de las veces: al pasar a la sala 8 se pone a 0.
-GAME_FIX = {('SQ1', 9): bytes((0xFF, 7, 3, 0xFF, 3, 0, 3, 31, 0))}
-
-
-def game_fix(path, n, d):
-    code = GAME_FIX.get((os.path.basename(os.path.normpath(path)).upper(), n))
-    if not code:
-        return d
-    size = (d[0] | (d[1] << 8)) + len(code)
-    return bytes((size & 255, size >> 8)) + code + bytes(d[2:])
-
-
 def testboot(n, d):
     """Solo para pruebas (variable de entorno AGI_BOOT="v80=6,room=6"): codigo inyectado al principio de la logica 0 (asignaciones y new.room); igual en agi2log.py."""
     spec = os.environ.get('AGI_BOOT', '')
