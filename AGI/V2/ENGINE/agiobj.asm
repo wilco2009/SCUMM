@@ -271,6 +271,7 @@ h_release_loop: call argobj
 h_set_cel:      call argobj
                 ld a,(ARGS+1)
 sc_set:         ld (ix+O_CEL),a
+                res 4,(ix+O_F2)         ; set.cel quita el fDontUpdate
                 jp obj_cell
 h_set_cel_v:    call argobj
                 ld a,(ARGS+1)
@@ -478,6 +479,8 @@ eol_set:        call argobj
                 ld a,(ARGS+1)
                 ld (ix+O_CFLAG),a
                 set 3,(ix+O_F1)
+                set 2,(ix+O_F1)         ; cmdEndOfLoop: fDontUpdate | fUpdate | fCycling
+                set 4,(ix+O_F2)
                 ld l,a
                 ld h,FLAGS>>8
                 ld (hl),0
@@ -697,10 +700,12 @@ LOOP2:          defb 4,4,0,0,0,4,1,1,1
 update_objects: ld ix,OBJ
                 xor a
                 ld (curk),a
+                ld (uo_chg),a
 uo_l:           ld a,(ix+O_F1)
                 and 7
                 cp 7
                 jp nz,uo_next
+                ld (uo_chg),a           ; hay algun objeto que actualizar
                 ld a,(curk)
                 or a
                 jr nz,uo_m
@@ -752,7 +757,13 @@ uo_next:        ld de,32
                 ld (curk),a
                 cp NOBJ
                 jp c,uo_l
+                ld a,(uo_chg)           ; updateScreenObjTable: el ego deja de observar agua / tierra al acabar el ciclo
+                or a
+                ret z
+                xor a
+                ld (OBJ+O_WATER),a
                 ret
+uo_chg:         defb 0
 
 ; A = 0, 1 o 2 segun el signo de (A - B) (menos, cero, mas)... aqui: comparacion de A con (HL)
 sign3:          cp (hl)
@@ -1051,30 +1062,40 @@ cycle_cel:      call obj_info
                 or a
                 ret z
                 ld b,a                  ; B = celdas del bucle
-                ld a,(ix+O_CTYPE)
+                bit 4,(ix+O_F2)         ; fDontUpdate: se come este paso
+                jr z,cc_nd
+                res 4,(ix+O_F2)
+                ret
+cc_nd:          ld a,(ix+O_CTYPE)
                 or a
                 jr z,cc_0
                 cp 3
                 jr z,cc_3
                 cp 1
                 jr z,cc_1
-                ld a,(ix+O_CEL)         ; 2: reverse.loop
+                ld a,(ix+O_CEL)         ; 2: reverse.loop (la bandera se pone al llegar a la celda 0)
                 or a
                 jr z,cc_end
-                dec (ix+O_CEL)
-                ret
+                dec a
+                ld (ix+O_CEL),a
+                ret nz
+                jr cc_end
 cc_1:           ld a,(ix+O_CEL)
                 inc a
                 cp b
                 jr nc,cc_end
                 ld (ix+O_CEL),a
-                ret
+                inc a
+                cp b
+                ret nz                  ; end.of.loop: la bandera se pone al llegar a la ultima celda
 cc_end:         ld a,(ix+O_CFLAG)
                 ld l,a
                 ld h,FLAGS>>8
                 ld (hl),1
                 res 3,(ix+O_F1)
-                ld (ix+O_CTYPE),0
+                xor a
+                ld (ix+O_CTYPE),a
+                ld (ix+O_DIR),a
                 ret
 cc_0:           ld a,(ix+O_CEL)
                 inc a

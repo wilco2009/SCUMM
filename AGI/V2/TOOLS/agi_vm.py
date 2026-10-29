@@ -63,6 +63,7 @@ class Obj:
         self.wander = 0
         self.static = False             # add.to.pic: objeto fijo
         self.dm = False                 # fDidntMove: el ultimo paso no lo movio
+        self.dontupd = False            # fDontUpdate: el siguiente paso de ciclo se salta
 
 
 class Interp:
@@ -637,9 +638,15 @@ class Interp:
         self.snd_stop()
         self.spans = []
         self.span_rows = 0
+        for k in range(self.NOBJ):
+            if k not in self.objs:
+                self.objs[k] = Obj()
+                self.objs[k].cycling = self.objs[k].mon = False       # (un objeto sin usar: todo a 0 salvo lo que newRoom pone)
         for k, o in self.objs.items():
             if k != EGO:
                 o.anim = o.drawn = False
+            o.upd = True
+            o.step = o.stime = o.scount = o.ctime = o.ccount = 1      # newRoom: tambien el ego
         ego = self.obj(EGO)
         ego.drawn = False
         ego.upd = ego.cycling = ego.mon = True      # el ego sale de la sala listo para andar y sin prioridad fija aunque la anterior le hiciera stop.motion o set.priority
@@ -760,7 +767,7 @@ class Interp:
             o.ctype = 0
             o.water = 0
             o.static = False
-            o.dm = False
+            o.dm = o.dontupd = False
 
     def c_unanimate_all(self):
         for o in self.objs.values():
@@ -774,6 +781,7 @@ class Interp:
             if agi2spr.frozen(o.view):              # vista congelada (agi2spr.FREEZE_VIEWS): casi no cicla
                 o.ctime = o.ccount = 127
             self.fix_position(o)
+            o.dontupd = False
             self.log('draw o%d view %d at %d,%d' % (n, o.view, o.x, o.y))
 
     def c_erase(self, n): self.obj(n).drawn = False
@@ -868,6 +876,7 @@ class Interp:
     def c_set_cel(self, n, c):
         o = self.obj(n)
         o.cel = c
+        o.dontupd = False
         self.cell(o)
 
     def c_set_cel_v(self, n, v): self.c_set_cel(n, self.vars[v])
@@ -913,7 +922,8 @@ class Interp:
     def c_distance(self, a, b, v):
         o1, o2 = self.obj(a), self.obj(b)
         if o1.drawn and o2.drawn:
-            self.vars[v] = min(255, abs(o1.x - o2.x) + abs(o1.y - o2.y))
+            x1, x2 = o1.x + self.cell(o1)[0] // 2, o2.x + self.cell(o2)[0] // 2      # cmdDistance: centros en x, y base, tope 254
+            self.vars[v] = min(254, abs(x1 - x2) + abs(o1.y - o2.y))
         else:
             self.vars[v] = 255
 
@@ -928,11 +938,13 @@ class Interp:
     def c_end_of_loop(self, n, f):
         o = self.obj(n)
         o.ctype, o.cflag, o.cycling = 1, f, True
+        o.upd = o.dontupd = True            # cmdEndOfLoop: fDontUpdate | fUpdate | fCycling
         self.flags[f] = 0
 
     def c_reverse_loop(self, n, f):
         o = self.obj(n)
         o.ctype, o.cflag, o.cycling = 2, f, True
+        o.upd = o.dontupd = True
         self.flags[f] = 0
 
     def c_reverse_cycle(self, n):
@@ -1634,35 +1646,41 @@ class Interp:
                 v[4], v[5] = k, border
 
     def cycle_cel(self, o):
+        """updateView de ScummVM: end.of.loop / reverse.loop ponen la bandera en el mismo paso en que llegan al extremo y dejan el objeto sin ciclar, con direccion 0;
+        un fDontUpdate pendiente se come el primer paso."""
+        if o.dontupd:
+            o.dontupd = False
+            return
         cs = self.loops(o.view)[o.loop] if self.loops(o.view) else []
         if not cs:
             return
-        n = len(cs)
+        last = len(cs) - 1
         if o.ctype == 0:
-            o.cel = (o.cel + 1) % n
+            o.cel = (o.cel + 1) % (last + 1)
         elif o.ctype == 3:
-            o.cel = (o.cel - 1) % n
-        elif o.ctype == 1:
-            if o.cel + 1 >= n:
-                self.flags[o.cflag] = 1
-                o.cycling = False
-                o.ctype = 0
-            else:
+            o.cel = last if o.cel == 0 else o.cel - 1
+        else:
+            if o.ctype == 1 and o.cel < last:
                 o.cel += 1
-        elif o.ctype == 2:
-            if o.cel == 0:
-                self.flags[o.cflag] = 1
-                o.cycling = False
-                o.ctype = 0
-            else:
+                if o.cel != last:
+                    return
+            elif o.ctype == 2 and o.cel:
                 o.cel -= 1
+                if o.cel:
+                    return
+            self.flags[o.cflag] = 1
+            o.cycling = False
+            o.dir = 0
+            o.ctype = 0
 
     def update_objects(self):
         v = self.vars
+        changed = False
         for k in sorted(self.objs):
             o = self.objs[k]
             if not (o.anim and o.drawn and o.upd):
                 continue
+            changed = True
             if k == EGO:
                 if self.pcontrol:
                     o.dir = v[6]
@@ -1682,13 +1700,15 @@ class Interp:
                     self.cycle_cel(o)
             if k == EGO and not self.pcontrol:
                 v[6] = o.dir
+        if changed:
+            self.obj(EGO).water = 0         # updateScreenObjTable: el ego deja de observar agua / tierra al acabar el ciclo
 
     NOBJ = 32
 
     def objbytes(self, o):
         b = lambda x: 1 if x else 0
         f1 = b(o.anim) | b(o.drawn) << 1 | b(o.upd) << 2 | b(o.cycling) << 3 | b(o.mon) << 4 | b(o.fixpri) << 5 | b(o.fixloop) << 6 | b(o.ign_horizon) << 7
-        f2 = b(o.ign_blocks) | b(o.ign_objs) << 1 | b(o.static) << 2 | b(o.dm) << 3
+        f2 = b(o.ign_blocks) | b(o.ign_objs) << 1 | b(o.static) << 2 | b(o.dm) << 3 | b(o.dontupd) << 4
         return [f1, f2, o.view, o.loop, o.cel, o.x & 255, o.y & 255, o.pri & 255, o.ctype, o.ctime & 255, o.ccount & 255, o.cflag,
                 o.motion, o.step & 255, o.stime & 255, o.scount & 255, o.dir, o.water, o.tx & 255, o.ty & 255, o.mstep & 255, o.mflag,
                 o.wander & 255]
@@ -1778,6 +1798,7 @@ class Interp:
         else:
             self.flags[5] = self.flags[6] = 0
         self.input = None
+        v[9] = v[19] = 0                # playGame: la palabra desconocida y la tecla valen un solo ciclo
         self.keyq = []
         self.tick_clock()
         self.summ.append((self.cycle, self.nsteps, sum(v) & 0xFFFF, sum(i for i in range(256) if self.flags[i]) & 0xFFFF, v[0], self.objsum(), self.strsum(), self.miscsum()))

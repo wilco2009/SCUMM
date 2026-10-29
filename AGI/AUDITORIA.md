@@ -119,12 +119,12 @@ Implementadas distinto:
 4. **CORREGIDO (modelo y Z80; el bit mon queda sin uso en estos comandos)** **`player.control` (930), `stop.motion` (880), `start.motion` (888)** — como ScummVM: `player.control` pone `motion=0` en el ego; `stop.motion`/`start.motion` ponen `motion=0` (y ego: v6=0); eliminar `mon` o dejarlo sin efecto sobre el movimiento (ScummVM no lo tiene).
 5. **CORREGIDO (modelo y Z80; ya no aterriza exacto: riesgo de scripts que comparen la posicion final)** **`move.obj` (`move`, 1468)** — dirección con `checkStep` y paso completo `step*DX[dir]`; llegada con `dir==0` (sin aterrizar exacto). Llamar a la dirección ya en `c_move_obj`.
 6. **CORREGIDO (modelo y Z80; fstep en mstep, follow_count en wander, fDidntMove = bit 3 de F2; sin cobertura de la bateria)** **`follow.ego` (909, 1489)** — campo `fstep=max(step, o.step)`, comparar centros x, umbral `< fstep`, no tocar `o.step`.
-7. **Ego `fOnWater/fOnLand`** (`update_objects`, 1554) — ponerlo a 0 al final de cada ciclo.
-8. **`cycle_cel` (1530)** — end.of.loop/reverse.loop: bandera en la misma llamada al llegar al extremo, `cycling=False`, **`dir=0`**, `ctype=0`; opcional DontUpdate del primer tick.
-9. **`interpret_cycle` (1644)** — `v[9]=v[19]=0` al final del ciclo.
-10. **`do_new_room` (613)** — `step=stime=scount=ctime=ccount=1` en todos los objetos (incluido el ego).
+7. **CORREGIDO** **Ego `fOnWater/fOnLand`** (`update_objects`, 1554) — ponerlo a 0 al final de cada ciclo.
+8. **CORREGIDO (con fDontUpdate en end.of.loop/reverse.loop, borrado por set.cel y draw)** **`cycle_cel` (1530)** — end.of.loop/reverse.loop: bandera en la misma llamada al llegar al extremo, `cycling=False`, **`dir=0`**, `ctype=0`; opcional DontUpdate del primer tick.
+9. **CORREGIDO** **`interpret_cycle` (1644)** — `v[9]=v[19]=0` al final del ciclo.
+10. **CORREGIDO** **`do_new_room` (613)** — `step=stime=scount=ctime=ccount=1` en todos los objetos (incluido el ego).
 11. **`pick_loop` (1456)** — bucle automático solo con 2, 3 (LOOP2) o 4 (LOOP4) bucles; ejecutarlo para todo objeto animated+update+drawn cada ciclo (antes de mover), no solo al moverse.
-12. **`c_distance` (850)** — centros en x, `y` base, tope 254.
+12. **CORREGIDO** **`c_distance` (850)** — centros en x, `y` base, tope 254.
 13. **`c_set_view/set_loop/set_cel` (786-810)** — `clipViewCoordinates` tras cambiar de celda.
 14. **`c_add_to_pic` (671)** — bordes 2 y 3, caja completa (lados y techo) y `pri==0` → `priorityFromY`; no usar ranuras de objeto.
 15. **Menores**: recorte superior de `move`, `wander` (dir 0..8, contador 6..49), `reposition` con recorte a 0, `compare.strings` con puntuación, bandera 11 (ego invisible), `set.scan.start`, `shake.screen`, `clear.text.rect`.

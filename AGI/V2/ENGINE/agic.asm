@@ -487,9 +487,15 @@ t_distance:     call argobj
                 jr z,dd_put
                 bit 1,(ix+O_F1)
                 jr z,dd_put
-                ld a,(ix+O_X)
-                ld b,a
-                ld a,(iy+O_X)
+                call dd_cx              ; centro en x del segundo
+                ld (dd_a),a
+                push ix
+                push iy
+                pop ix
+                call dd_cx              ; y el del primero
+                pop ix
+                ld hl,dd_a
+                ld b,(hl)
                 call absd
                 ld e,a
                 ld d,0
@@ -500,16 +506,25 @@ t_distance:     call argobj
                 ld l,a
                 ld h,0
                 add hl,de
-                ld b,255
+                ld b,254                ; cmdDistance: tope 254
                 ld a,h
                 or a
                 jr nz,dd_put
+                ld a,l
+                cp 254
+                jr nc,dd_put
                 ld b,l
 dd_put:         ld a,(ARGS+2)
                 ld l,a
                 ld h,VARS>>8
                 ld (hl),b
                 ret
+dd_cx:          call obj_cell
+                ld a,d
+                srl a
+                add a,(ix+O_X)
+                ret
+dd_a:           defb 0
 
 ; animate.obj(o)
 t_animate:  call argobj
@@ -603,7 +618,8 @@ t_draw:         call argobj
                 ld a,127
                 ld (ix+O_CTIME),a
                 ld (ix+O_CCOUNT),a
-td_nf:          ld a,(ARGS)
+td_nf:          res 4,(ix+O_F2)         ; draw quita el fDontUpdate
+                ld a,(ARGS)
                 ld (curk),a
                 jp t_fixpos
 

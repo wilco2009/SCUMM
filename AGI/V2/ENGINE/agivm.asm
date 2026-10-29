@@ -208,6 +208,8 @@ ml_end:         xor a                   ; los codigos de borde se ponen a 0 ante
                 ld (keyn),a
                 ld (FLAGS+2),a
                 ld (FLAGS+4),a
+                ld (VARS+9),a           ; la palabra desconocida y la tecla valen un solo ciclo (playGame)
+                ld (VARS+19),a
                 ld a,(rs_keep)          ; tras restart.game / restore.game las banderas 5 y 6 las ve la logica 0 del ciclo siguiente
                 or a
                 jr nz,ml_k6
@@ -813,6 +815,18 @@ do_new_room:    xor a                   ; la logica 0 se reinicia sin la linea t
                 call h_stop_sound
                 ld a,(VARS+0)
                 ld (VARS+1),a
+                ld ix,OBJ               ; newRoom: todos (tambien el ego) con paso, tiempo de paso y de ciclo a 1
+                ld de,32
+                ld b,NOBJ
+                ld a,1
+nr_s:           set 2,(ix+O_F1)         ; (fUpdate)
+                ld (ix+O_STEP),a
+                ld (ix+O_STIME),a
+                ld (ix+O_SCOUNT),a
+                ld (ix+O_CTIME),a
+                ld (ix+O_CCOUNT),a
+                add ix,de
+                djnz nr_s
                 ld ix,OBJ+32            ; todos menos el ego dejan de estar animados y dibujados
                 ld de,32
                 ld b,NOBJ-1
