@@ -65,6 +65,11 @@ PG_PRI          equ 29
 PG_OVL          equ 41
 PG_OVC          equ 44
 PG_INV          equ 45
+PG_OVD          equ 46
+PG_SAV          equ 47                  ; las ranuras de guardar/cargar (datos), en la ventana
+SAV_EX          equ $8000               ; 12 bytes: la ranura existe
+SAV_DESC        equ $8010               ; 12 descripciones de 32 bytes
+SAV_NEW         equ $8190               ; la descripcion que se guarda / la cabecera que se lee
 OVL_KPOLL       equ $2000               ; overlay A (teclado, sprites, rotulos): siempre en el bloque 1
 OVL_KDELIV      equ $2003
 OVL_ACCEPT      equ $2006
@@ -93,8 +98,8 @@ OVB_MENUOPEN    equ $202A
 OVB_MENUNAV     equ $202D
 OVB_MENUSEL     equ $2030
 OVB_MENUCLOSE   equ $2033
-OVB_DLGSAVE     equ $2036
-OVB_DLGLOAD     equ $2039
+OVB_DLGLIST     equ $2036
+OVB_MENUON      equ $2039
 OVB_DLGDONE     equ $203C
 OVB_MENURESET   equ $203F
 OVB_DLGINV      equ $2042
@@ -109,6 +114,10 @@ OVC_GETNUM      equ $201E
 OVC_PARSE       equ $2021
 OVC_DRAW        equ $2024
 OVC_TEXTSCR     equ $2015
+OVD_READ        equ $2000               ; overlay D (ficheros de guardar/cargar): con call_d
+OVD_PREP        equ $2003
+OVD_CONF        equ $2006
+OVD_DO          equ $2009
 OVC_RESTART     equ $2000               ; overlay C (restart.game, status, show.obj): tambien con call_c
 OVC_INVTXT      equ $2003
 OVC_OBJDESC     equ $2006
@@ -145,6 +154,8 @@ start:          di
                 ld a,(stopf)
                 or a
                 jp nz,finish
+                ld hl,OVC_RESTART       ; el estado inicial es el del reinicio
+                call call_c
 
 ; ---------------------------------------------------------------------
 ;  El ciclo del interprete
@@ -289,68 +300,12 @@ sc_map:         ld c,MAP_PORT
 ; ---------------------------------------------------------------------
 ;  Arranque: tablas y ficheros auxiliares
 ; ---------------------------------------------------------------------
-init:           ld hl,LGSLOT
-                ld de,LGSLOT+1
-                ld bc,255
-                ld (hl),$FF
-                ldir
-                ld hl,slot_lg
-                ld de,slot_lg+1
-                ld bc,NSLOTS-1
-                ld (hl),$FF
-                ldir
-                ld hl,VARS
-                ld de,VARS+1
-                ld bc,511               ; variables y banderas
-                ld (hl),0
-                ldir
-                ld a,255
-                ld (VARS+8),a
-                ld a,2
-                ld (VARS+10),a
-                ld a,3
-                ld (VARS+15),a
-                ld a,15
-                ld (VARS+22),a
-                ld a,41
-                ld (VARS+24),a
-                ld a,3
-                ld (VARS+26),a
-                ld a,1
-                ld (FLAGS+9),a
-                ld (FLAGS+5),a
-                ld (FLAGS+11),a
-                ld (pctl),a
-                ld hl,1
+init:           ld hl,1                 ; el estado de las variables, objetos... lo pone el overlay C (restart) tras cargar los overlays
                 ld (cyc),hl
                 ld hl,TRACE
                 ld (trptr),hl
                 ld hl,SUMM
                 ld (sptr),hl
-                ld hl,SNDP              ; sonidos pendientes: todos libres
-                ld b,8
-in_s:           ld (hl),$FF
-                inc hl
-                inc hl
-                inc hl
-                djnz in_s
-                ld hl,KEYMAP            ; teclas, controladores
-                ld de,KEYMAP+1
-                ld bc,511
-                ld (hl),0
-                ldir
-                ld hl,ARGS              ; cadenas, buffers del parser
-                ld de,ARGS+1
-                ld bc,CLR_END-ARGS-1
-                ld (hl),0
-                ldir
-                ld hl,OBJ
-                ld de,OBJ+1
-                ld bc,NOBJ*32-1
-                ld (hl),0
-                ldir
-                ld a,36
-                ld (horizon),a
                 ld a,PG_VIEWS
                 ld hl,nm_views
                 ld bc,8192
@@ -375,12 +330,7 @@ in_s:           ld (hl),$FF
                 call map_page
                 ld hl,(LWIN)            ; ciclos que se ejecutan
                 ld (ncyc),hl
-                call unmap_win
-                ld hl,nm_inv
-                ld de,INV
-                ld bc,256
-                call load_aux
-                ret
+                jp unmap_win
 
 ; A = pagina, HL = nombre, BC = bytes -> los lee a la ventana del bloque 4 (pagina A)
 load_page:      push hl

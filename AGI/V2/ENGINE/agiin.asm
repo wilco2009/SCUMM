@@ -601,10 +601,14 @@ sv_ok:          defb 0
 
 ; save.game / restore.game: la lista de 9 ranuras es un menu de una sola entrada (overlay B, agib.asm) con el mismo bucle de menu.input; B lee y escribe los ficheros
 ; SAV/GAMEn.SAV (el estado: variables, banderas, inventario, objetos, cadenas...) y aqui se rehace la imagen y los objetos fijos al cargar
-h_save_game:    ld hl,OVB_DLGSAVE
+h_save_game:    xor a
                 jr sg_go
-h_restore_game: ld hl,OVB_DLGLOAD
-sg_go:          call call_b
+h_restore_game: ld a,1
+sg_go:          ld (sf_mode),a
+                ld hl,OVD_READ
+                call call_d
+                ld hl,OVB_DLGLIST
+                call call_b
                 ld a,1
                 ld (mi_dlg),a
                 call mi_nk
@@ -615,9 +619,43 @@ sg_go:          call call_b
                 ret nz                  ; pruebas: se acabaron los ciclos, la lista se queda
                 ld hl,OVB_DLGDONE
                 call call_b
+                ld a,(mn_res)
+                inc a
+                ret z                   ; ESC
+                ld a,(sf_mode)
+                or a
+                jr nz,sg_cf
+                ld hl,OVD_PREP          ; guardar: la descripcion (get.string con el texto previo y ESC que cancela)
+                call call_d
+                ld a,1
+                ld (gs_cust),a
+                ld de,MSGBUF
+                call gs_go
+                ld a,(stopf)
+                or a
+                ret nz
+                ld hl,gs_cust
+                ld a,(hl)
+                ld (hl),0
+                cp 2
+                ret z
+sg_cf:          ld hl,OVD_CONF
+                call call_d
+                ld a,3
+                call pr_rawgo
+                ld a,(stopf)
+                or a
+                ret nz
+                ld a,(pw_last)
+                cp 13
+                ret nz
+                ld hl,OVD_DO
+                call call_d
                 ld a,(sv_ok)
                 or a
                 ret z
+                ld hl,OVB_MENUON
+                call call_b
                 call rd_pic             ; se carga: la imagen, los rangos de los objetos fijos y se sale de la logica
                 ld a,1
                 ld (exitall),a
@@ -663,14 +701,17 @@ h_prevent_input: jp OVL_PREVENT
 h_get_string:   ld a,(ARGS)
                 cp 12
                 ret nc
+                call strptr
+                ex de,hl
+                xor a
+                ld (il_n),a
+                ld (INBUF),a
+gs_go:          ld (gs_dst),de          ; DE = donde va la linea (il_n e INBUF ya preparados)
                 ld a,(accin)
                 ld (gs_acc),a
                 ld a,1
                 ld (accin),a
                 ld (gs_on),a
-                xor a
-                ld (il_n),a
-                ld (INBUF),a
 gs_l:           ld a,(tqn)
                 or a
                 jr nz,gs_d
@@ -683,13 +724,23 @@ gs_l:           ld a,(tqn)
 gs_w:           call pr_wait
                 ld a,(stopf)
                 or a
-                jr z,gs_l
+                jr z,gs_k
                 ret
-gs_d:           ld a,(ARGS)
-                call strptr
-                ex de,hl
+gs_k:           ld a,(gs_cust)          ; descripcion de una partida: ESC cancela
+                or a
+                jr z,gs_l
+                ld a,(tqn)
+                or a
+                jr nz,gs_l
+                ld a,(pw_last)
+                cp 27
+                jr nz,gs_l
+                ld a,2
+                ld (gs_cust),a
+                jr gs_f
+gs_d:           ld de,(gs_dst)
                 call tq_pop
-                xor a
+gs_f:           xor a
                 ld (gs_on),a
                 ld a,(gs_acc)
                 ld (accin),a
@@ -698,6 +749,11 @@ gs_d:           ld a,(ARGS)
                 ret
 gs_on:          defb 0
 gs_acc:         defb 0
+gs_cust:        defb 0
+gs_dst:         defw 0
+sf_mode:        defb 0
+st_on:          defb 0
+st_valid:       defb 0
 
 h_get_num:      ld hl,OVC_GETNUM
                 jp call_c

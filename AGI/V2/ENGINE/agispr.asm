@@ -28,6 +28,9 @@ ov_load:        ld hl,nmo
                 ld hl,nmoc
                 ld b,PG_OVC
                 call ov_one
+                ld hl,nmod
+                ld b,PG_OVD
+                call ov_one
 ov_tail:        ld b,PG_OVL
                 ld c,MAP_PORT
                 ld a,1
@@ -65,12 +68,17 @@ ol_o:           ld (fh),a
 nmo:            defb "DATA/OVERA.OVL",0
 nmob:           defb "DATA/OVERB.OVL",0
 nmoc:           defb "DATA/OVERC.OVL",0
+nmod:           defb "DATA/OVERD.OVL",0
 vlen:           defw 0
 ov_pg:          defb 0
 
 ; HL = entrada del overlay B (OVB_*): se mapea en el bloque 1, se llama y se vuelve a poner el A
 call_b:         ld b,PG_OVB
-                ld c,MAP_PORT
+                jr call_x
+call_c:         ld b,PG_OVC
+                jr call_x
+call_d:         ld b,PG_OVD
+call_x:         ld c,MAP_PORT
                 ld a,1
                 out (c),a
                 ld de,cb_ret
@@ -82,14 +90,6 @@ cb_ret:         ld b,PG_OVL
                 out (c),a
                 ret
 
-; HL = entrada del overlay C (OVC_*), igual que call_b
-call_c:         ld b,PG_OVC
-                ld c,MAP_PORT
-                ld a,1
-                out (c),a
-                ld de,cb_ret
-                push de
-                jp (hl)
 
 ; Ritmo de AGI (solo en modo real): cada ciclo dura v10 * 2,5 tramas (v10 son 1/20 s), con al menos un VSYNC, y los sprites se escriben justo despues,
 ; sin que el haz de video pille estados a medias. Mientras espera lee el teclado.

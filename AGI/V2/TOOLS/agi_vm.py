@@ -1130,6 +1130,22 @@ class Interp:
         self.gs_on = False
         self.strs[s] = self.textq.pop(0)[:40]
 
+    def save_desc(self):
+        """La descripcion de la partida: una linea (evento `text` o `str`) o None si se cancela con ESC; la linea cuenta 30 caracteres."""
+        n, v19 = len(self.keyq), self.vars[19]
+        self.gs_on = True
+        esc = False
+        while not self.textq and not esc:
+            self.cycle += 1
+            if self.cycle > self.max_cycles:
+                raise Stop('fin de los ciclos en la descripcion')
+            self.apply_events(self.ev.get(self.cycle, []))
+            esc = 27 in self.keyq[n:] and not self.textq
+            del self.keyq[n:]
+            self.vars[19] = v19
+        self.gs_on = False
+        return None if esc else self.textq.pop(0)[:30]
+
     def c_get_num(self, m, v):
         self.log('get.num: ' + self.msg(m))
         t = self.textq.pop(0) if self.textq else '0'
@@ -1195,10 +1211,10 @@ class Interp:
         if r is not None:
             self.ctl.add(r)
 
-    def menu_loop(self):
+    def menu_loop(self, start=0):
         """Modal como print: cada vuelta es un ciclo; las flechas (cambios de la direccion a 1, 3, 5, 7) mueven, ENTER elige (devuelve el controlador del elemento si
         esta activado) y ESC cierra (None); la tecla no llega a la logica."""
-        sel = it = 0
+        sel, it = 0, start              # start: la primera linea elegible (la lista de ranuras tiene antes las del titulo)
         self.menu_ui = [sel, it]
         n0, v19 = len(self.keyq), self.vars[19]
         prev = self.dirhold
@@ -1214,13 +1230,13 @@ class Interp:
                 prev = d
                 cnt = len(self.menus[sel][1])
                 if d == 7:
-                    sel, it = (sel - 1) % len(self.menus), 0
+                    sel, it = (sel - 1) % len(self.menus), start
                 elif d == 3:
-                    sel, it = (sel + 1) % len(self.menus), 0
+                    sel, it = (sel + 1) % len(self.menus), start
                 elif d == 5 and cnt:
-                    it = (it + 1) % cnt
+                    it = it + 1 if it + 1 < cnt else start
                 elif d == 1 and cnt:
-                    it = (it - 1) % cnt
+                    it = cnt - 1 if it == start else it - 1
                 self.menu_ui = [sel, it]
             if len(self.keyq) > n0:
                 k = self.keyq[n0]
@@ -1247,22 +1263,38 @@ class Interp:
     def c_restore_game(self): self.save_load(True)
 
     def save_load(self, load):
-        """La lista de 9 ranuras es un menu de una sola entrada con el bucle de menu.input; las partidas se guardan en self.saves (el Z80, en SAV/GAMEn.SAV)."""
-        items = []
-        for n in range(1, 10):
+        """La lista de 12 ranuras es un menu de una sola entrada con el bucle de menu.input (antes, las lineas del titulo, desactivadas); al guardar se pide la
+        descripcion (como get.string, con la anterior de texto inicial; ESC cancela) y en los dos casos se confirma con ENTER (ESC cancela).
+        Las partidas se guardan en self.saves (el Z80, en SAV/GAMEnn.SAV)."""
+        if load:
+            ins = ['Use the arrow keys to select the', 'game which you wish to restore.', 'Press ENTER to restore the game,', 'ESC to not restore a game.']
+        else:
+            ins = ['Use the arrow keys to select the', 'slot in which you wish to save', 'the game.', 'Press ENTER to save in the slot,', 'ESC to not save a game.']
+        items = [[t, 0, False] for t in ins]
+        for n in range(1, 13):
             s = self.saves.get(n)
-            items.append(['%d %s' % (n, s[0] if s else '(empty)'), n, (s is not None) if load else True])
+            items.append(['%02d:%s' % (n, s[0] if s else '(empty)'), n, (s is not None) if load else True])
         real = self.menus
         self.menus = [['Restore game' if load else 'Save game', items]]
         try:
-            r = self.menu_loop()
+            r = self.menu_loop(len(ins))
         finally:
             if self.cycle <= self.max_cycles:
                 self.menus = real
         if r is None:
             return
         if not load:
-            self.saves[r] = ('Room %d  Score %d' % (self.vars[0], self.vars[3]), self.snapshot())
+            desc = self.save_desc()
+            if desc is None:
+                return
+        else:
+            desc = self.saves[r][0]
+        self.do_print(('About to %s the game\ndescribed as:\n%s\n%s:\nGAME%02d.SAV\n\nPress ENTER to continue.\nPress ESC to cancel.'
+                       % ('restore' if load else 'save', desc, 'from file' if load else 'in file', r)), None, None, 0)
+        if self.last_key != 13:
+            return
+        if not load:
+            self.saves[r] = (desc, self.snapshot())
             return
         import copy
         st = copy.deepcopy(self.saves[r][1])
