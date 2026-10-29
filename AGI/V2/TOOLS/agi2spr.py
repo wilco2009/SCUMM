@@ -81,8 +81,16 @@ def tile_row(colors):
     return mask, pix, (ink << 4) | paper
 
 
-def cel_tiles(d, loop, cel):
-    """(ancho HiRes, alto, [(tx, ty, color[8], dato[8], mascara[8]), ...]) o None si no existe la celda."""
+def has_desc(d):
+    """La vista tiene descripcion (show.obj): su celda 0 del bucle 0 es un dibujo con marco, que se muestra entero en un cuadro de dialogo."""
+    off = d[3] | (d[4] << 8)
+    return 0 < off < len(d)
+
+
+def cel_tiles(d, loop, cel, framed=False):
+    """(ancho HiRes, alto, [(tx, ty, color[8], dato[8], mascara[8]), ...]) o None si no existe la celda.
+    framed: el ancho se rellena hasta un mosaico entero (el ultimo pixel, el del marco, pasa al final y el hueco repite el de su izquierda): en una celda con
+    parte transparente el papel es el blanco del cuadro y el interior negro del dibujo se veia blanco."""
     c = cel_pixels(d, loop, cel)
     if c is None:
         return None
@@ -92,6 +100,9 @@ def cel_tiles(d, loop, cel):
     for a in range(w):
         for x in range(lo(a), lo(a + 1)):
             inv[x] = a
+    if framed and hrw % 8:
+        inv = inv[:hrw - 1] + [inv[hrw - 2]] * (-hrw % 8) + [inv[hrw - 1]]
+        hrw += -hrw % 8
     tiles = []
     for ty in range((h + 7) // 8):
         for tx in range((hrw + 7) // 8):
@@ -161,7 +172,7 @@ def build_loop(d, loop, view=None):
     ncels = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)]
     recs = []
     for cel in range(ncels):
-        hrw, h, tiles = cel_tiles(d, loop, cel)
+        hrw, h, tiles = cel_tiles(d, loop, cel, framed=loop == 0 and cel == 0 and has_desc(d))
         sw, hh = meta(tiles, view)
         r = bytearray((len(tiles), hrw, h, sw, hh & 255, hh >> 8))
         for tx, ty, col, pix, msk in tiles:

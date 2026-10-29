@@ -985,7 +985,7 @@ class Interp:
         pic = None
         if s:
             try:
-                c = agi2spr.cel_tiles(d, 0, 0)
+                c = agi2spr.cel_tiles(d, 0, 0, framed=True)
             except IndexError:
                 c = None
             if c and c[2] and c[0] <= 200 and c[1] <= 56:        # el dibujo: bucle 0, celda 0; delante del texto, las filas que ocupa y una en blanco
