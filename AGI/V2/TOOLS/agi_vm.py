@@ -1380,7 +1380,8 @@ class Interp:
             return False
         if self.blocks and o is self.objs.get(EGO) and not o.ign_blocks:
             bx1, by1, bx2, by2 = self.blocks
-            if not (bx1 <= x and x + w - 1 <= bx2 and by1 <= y <= by2):
+            # la zona de block no se cruza ni hacia dentro ni hacia fuera (el ego que sale de ella, o que empieza fuera, se mueve libremente por su lado)
+            if (bx1 <= x and x + w - 1 <= bx2 and by1 <= y <= by2) != (bx1 <= o.x and o.x + w - 1 <= bx2 and by1 <= o.y <= by2):
                 return False
         if self.pic and self.use_pic:
             pri = self.pic.pri

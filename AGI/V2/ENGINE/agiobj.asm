@@ -1130,6 +1130,32 @@ cc_3b:          dec a
                 ld (ix+O_CEL),a
                 ret
 
+; A = 1 si la celda del objeto IX en (D, E) cae dentro de la zona de block: x1 <= x, x+w-1 <= x2, y1 <= y <= y2 (blk = x1, y1, x2, y2)
+bk_in:          ld hl,blk
+                ld a,d
+                cp (hl)
+                jr c,bk_no
+                inc hl
+                ld a,e
+                cp (hl)
+                jr c,bk_no
+                inc hl
+                ld a,(ow)
+                add a,d
+                dec a
+                cp (hl)
+                jr z,bk_2
+                jr nc,bk_no
+bk_2:           inc hl
+                ld a,e
+                cp (hl)
+                jr z,bk_ok
+                jr nc,bk_no
+bk_ok:          ld a,1
+                ret
+bk_no:          xor a
+                ret
+
 ; Puede el objeto IX estar en (nx, ny)? -> A = 1 si
 can_be_here:    call obj_cell
                 ld a,d
@@ -1166,41 +1192,17 @@ cb_blk:         ld a,(curk)             ; la zona de bloqueo solo vale para el e
                 jr z,cb_pic
                 bit 0,(ix+O_F2)
                 jr nz,cb_pic
-                ld a,(blk)              ; x1 <= nx y nx+w-1 <= x2 y y1 <= ny <= y2
+                ld a,(nx)               ; la zona de bloqueo no se cruza ni hacia dentro ni hacia fuera: el sitio nuevo tiene que estar dentro si el de ahora lo esta
+                ld d,a
+                ld a,(ny)
                 ld e,a
-                ld d,0
-                ld hl,(nx)
-                or a
-                sbc hl,de
-                jp c,ret_false
-                ld hl,(nx)
-                ld a,(ow)
-                ld e,a
-                ld d,0
-                add hl,de
-                dec hl
-                ld a,(blk+2)
-                ld e,a
-                ld d,0
-                or a
-                sbc hl,de
-                jr z,cb_y
-                jp nc,ret_false
-cb_y:           ld a,(blk+1)
-                ld e,a
-                ld d,0
-                ld hl,(ny)
-                or a
-                sbc hl,de
-                jp c,ret_false
-                ld a,(blk+3)
-                ld e,a
-                ld d,0
-                ld hl,(ny)
-                or a
-                sbc hl,de
-                jr z,cb_pic
-                jp nc,ret_false
+                call bk_in
+                ld c,a
+                ld d,(ix+O_X)
+                ld e,(ix+O_Y)
+                call bk_in
+                cp c
+                jp nz,ret_false
 cb_pic:         call pic_check
                 or a
                 jp z,ret_false
