@@ -940,15 +940,16 @@ class Interp:
     def c_cycle_time(self, n, v): self.obj(n).ctime = self.obj(n).ccount = max(1, self.vars[v])
     def c_stop_motion(self, n):
         o = self.obj(n)
-        o.mon = False
+        o.motion = 0                        # cmdStopMotion de ScummVM: sin movimiento y direccion 0 (no hay bandera de monitor)
         o.dir = 0
         if n == EGO:
             self.vars[6] = 0
             self.pcontrol = False
 
     def c_start_motion(self, n):
-        self.obj(n).mon = True
+        self.obj(n).motion = 0
         if n == EGO:
+            self.vars[6] = 0
             self.pcontrol = True
 
     def c_step_size(self, n, v): self.obj(n).step = self.vars[v]
@@ -988,7 +989,9 @@ class Interp:
     def c_get_dir(self, n, v): self.vars[v] = self.obj(n).dir
 
     def c_program_control(self): self.pcontrol = False
-    def c_player_control(self): self.pcontrol = True
+    def c_player_control(self):
+        self.pcontrol = True
+        self.obj(EGO).motion = 0             # cmdPlayerControl: el ego deja de seguir cualquier movimiento programado
 
     # ------------------------------------------------------------ inventario
     def c_get(self, i): self.inv[i] = 255

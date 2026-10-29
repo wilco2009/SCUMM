@@ -1352,6 +1352,8 @@ h_program_control: xor a
                 ret
 h_player_control: ld a,1
                 ld (pctl),a
+                xor a
+                ld (OBJ+O_MOTION),a     ; el ego deja de seguir cualquier movimiento programado
                 ret
 ; --- inventario
 h_get:          ld a,(ARGS)

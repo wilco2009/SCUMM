@@ -497,8 +497,8 @@ ct_1:           ld (ix+O_CTIME),a
                 ret
 
 h_stop_motion:  call argobj
-                res 4,(ix+O_F1)
                 xor a
+                ld (ix+O_MOTION),a      ; como cmdStopMotion: sin movimiento y direccion 0
                 ld (ix+O_DIR),a
                 ld a,(ARGS)
                 or a
@@ -507,10 +507,12 @@ h_stop_motion:  call argobj
                 ld (pctl),a
                 ret
 h_start_motion: call argobj
-                set 4,(ix+O_F1)
+                xor a
+                ld (ix+O_MOTION),a
                 ld a,(ARGS)
                 or a
                 ret nz
+                ld (VARS+6),a
                 inc a
                 ld (pctl),a
                 ret
