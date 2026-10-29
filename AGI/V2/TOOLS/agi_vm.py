@@ -69,6 +69,7 @@ class Interp:
         self.path = path
         self.last_key = 0
         self.g = ag.Game(path)
+        agi2spr.set_game(path)
         self.quiet = quiet
         self.vars = [0] * 256
         self.flags = [0] * 256
@@ -238,7 +239,7 @@ class Interp:
                 if c is None:
                     continue
                 hrw, h, tiles = c
-                if agi2spr.meta(tiles)[0] or o.static:
+                if agi2spr.meta(tiles, o.view)[0] or o.static:
                     continue                # rotulo ancho o objeto fijo: lo dibuja el Z80 en el bitmap (sw_blit)
                 start = k
                 k += agi2spr.loop_maxt(d, o.loop)
@@ -307,7 +308,7 @@ class Interp:
                 if self.spr_big[key]:
                     continue
                 c = agi2spr.cel_tiles(d, o.loop, o.cel)
-                if c is None or not (agi2spr.meta(c[2])[0] or o.static):
+                if c is None or not (agi2spr.meta(c[2], o.view)[0] or o.static):
                     continue
                 hrw, h, tiles = c
                 x0 = agi2spr.lo(o.x)

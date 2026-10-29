@@ -117,7 +117,19 @@ def cel_tiles(d, loop, cel):
 SW_TILES = 6
 
 
-def meta(tiles):
+# Vistas que se dibujan por software (como los rotulos anchos) aunque quepan en los sprites, porque en su sala pasan de los 12 sprites por linea y el hardware
+# deja sin dibujar a los de abajo del orden (una cupula y la mitad del ego): {juego: {vista}}. SQ1, sala 6: tres cupulas de 5 mosaicos por fila (vista 175) y el ego.
+FORCE_SW = {'SQ1': {175}}
+_force = set()
+
+
+def set_game(path):
+    """Elige las vistas forzadas a software del juego (carpeta `path`)."""
+    global _force
+    _force = FORCE_SW.get(os.path.basename(os.path.normpath(path)).upper(), set())
+
+
+def meta(tiles, view=None):
     """(software, huella de 16 bits) de los mosaicos de una celda."""
     per = {}
     h = 0x811C
@@ -125,7 +137,7 @@ def meta(tiles):
         per[ty] = per.get(ty, 0) + 1
         for b in (tx, ty) + tuple(msk):
             h = ((h ^ b) * 0x0101) & 0xFFFF
-    return (1 if per and max(per.values()) > SW_TILES else 0), h
+    return (1 if per and (max(per.values()) > SW_TILES or view in _force) else 0), h
 
 
 def loop_maxt(d, loop):
@@ -134,13 +146,13 @@ def loop_maxt(d, loop):
     return max((len(cel_tiles(d, loop, c)[2]) for c in range(ncels)), default=0)
 
 
-def build_loop(d, loop):
+def build_loop(d, loop, view=None):
     """Contenido de Nvvvl.SPR para el bucle `loop` de la vista d (sin el u16 del tamano)."""
     ncels = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)]
     recs = []
     for cel in range(ncels):
         hrw, h, tiles = cel_tiles(d, loop, cel)
-        sw, hh = meta(tiles)
+        sw, hh = meta(tiles, view)
         r = bytearray((len(tiles), hrw, h, sw, hh & 255, hh >> 8))
         for tx, ty, col, pix, msk in tiles:
             r.extend((tx, ty))
@@ -164,6 +176,7 @@ def main(argv):
         print(__doc__)
         return 1
     g = ag.Game(argv[1])
+    set_game(argv[1])
     os.makedirs(os.path.join(argv[2], 'SPR'), exist_ok=True)
     sel = [int(a) for a in argv[3:]] or g.present('VIEW')
     n = big = 0
@@ -174,7 +187,7 @@ def main(argv):
         try:
             nl = d[2]
             for lp in range(nl):
-                data = build_loop(d, lp)
+                data = build_loop(d, lp, v)
                 if len(data) > 8190:
                     big += 1
                     print('VIEW %d bucle %d: %d bytes, no cabe en una pagina' % (v, lp, len(data)))
