@@ -1,21 +1,28 @@
 ; =====================================================================
-;  agia.asm - overlay A: teclado, sprites por hardware (agihws.asm) y rotulos anchos (agisw.asm). Pagina PG_OVL, mapeada siempre en el bloque 1 ($2000).
+;  agia.asm - overlay A: teclado, sprites por hardware (agihws.asm). Pagina PG_OVL, mapeada siempre en el bloque 1 ($2000).
 ;  El texto esta en el overlay B (agib.asm); plot, map7 y las variables compartidas, en el nucleo (agispr.asm).
 ; =====================================================================
 
                 org $2000
                 include "agires.inc"
+HQ_FIX          equ $2040
 
                 jp t_kpoll              ; OVL_KPOLL
                 jp t_kdeliv             ; OVL_KDELIV
                 jp t_accept             ; OVL_ACCEPT
                 jp t_prevent            ; OVL_PREVENT
-                jp t_render             ; OVL_RENDER
+                jp t_draw               ; OVL_DRAW
                 jp t_sinit              ; OVL_SPRINIT
-                jp t_bgsave             ; OVL_BGSAVE
+                jp t_sort               ; OVL_SORT
                 jp t_force              ; OVL_FORCE
                 jp t_addpic             ; OVL_ADDPIC
                 jp t_spclr              ; OVL_SPCLR
+
+; El orden de los objetos que deja t_sort: el overlay A2 (que se mapea en lugar de este) lo lee de aqui, por el bloque 7, asi que va en una direccion fija
+                defs HQ_FIX-$
+hq_cnt:         defb 0
+ORD:            defs NOBJ
+VPG:            defs NOBJ
 
 ; ---------------------------------------------------------------------
 ;  Teclado del ZX81
@@ -368,6 +375,7 @@ PTEXT:          defs 42
 PQ:             defs 2*PQ_MAX
 
 
+                include "agicel.asm"
                 include "agihws.asm"
 
 ; Tras una ventana de mensaje: todos los objetos se vuelven a armar (sprites) y los rotulos se recomponen
@@ -381,4 +389,3 @@ tfo_l:          res 1,(ix+O_SDR)
                 ld (sw_force),a
                 ret
 
-                include "agisw.asm"

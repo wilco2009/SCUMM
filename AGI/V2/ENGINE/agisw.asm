@@ -14,15 +14,6 @@
 ;  el de antes y el de ahora) y lo que toca hacer.
 ; =====================================================================
 
-O_SDR           equ 23                  ; bit 0: esta puesto en el bitmap
-O_SVW           equ 24                  ; vista, bucle, celda, x, y, prioridad y huella con los que se puso
-O_SLP           equ 25
-O_SCL           equ 26
-O_SX            equ 27
-O_SY            equ 28
-O_SPR           equ 29
-O_SHL           equ 30
-O_SHH           equ 31
 
 ; La imagen que acaba de dibujarse (en la pantalla) pasa a las paginas de fondo; ningun rotulo esta puesto
 t_bgsave:       ld a,PG_BGB
@@ -457,7 +448,7 @@ sc_on:          ld hl,sc_k
 sc_ld:
                 ld a,(sc_ymin)          ; linea a linea
                 ld (sw_y),a
-sc_l:           call t_kpoll
+sc_l:           call kp_a2
                 call sw_span
                 ld a,(sp_lo)
                 ld hl,sp_hi
@@ -465,6 +456,7 @@ sc_l:           call t_kpoll
                 jr z,sc_do
                 jr nc,sc_ln             ; nadie toca esta linea
 sc_do:          call lb_load
+                call sw_prow
                 xor a
                 ld (sc_k),a
 sc_k1:          ld a,(sc_k)
@@ -759,6 +751,13 @@ sw_apply:       ld a,(sa_n)
                 pop ix
                 call cel_open
                 ret c
+                ld a,(ix+O_PRI)
+                ld (hw_pri),a
+                ld a,(sw_pv)
+                bit 2,(ix+O_F2)         ; los objetos fijos (add.to.pic) no los tapa el fondo (en los sprites su propio rango sube la prioridad)
+                jr z,sa_pq
+                xor a
+sa_pq:          ld (sw_pm),a
                 ld l,(ix+O_Y)           ; t = y - (y_obj - h + 9)
                 ld h,0
                 ld a,(cv_h)
@@ -893,12 +892,54 @@ sa_nx:          ld hl,(sa_p)
                 jp sa_t
 
 ; sp_cell (0-31), sp_m, sp_p, sp_col (tinta*16 + papel) al bufer
+; La prioridad de la imagen en la linea sw_y -> PROW (sw_pv = 1), si hay imagen
+sw_prow:        xor a
+                ld (sw_pv),a
+                ld a,(picvalid)
+                or a
+                ret z
+                ld a,(sw_y)
+                sub 8
+                ret c
+                cp 168
+                ret nc
+                ld e,a
+                ld a,160
+                ld (hw_plim),a
+                ld a,PG_PRI2
+                call map7
+                ld a,e
+                call pd_row
+                call map7_back
+                ld a,1
+                ld (sw_pv),a
+                ret
+
 sw_part:        ld a,(sp_m)
                 or a
                 ret z
                 ld a,(sp_cell)
                 cp 32
                 ret nc
+                ld a,(sw_pm)
+                or a
+                jr z,spp_np
+                push bc                 ; la prioridad de la imagen quita de la mascara los pixeles que el fondo tapa (como los sprites por hardware)
+                push de
+                ld a,(sp_cell)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                call hg_okb
+                pop de
+                pop bc
+                ld hl,sp_m
+                and (hl)
+                ld (hl),a
+                ret z
+spp_np:
                 ld a,(sp_m)
                 cp $FF
                 jr nz,spp_pl
@@ -1060,6 +1101,8 @@ sc_ymax:        defb 0
 sc_pri:         defb 0
 sc_k:           defb 0
 sw_y:           defb 0
+sw_pv:          defb 0
+sw_pm:          defb 0
 sp_lo:          defb 0
 sp_hi:          defb 0
 sp_r:           defw 0

@@ -66,6 +66,9 @@ PG_OVL          equ 41
 PG_OVC          equ 44
 PG_INV          equ 45
 PG_OVD          equ 46
+PG_OVE          equ 48                  ; overlay A2 (rotulos por software), con call_e
+OVE_BGSAVE      equ $2000
+OVE_RUN         equ $2003
 PG_SAV          equ 47                  ; las ranuras de guardar/cargar (datos), en la ventana
 SAV_EX          equ $8000               ; 12 bytes: la ranura existe
 SAV_DESC        equ $8010               ; 12 descripciones de 32 bytes
@@ -74,9 +77,9 @@ OVL_KPOLL       equ $2000               ; overlay A (teclado, sprites, rotulos):
 OVL_KDELIV      equ $2003
 OVL_ACCEPT      equ $2006
 OVL_PREVENT     equ $2009
-OVL_RENDER      equ $200C
+OVL_DRAW        equ $200C
 OVL_SPRINIT     equ $200F
-OVL_BGSAVE      equ $2012
+OVL_SORT        equ $2012
 OVL_FORCE       equ $2015
 OVL_ADDPIC      equ $2018
 OVL_SPCLR       equ $201B

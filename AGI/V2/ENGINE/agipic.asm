@@ -85,7 +85,8 @@ lp_o:           ld (fh),a
                 ld bc,168*20
                 call f_read_n
                 call unmap_win
-                call OVL_BGSAVE
+                ld hl,OVE_BGSAVE
+                call call_e
                 ld a,(fh)
                 call f_close
                 ld a,1

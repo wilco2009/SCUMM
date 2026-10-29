@@ -15,22 +15,43 @@ PG_BGA          equ 32
 PG_VC0          equ 33
 NVSLOT          equ 8
 
-render:         jp OVL_RENDER
+render:         call OVL_SORT           ; A1: orden de los objetos; A2 (call_e): rotulos por software; A1: sprites
+                ld hl,OVE_RUN
+                call call_e
+                jp OVL_DRAW
+
+; El A2 esta mapeado en lugar del A1: el teclado lo lee el A1 un momento
+kp_a2:          push af
+                push bc
+                ld b,PG_OVL
+                ld c,MAP_PORT
+                ld a,1
+                out (c),a
+                call OVL_KPOLL
+                ld b,PG_OVE
+                ld a,1
+                out (c),a
+                pop bc
+                pop af
+                ret
 
 ; Los overlays: A (OVERA.OVL: teclado, sprites, rotulos) a su pagina, mapeada siempre en el bloque 1 ($2000); B (OVERB.OVL: texto), que call_b mapea solo
 ; mientras corre
-ov_load:        ld hl,nmo
-                ld b,PG_OVL
+ov_load:        ld hl,ov_tab
+ol_lp:          ld a,(hl)
+                or a
+                jr z,ov_tail
+                ld b,a
+                inc hl
+                ld a,(hl)
+                ld (nmo+9),a            ; la letra del overlay en el nombre
+                inc hl
+                push hl
+                ld hl,nmo
                 call ov_one
-                ld hl,nmob
-                ld b,PG_OVB
-                call ov_one
-                ld hl,nmoc
-                ld b,PG_OVC
-                call ov_one
-                ld hl,nmod
-                ld b,PG_OVD
-                call ov_one
+                pop hl
+                jr ol_lp
+ov_tab:         defb PG_OVL,'A',PG_OVB,'B',PG_OVC,'C',PG_OVD,'D',PG_OVE,'E',0
 ov_tail:        ld b,PG_OVL
                 ld c,MAP_PORT
                 ld a,1
@@ -66,9 +87,6 @@ ol_o:           ld (fh),a
                 ld a,(fh)
                 jp f_close
 nmo:            defb "DATA/OVERA.OVL",0
-nmob:           defb "DATA/OVERB.OVL",0
-nmoc:           defb "DATA/OVERC.OVL",0
-nmod:           defb "DATA/OVERD.OVL",0
 vlen:           defw 0
 ov_pg:          defb 0
 
@@ -78,6 +96,8 @@ call_b:         ld b,PG_OVB
 call_c:         ld b,PG_OVC
                 jr call_x
 call_d:         ld b,PG_OVD
+                jr call_x
+call_e:         ld b,PG_OVE
 call_x:         ld c,MAP_PORT
                 ld a,1
                 out (c),a

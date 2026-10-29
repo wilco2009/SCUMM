@@ -43,11 +43,83 @@ si_h:           ld a,b
                 jr c,si_h
                 ret
 
-t_render:       call sort_objs
-                call sw_scan
-                call sw_close
-                call sw_comp
+; Tras ordenar, para el A2 (que no tiene la cache de vistas): VPG = la pagina de la vista de cada objeto que es un rotulo ancho ($FF: los demas)
+t_sort:         call sort_objs
+                ld hl,VPG
+                ld de,VPG+1
+                ld bc,NOBJ-1
+                ld (hl),$FF
+                ldir
+                ld a,(picvalid)
+                or a
+                ret z
                 xor a
+                ld (ts_n),a
+                ld ix,OBJ
+ts_1:           ld a,(ix+O_F1)
+                and 3
+                cp 3
+                jp nz,ts_1n
+                call cel_open
+                jp c,ts_1n
+                ld a,(cv_fl)
+                ld c,a
+                call unmap_win
+                bit 0,c
+                jp z,ts_1n
+                ld a,(ts_n)
+                ld e,a
+                ld d,0
+                ld hl,VPG
+                add hl,de
+                ld (hl),$FE             ; es ancho: su pagina se busca en la segunda vuelta (la cache de 8 vistas puede haberla cambiado)
+ts_1n:          ld de,32
+                add ix,de
+                ld hl,ts_n
+                inc (hl)
+                ld a,(hl)
+                cp NOBJ
+                jp c,ts_1
+                xor a
+                ld (ts_n),a
+                ld ix,OBJ
+ts_2:           ld a,(ts_n)
+                ld e,a
+                ld d,0
+                ld hl,VPG
+                add hl,de
+                ld a,(hl)
+                cp $FE
+                jr nz,ts_2n
+                push hl
+                ld a,(ix+O_VIEW)
+                ld b,(ix+O_LOOP)
+                call vc_get
+                pop hl
+                ld (hl),a
+ts_2n:          ld de,32
+                add ix,de
+                ld hl,ts_n
+                inc (hl)
+                ld a,(hl)
+                cp NOBJ
+                jp c,ts_2
+                jp unmap_win
+
+; IX = objeto -> NC con la pagina de su bucle mapeada y cv_* puestos (cel_rd), o C si no hay celda (sin mapear)
+cel_open:       ld a,(ix+O_X)
+                cp 160
+                jp nc,co_no
+                ld a,(ix+O_VIEW)
+                ld b,(ix+O_LOOP)
+                call vc_get
+                cp $FF
+                jp z,co_no
+                jp cel_rd
+ts_n:           defb 0
+
+; Tras el dibujo por software (overlay A2, que llama el nucleo): los sprites
+t_draw:         xor a
                 ld (sk),a
                 xor a                   ; y ahora, en orden
                 ld (hq_k),a
@@ -272,81 +344,10 @@ vg_hit:         ld a,NVSLOT
                 add a,PG_VC0
                 ret
 
-; A = pixel de AGI (0-160) -> HL = primer pixel HiRes de ese pixel: 8*(a/5) + (0,2,4,5,7)[a%5]
-lo16:           ld b,5
-                call div8
-                ld e,a
-                ld d,0
-                ld hl,lo_t1
-                add hl,de
-                ld e,(hl)
-                ld l,c
-                ld h,0
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,de
-                ret
-lo_t1:          defb 0,2,4,5,7
 
 ; ---------------------------------------------------------------------
 ;  Un objeto (IX): sus mosaicos a los siguientes sprites
 ; ---------------------------------------------------------------------
-; IX = objeto -> NC con la pagina de su bucle mapeada y cv_* puestos (celdas, ancho, alto, banderas, huella, mosaicos), o C si no hay celda (sin mapear)
-cel_open:       ld a,(ix+O_X)
-                cp 160
-                jr nc,co_no
-                ld a,(ix+O_VIEW)
-                ld b,(ix+O_LOOP)
-                call vc_get
-                cp $FF
-                jr z,co_no
-                call map_page
-                ld a,(LWIN+1)           ; mosaicos que reserva un objeto de este bucle
-                ld (cv_mt),a
-                ld a,(LWIN)             ; numero de celdas del bucle
-                ld b,a
-                ld a,(ix+O_CEL)
-                cp b
-                jr nc,co_bad            ; la celda no existe
-                ld l,a
-                ld h,0
-                add hl,hl
-                ld de,LWIN+2
-                add hl,de
-                ld e,(hl)
-                inc hl
-                ld d,(hl)
-                ld hl,LWIN
-                add hl,de               ; registro de la celda
-                ld a,(hl)
-                ld (cv_n),a
-                inc hl
-                ld a,(hl)
-                ld (cv_w),a
-                inc hl
-                ld a,(hl)
-                ld (cv_h),a
-                inc hl
-                ld a,(hl)
-                ld (cv_fl),a
-                inc hl
-                ld a,(hl)
-                ld (cv_hl),a
-                inc hl
-                ld a,(hl)
-                ld (cv_hh),a
-                inc hl
-                ld (cv_p),hl
-                bit 2,(ix+O_F2)         ; objeto fijo (add.to.pic): se pinta contra el fondo, como un rotulo
-                jr z,co_ns
-                ld hl,cv_fl
-                set 0,(hl)
-co_ns:          or a
-                ret
-co_bad:         call unmap_win
-co_no:          scf
-                ret
 
 ; ---------------------------------------------------------------------
 ;  Un objeto (IX): sus mosaicos a los siguientes sprites (o, si es un rotulo ancho, al bitmap: sw_blit)
@@ -576,7 +577,6 @@ hw_off1:        ld a,(hw_slot)
 ;  prioridad de los sprites (PG_PRI2, por el bloque 7) una prioridad <= la del objeto. Se hace por grupos de mosaicos de la misma fila (ty):
 ;  para cada una de sus 8 lineas se decodifica la fila del plano una vez (PROW) y se calcula la mascara de todos sus mosaicos (MK).
 ; ---------------------------------------------------------------------
-PROW            equ MSGBUF
 
 ; Z si el mosaico hw_i se queda sin ningun pixel visible; si no, hw_mkp apunta a sus 8 mascaras
 hw_mask:        ld hl,(hw_p)
@@ -819,75 +819,6 @@ hn_r:           push af
                 or a
                 ret
 
-; HL = x HiRes del primer pixel -> A = pixeles visibles (bit 7 = el primero) segun PROW y hw_pri
-hg_okb:         ld b,8
-                ld c,0
-hk_l:           sla c
-                ld a,h
-                or a
-                jr nz,hk_v              ; x >= 256: fuera de la pantalla
-                push hl
-                ld d,0
-                ld e,l
-                add hl,hl
-                add hl,hl
-                add hl,de               ; 5 * x
-                srl h
-                rr l
-                srl h
-                rr l
-                srl h
-                rr l
-                ld de,PROW
-                add hl,de
-                ld a,(hl)
-                ld hl,hw_pri
-                cp (hl)
-                pop hl
-                jr c,hk_v
-                jr nz,hk_n              ; la del fondo es mayor
-hk_v:           inc c
-hk_n:           inc hl
-                djnz hk_l
-                ld a,c
-                ret
-
-; A = fila de la imagen, PG_PRI2 en el bloque 7 -> PROW (prioridad de los pixeles de AGI hasta hw_plim)
-pd_row:         ld l,a
-                ld h,0
-                add hl,hl
-                ld de,$E000
-                add hl,de
-                ld e,(hl)
-                inc hl
-                ld d,(hl)
-                ld hl,$E000+336
-                add hl,de
-                ld de,PROW
-pd_l:           ld a,(hl)
-                inc hl
-                ld b,a
-                rrca
-                rrca
-                rrca
-                rrca
-                and 15
-                ld c,a
-                ld a,b
-                and 15
-                inc a
-                ld b,a
-                ld a,c
-pd_f:           ld (de),a
-                inc de
-                djnz pd_f
-                ld a,(hw_plim)
-                ld c,a
-                ld a,e
-                cp c
-                jr c,pd_l
-                ret
-
 ; Objeto sin cambios desde el ciclo anterior (mismos datos y mismo primer sprite): se salta sus sprites; si no, se arma y se anota
 spr_obj:        ld a,(sk)
                 ld (hw_sk0),a
@@ -1063,12 +994,10 @@ rpri:           defb 0
 rn:             defb 0
 hw_k:           defb 0
 hw_n:           defb 0
-hq_cnt:         defb 0
 hq_k:           defb 0
 hw_mm:          defb 0
 hw_graw:        defb 0
 PCNT:           defs 16
-ORD:            defs NOBJ
 hw_bx0:         defb 0
 hw_bx1:         defb 0
 hw_mk:          defb 0
@@ -1078,9 +1007,7 @@ hw_gn:          defb 0
 hw_gp:          defw 0
 hw_gb:          defw 0
 hw_mkp:         defw 0
-hw_pri:         defb 0
 hw_X0:          defb 0
-hw_plim:        defb 0
 hw_sk0:         defb 0
 hg_r:           defb 0
 hg_py:          defb 0
@@ -1089,16 +1016,8 @@ hg_tp:          defw 0
 hg_j:           defb 0
 MK:             defs 64
 HWI:            defs 64
-cv_n:           defb 0
-cv_mt:          defb 0
 hw_base:        defb 0
 hw_slot:        defb 0
-cv_w:           defb 0
-cv_h:           defb 0
-cv_fl:          defb 0
-cv_hl:          defb 0
-cv_hh:          defb 0
-cv_p:           defw 0
 hw_h:           defb 0
 hw_i:           defb 0
 hw_p:           defw 0
