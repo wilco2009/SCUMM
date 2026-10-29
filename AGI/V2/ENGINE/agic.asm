@@ -716,52 +716,104 @@ fxd:            defb 0
 fxc:            defb 0
 fxs:            defb 0
 
-; follow.ego del objeto IX: llega si |dx| <= 2*paso y |dy| <= paso (Z, con la bandera puesta y el movimiento parado); si no pone la direccion hacia el ego (NZ)
-t_follow:
-                ld a,(ix+O_X)           ; follow.ego: llega si |dx| <= 2*paso y |dy| <= paso
-                ld b,a
-                ld a,(OBJ+O_X)
-                call absd
-                ld e,a
-                ld d,0
-                ld l,(ix+O_STEP)
-                ld h,0
-                add hl,hl
-                or a
-                sbc hl,de
-                jr c,tf_2
+; motionFollowEgo de ScummVM para el objeto IX (follow_stepSize en MSTEP, follow_count en WANDER): pone O_DIR (centros en x; llega con dir 0 y bandera;
+; si no se movio en el paso anterior (F2 bit 3) tira al azar un rato) y el nucleo sigue con el paso
+t_follow:       push ix
+                ld ix,OBJ
+                call obj_cell
+                ld a,d
+                srl a
+                add a,(ix+O_X)
+                ld (tf_ex),a
                 ld a,(ix+O_Y)
+                ld (tf_ey),a
+                pop ix
+                call obj_cell
+                ld a,d
+                srl a
+                add a,(ix+O_X)
+                ld (tf_ox),a
+                ld a,(ix+O_Y)
+                ld (tf_oy),a
+                ld a,(tf_ex)
+                ld hl,tf_ox
+                sub (hl)
+                ld e,(ix+O_MSTEP)
+                call mo_cs2
                 ld b,a
-                ld a,(OBJ+O_Y)
-                call absd
+                ld a,(tf_ey)
+                ld hl,tf_oy
+                sub (hl)
+                ld e,(ix+O_MSTEP)
+                call mo_cs2
                 ld c,a
-                ld a,(ix+O_STEP)
-                cp c
-                jr c,tf_2
+                ld a,(ix+O_DIR)
+                push af
+                call setdir
+                ld a,(ix+O_DIR)
+                ld (tf_d),a             ; direccion hacia el ego
+                pop af
+                ld (ix+O_DIR),a
+                ld a,(tf_d)
+                or a
+                jr nz,tf_n0
+                ld (ix+O_DIR),a         ; ya esta: para y pone la bandera
+                ld (ix+O_MOTION),a
                 ld a,(ix+O_MFLAG)
                 ld l,a
                 ld h,FLAGS>>8
                 ld (hl),1
+                ret
+tf_n0:          ld a,(ix+O_WANDER)
+                cp 255
+                jr nz,tf_c1
                 xor a
-                ld (ix+O_MOTION),a
+                ld (ix+O_WANDER),a
+                jr tf_cnt
+tf_c1:          bit 3,(ix+O_F2)
+                jr z,tf_cnt
+                call rand8              ; no se movio: rumbo al azar (1-8) durante un rato
+                and 7
+                inc a
+                ld (ix+O_DIR),a
+                ld a,(tf_oy)
+                ld b,a
+                ld a,(tf_ey)
+                call absd
+                ld l,a
+                ld a,(tf_ox)
+                ld b,a
+                ld a,(tf_ex)
+                call absd
+                add a,l
+                rra                     ; (|dy| + |dx|) / 2 (el acarreo es el bit 9)
+                ld c,(ix+O_STEP)
+                cp c
+                jr nc,tf_r
+                ld (ix+O_WANDER),c
+                ret
+tf_r:           sub c
+                inc a
+                ld b,a
+                call rand8
+                call rem8
+                add a,(ix+O_STEP)
+                ld (ix+O_WANDER),a
+                ret
+tf_cnt:         ld a,(ix+O_WANDER)
+                or a
+                jr nz,tf_dec
+                ld a,(tf_d)
                 ld (ix+O_DIR),a
                 ret
-tf_2:          ld a,(OBJ+O_X)
-                push ix
-                pop hl
-                ld de,O_X
-                add hl,de
-                call sign3
-                ld b,a
-                ld a,(OBJ+O_Y)
-                push bc
-                push ix
-                pop hl
-                ld de,O_Y
-                add hl,de
-                call sign3
-                pop bc
-                ld c,a
-                call setdir
-                or 1                    ; NZ: sigue con el paso
+tf_dec:         sub (ix+O_STEP)
+                jp p,tf_s
+                xor a
+tf_s:           ld (ix+O_WANDER),a
                 ret
+
+tf_ex:          defb 0
+tf_ey:          defb 0
+tf_ox:          defb 0
+tf_oy:          defb 0
+tf_d:           defb 0

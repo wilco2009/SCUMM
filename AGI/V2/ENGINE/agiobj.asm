@@ -578,13 +578,14 @@ h_follow_ego:   call argobj
                 ld l,a
                 ld h,FLAGS>>8
                 ld (hl),0
-                ld a,(ix+O_STEP)
-                ld (ix+O_MSTEP),a
-                ld a,(ARGS+1)
-                or a
-                jr z,fe_1
-                ld (ix+O_STEP),a
-fe_1:           set 4,(ix+O_F1)
+                ld a,(ARGS+1)           ; follow_stepSize (en MSTEP) = el mayor de los dos pasos; follow_count (en WANDER) = 255
+                cp (ix+O_STEP)
+                jr z,fe_s
+                jr nc,fe_1
+fe_s:           ld a,(ix+O_STEP)
+fe_1:           ld (ix+O_MSTEP),a
+                ld (ix+O_WANDER),255
+                set 4,(ix+O_F1)
                 ret
 h_wander:       call argobj
                 ld (ix+O_MOTION),1
@@ -715,7 +716,19 @@ uo_m:           bit 4,(ix+O_F1)
                 jp p,uo_c
 uo_mv:          ld a,(ix+O_STIME)
                 ld (ix+O_SCOUNT),a
+                ld e,(ix+O_X)
+                ld d,(ix+O_Y)
+                push de
                 call move
+                pop de
+                res 3,(ix+O_F2)         ; fDidntMove: el paso no lo movio
+                ld a,(ix+O_X)
+                cp e
+                jr nz,uo_c
+                ld a,(ix+O_Y)
+                cp d
+                jr nz,uo_c
+                set 3,(ix+O_F2)
 uo_c:           bit 3,(ix+O_F1)
                 jr z,uo_e
                 dec (ix+O_CCOUNT)
@@ -780,9 +793,8 @@ move:           ld a,(ix+O_MOTION)
                 jp z,mv_obj
                 cp 2
                 jr nz,mv_w
-                ld hl,OVC_FOLLOW        ; follow.ego (direccion o llegada) en el overlay C: Z = ha llegado
+                ld hl,OVC_FOLLOW        ; follow.ego (direccion o llegada) en el overlay C
                 call call_c
-                ret z
                 jr mv_gen
 mv_w:           cp 1
                 jr nz,mv_gen
@@ -960,12 +972,12 @@ mo_nv:          or a
                 jr mv_stop
 
 ; A = diferencia (8 bits sin signo con acarreo = negativa) -> A = checkStep(delta, paso): 0 si delta <= -paso, 2 si delta >= paso, 1 en otro caso
-mo_cs:          ld l,a
+mo_cs:          ld e,(ix+O_STEP)
+mo_cs2:         ld l,a                  ; (E = paso)
                 ld h,0
                 jr nc,cs_p
                 dec h
-cs_p:           ld e,(ix+O_STEP)
-                ld d,0
+cs_p:           ld d,0
                 push hl
                 add hl,de
                 bit 7,h

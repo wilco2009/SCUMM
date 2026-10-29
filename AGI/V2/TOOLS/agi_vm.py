@@ -62,6 +62,7 @@ class Obj:
         self.mflag = 0
         self.wander = 0
         self.static = False             # add.to.pic: objeto fijo
+        self.dm = False                 # fDidntMove: el ultimo paso no lo movio
 
 
 class Interp:
@@ -759,6 +760,7 @@ class Interp:
             o.ctype = 0
             o.water = 0
             o.static = False
+            o.dm = False
 
     def c_unanimate_all(self):
         for o in self.objs.values():
@@ -972,9 +974,8 @@ class Interp:
     def c_follow_ego(self, n, step, f):
         o = self.obj(n)
         o.motion, o.mflag = 2, f
-        o.mstep = o.step
-        if step:
-            o.step = step
+        o.mstep = o.step if step <= o.step else step      # follow_stepSize
+        o.wander = 255                                    # follow_count
         self.flags[f] = 0
         o.mon = True
 
@@ -1539,11 +1540,42 @@ class Interp:
     def check_step(delta, step):
         return 0 if -step >= delta else 2 if step <= delta else 1
 
+    def get_dir(self, ox, oy, dx, dy, step):
+        """getDirection de ScummVM"""
+        sx = self.check_step(dx - ox, step) - 1
+        sy = self.check_step(dy - oy, step) - 1
+        return [d for d in range(9) if DX[d] == sx and DY[d] == sy][0]
+
+    def follow_dir(self, o):
+        """motionFollowEgo de ScummVM (follow_stepSize en mstep, follow_count en wander): centros en x, llegada con dir 0 y, si no se movio en el paso anterior, rumbo al azar un rato."""
+        ego = self.obj(EGO)
+        ex, ey = ego.x + self.cell(ego)[0] // 2, ego.y
+        ox, oy = o.x + self.cell(o)[0] // 2, o.y
+        d = self.get_dir(ox, oy, ex, ey, o.mstep)
+        if d == 0:
+            o.dir = 0
+            o.motion = 0
+            self.flags[o.mflag] = 1
+            return
+        if o.wander == 255:
+            o.wander = 0
+        elif o.dm:
+            o.dir = 1 + self.rand8() % 8
+            dist = (abs(ey - oy) + abs(ex - ox)) // 2
+            if dist < o.step:
+                o.wander = o.step
+            else:
+                o.wander = o.step + self.rand8() % (dist - o.step + 1)
+            return
+        if o.wander:
+            k = (o.wander - o.step) & 255
+            o.wander = 0 if k >= 128 else k
+        else:
+            o.dir = d
+
     def move_obj_dir(self, k, o):
         """motionMoveObj de ScummVM: la direccion sale de checkStep en cada eje (sin aterrizar exacto); con 0 el move.obj acaba."""
-        sx = self.check_step(o.tx - o.x, o.step) - 1
-        sy = self.check_step(o.ty - o.y, o.step) - 1
-        o.dir = [d for d in range(9) if DX[d] == sx and DY[d] == sy][0]
+        o.dir = self.get_dir(o.x, o.y, o.tx, o.ty, o.step)
         if k == EGO:
             self.vars[6] = o.dir
         if o.dir == 0:
@@ -1564,15 +1596,7 @@ class Interp:
             if o.motion != 3:
                 return
         if o.motion == 2:
-            ego = self.obj(EGO)
-            if abs(o.x - ego.x) <= o.step * 2 and abs(o.y - ego.y) <= o.step:
-                self.flags[o.mflag] = 1
-                o.motion = 0
-                o.dir = 0
-                return
-            sx = (ego.x > o.x) - (ego.x < o.x)
-            sy = (ego.y > o.y) - (ego.y < o.y)
-            o.dir = [d for d in range(9) if DX[d] == sx and DY[d] == sy][0]
+            self.follow_dir(o)
         if o.motion == 1:
             o.wander -= 1
             if o.wander <= 0 or o.dir == 0:
@@ -1648,7 +1672,9 @@ class Interp:
                 o.scount -= 1
                 if o.scount <= 0:
                     o.scount = o.stime
+                    old = o.x, o.y
                     self.move(k, o)
+                    o.dm = (o.x, o.y) == old        # fDidntMove (showSprites)
             if o.cycling:
                 o.ccount -= 1
                 if o.ccount <= 0:
@@ -1662,7 +1688,7 @@ class Interp:
     def objbytes(self, o):
         b = lambda x: 1 if x else 0
         f1 = b(o.anim) | b(o.drawn) << 1 | b(o.upd) << 2 | b(o.cycling) << 3 | b(o.mon) << 4 | b(o.fixpri) << 5 | b(o.fixloop) << 6 | b(o.ign_horizon) << 7
-        f2 = b(o.ign_blocks) | b(o.ign_objs) << 1 | b(o.static) << 2
+        f2 = b(o.ign_blocks) | b(o.ign_objs) << 1 | b(o.static) << 2 | b(o.dm) << 3
         return [f1, f2, o.view, o.loop, o.cel, o.x & 255, o.y & 255, o.pri & 255, o.ctype, o.ctime & 255, o.ccount & 255, o.cflag,
                 o.motion, o.step & 255, o.stime & 255, o.scount & 255, o.dir, o.water, o.tx & 255, o.ty & 255, o.mstep & 255, o.mflag,
                 o.wander & 255]
