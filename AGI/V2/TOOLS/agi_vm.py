@@ -1388,7 +1388,7 @@ class Interp:
             sig = False
             for i in range(w):
                 c = pri[y * ag.W + x + i]
-                if c == 0 and not o.ign_blocks:
+                if c == 0:                      # la linea 0 bloquea siempre; ignore.blocks solo salta las 1 y el rectangulo
                     return False
                 if c == 1 and not o.ign_blocks and o is self.objs.get(EGO):
                     return False
@@ -1400,7 +1400,7 @@ class Interp:
                     sig = True
             for mx, my, mw, mc in self.margins:
                 if y == my and x < mx + mw and mx < x + w:
-                    if mc == 0 and not o.ign_blocks:
+                    if mc == 0:
                         return False
                     if mc == 1 and not o.ign_blocks and o is self.objs.get(EGO):
                         return False

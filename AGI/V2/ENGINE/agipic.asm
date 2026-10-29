@@ -273,9 +273,7 @@ pic_check:      ld a,(picvalid)
                 call mg_probe
                 ld a,(pr_has0)
                 or a
-                jr z,pk_1
-                bit 0,(ix+O_F2)
-                jr z,pk_no              ; un 0 bloquea salvo a quien ignora bloques
+                jr nz,pk_no             ; un 0 bloquea siempre (ignore.blocks solo salta los 1 y el rectangulo de block)
 pk_1:           ld a,(curk)             ; un 1 bloquea al ego que no ignora bloques
                 or a
                 jr nz,pk_1b
