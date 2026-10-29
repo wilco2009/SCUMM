@@ -159,3 +159,5 @@ pd_f:           ld (de),a
                 jr c,pd_l
                 ret
 
+
+SP_MAX          equ 8

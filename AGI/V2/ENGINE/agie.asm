@@ -7,6 +7,8 @@
                 org $2000
                 include "agires.inc"
 HQ_FIX          equ $2040
+SPN_FIX         equ HQ_FIX+1+NOBJ+NOBJ
+SPH_FIX         equ SPN_FIX+1
 
                 jp t_bgsave             ; OVE_BGSAVE
                 jp sw_run               ; OVE_RUN

@@ -1037,7 +1037,6 @@ SHD:            defs 8*64
 ;  t_addpic sube PG_PMX. SPH: cabeceras de 8 bytes (fila de la imagen de la fila 0 de la celda, word con signo; filas; prioridad; puntero a los pares; 2 libres);
 ;  SPP: un par (ax0, ax1) por fila, vacio = (255, 0). Se vacian con draw.pic y new.room.
 ; ---------------------------------------------------------------------
-SP_MAX          equ 8
 SP_ROWS         equ 512
 
 t_spclr:        xor a
@@ -1422,7 +1421,6 @@ ps_n:           pop bc
                 pop iy
                 ret
 
-sp_n:           defb 0
 sp_u:           defw 0
 ap_h:           defb 0
 ap_n:           defb 0
@@ -1440,5 +1438,4 @@ ap_r0:          defw 0
 ap_pp:          defw 0
 ex_min:         defs 128
 ex_max:         defs 128
-SPH:            defs 8*SP_MAX
 SPP:            defs 2*SP_ROWS

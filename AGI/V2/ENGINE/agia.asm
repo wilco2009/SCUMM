@@ -23,6 +23,8 @@ HQ_FIX          equ $2040
 hq_cnt:         defb 0
 ORD:            defs NOBJ
 VPG:            defs NOBJ
+sp_n:           defb 0                  ; objetos fijos (add.to.pic): cuantos y sus cabeceras (agihws.asm)
+SPH:            defs 64                 ; 8 * SP_MAX
 
 ; ---------------------------------------------------------------------
 ;  Teclado del ZX81

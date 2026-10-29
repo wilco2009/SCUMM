@@ -196,15 +196,8 @@ class Interp:
         mas abajo en la pantalla tapa al de mas arriba) y a igual y por numero."""
         return [n for p, y, n in sorted((o.pri, 0 if o.static else o.y, n) for n, o in self.objs.items() if o.anim and o.drawn and o.pri < 16)]
 
-    def hw_sprites(self):
-        """Los sprites del hardware que el Z80 tiene que dejar puestos: lista de 64 con (x, y, color[8], dato[8], mascara[8]) o None (apagado); el 0 es el de abajo.
-        Los objetos con anim y drawn van de menor a mayor prioridad (a igual prioridad, por numero). Cada uno reserva tantos sprites seguidos como el
-        mayor numero de mosaicos de una celda de su bucle (asi los demas no cambian de sprite cuando cambia su celda o los tapa el fondo) y el mosaico j de
-        su celda va al sprite reservado j. Coordenadas del hardware (+32); un mosaico que cae entero fuera de la pantalla, o que el fondo tapa entero, deja su
-        sprite apagado.
-        Prioridad frente al fondo: un pixel del sprite solo se ve si la prioridad del objeto >= la del plano de prioridad de la imagen (agi2hr.sprite_priority) en
-        el pixel de AGI que ocupa ese pixel del HiRes ((5 * x) >> 3); se quita de la mascara."""
-        import agi2spr
+    def pri_plane(self):
+        """Plano de prioridad de los pixeles de AGI (160 x 168, agi2hr.sprite_priority) con el rango de cada objeto fijo (add.to.pic) subido a su prioridad; None sin imagen."""
         import agi2hr
         pri2 = agi2hr.sprite_priority(self.pic.pri) if self.pic is not None else None
         if pri2 is not None:
@@ -215,6 +208,19 @@ class Interp:
                         for ax in range(a0, a1 + 1):
                             if pri2[row * 160 + ax] < pri:
                                 pri2[row * 160 + ax] = pri
+        return pri2
+
+    def hw_sprites(self):
+        """Los sprites del hardware que el Z80 tiene que dejar puestos: lista de 64 con (x, y, color[8], dato[8], mascara[8]) o None (apagado); el 0 es el de abajo.
+        Los objetos con anim y drawn van de menor a mayor prioridad (a igual prioridad, por numero). Cada uno reserva tantos sprites seguidos como el
+        mayor numero de mosaicos de una celda de su bucle (asi los demas no cambian de sprite cuando cambia su celda o los tapa el fondo) y el mosaico j de
+        su celda va al sprite reservado j. Coordenadas del hardware (+32); un mosaico que cae entero fuera de la pantalla, o que el fondo tapa entero, deja su
+        sprite apagado.
+        Prioridad frente al fondo: un pixel del sprite solo se ve si la prioridad del objeto >= la del plano de prioridad de la imagen (agi2hr.sprite_priority) en
+        el pixel de AGI que ocupa ese pixel del HiRes ((5 * x) >> 3); se quita de la mascara."""
+        import agi2spr
+        import agi2hr
+        pri2 = self.pri_plane()
         out = [None] * 64
         k = 0
         if self.box is not None or self.menu_ui is not None or self.txtm:
@@ -289,10 +295,10 @@ class Interp:
         """Los objetos con celdas anchas (mas de SW_TILES mosaicos en una fila) no van en sprites: se dibujan en el bitmap, de menor a mayor prioridad, sobre la
         imagen (con su texto). Su borde izquierdo esta en el pixel HiRes lo(x) = 8*cx0 + s; cada fila de cada mosaico (en orden) aporta a la celda cx0 + tx la parte
         desplazada s a la derecha (A) y, si s > 0, a la siguiente la que se sale (B). Una parte con las 8 posiciones opacas escribe el bitmap y el atributo de la
-        celda tal cual; si no, pone sus pixeles uno a uno (agi_text.plot_hr) sobre lo que haya. Los pixeles que tapa la prioridad de la imagen no se ponen (sprite_priority, como hw_sprites; no los objetos fijos). (agisw.asm lo hace por lineas, con un bufer, sin borrar nada.)"""
+        celda tal cual; si no, pone sus pixeles uno a uno (agi_text.plot_hr) sobre lo que haya. Los pixeles que tapa la prioridad de la imagen no se ponen (pri_plane, como hw_sprites, con los rangos de los objetos fijos). (agisw.asm lo hace por lineas, con un bufer, sin borrar nada.)"""
         import agi2spr
         import agi2hr
-        pri2 = agi2hr.sprite_priority(self.pic.pri) if self.pic is not None else None   # sin los rangos de los objetos fijos (spans): el Z80 usa solo el plano
+        pri2 = self.pri_plane()
         for n in self.draw_order():
             if True:
                 o = self.objs[n]
@@ -330,8 +336,8 @@ class Interp:
                         for cell, pm, pp in parts:
                             if pm == 0 or cell > 31:
                                 continue
-                            if pri2 is not None and not o.static and 8 <= line < 176:
-                                ok = 0      # el fondo tapa los pixeles de prioridad mayor (como en los sprites; los objetos fijos no)
+                            if pri2 is not None and 8 <= line < 176:
+                                ok = 0      # el fondo tapa los pixeles de prioridad mayor (como en los sprites)
                                 for bit in range(8):
                                     hx = cell * 8 + bit
                                     if pri2[(line - 8) * 160 + ((5 * hx) >> 3)] <= o.pri:

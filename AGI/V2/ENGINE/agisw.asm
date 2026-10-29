@@ -754,10 +754,7 @@ sw_apply:       ld a,(sa_n)
                 ld a,(ix+O_PRI)
                 ld (hw_pri),a
                 ld a,(sw_pv)
-                bit 2,(ix+O_F2)         ; los objetos fijos (add.to.pic) no los tapa el fondo (en los sprites su propio rango sube la prioridad)
-                jr z,sa_pq
-                xor a
-sa_pq:          ld (sw_pm),a
+                ld (sw_pm),a
                 ld l,(ix+O_Y)           ; t = y - (y_obj - h + 9)
                 ld h,0
                 ld a,(cv_h)
@@ -893,6 +890,68 @@ sa_nx:          ld hl,(sa_p)
 
 ; sp_cell (0-31), sp_m, sp_p, sp_col (tinta*16 + papel) al bufer
 ; La prioridad de la imagen en la linea sw_y -> PROW (sw_pv = 1), si hay imagen
+; Los rangos de los objetos fijos (add.to.pic) en la fila sw_py -> PROW (el maximo con lo que hubiera), como pd_patch (agihws.asm): sus datos, en la pagina del A1.
+; PG_PRI2 esta en el bloque 7: se cambia por la del A1 un momento
+sw_patch:       ld a,PG_OVL
+                call map7
+                ld a,($E000+SPN_FIX-$2000)
+                or a
+                jr z,swp_e
+                push iy
+                ld b,a
+                ld iy,$E000+SPH_FIX-$2000
+swp_l:          push bc
+                ld a,(sw_py)
+                ld l,a
+                ld h,0
+                ld e,(iy+0)
+                ld d,(iy+1)
+                or a
+                sbc hl,de               ; fila - fila 0 de la celda
+                bit 7,h
+                jr nz,swp_n
+                ld a,h
+                or a
+                jr nz,swp_n
+                ld a,l
+                cp (iy+2)
+                jr nc,swp_n
+                ld l,a
+                ld h,0
+                add hl,hl
+                ld e,(iy+4)
+                ld d,(iy+5)
+                add hl,de
+                ld de,$C000             ; direccion del A1 -> su pagina en el bloque 7
+                add hl,de
+                ld a,(hl)               ; ax0
+                inc hl
+                ld c,a
+                ld a,(hl)               ; ax1
+                cp c
+                jr c,swp_n              ; vacio
+                sub c
+                inc a
+                ld b,a
+                ld e,c
+                ld d,0
+                ld hl,PROW
+                add hl,de
+                ld d,(iy+3)             ; prioridad
+swp_f:          ld a,(hl)
+                cp d
+                jr nc,swp_k
+                ld (hl),d
+swp_k:          inc hl
+                djnz swp_f
+swp_n:          pop bc
+                ld de,8
+                add iy,de
+                djnz swp_l
+                pop iy
+swp_e:          ld a,PG_PRI2
+                jp map7
+
 sw_prow:        xor a
                 ld (sw_pv),a
                 ld a,(picvalid)
@@ -909,7 +968,9 @@ sw_prow:        xor a
                 ld a,PG_PRI2
                 call map7
                 ld a,e
+                ld (sw_py),a
                 call pd_row
+                call sw_patch
                 call map7_back
                 ld a,1
                 ld (sw_pv),a
@@ -1102,6 +1163,7 @@ sc_pri:         defb 0
 sc_k:           defb 0
 sw_y:           defb 0
 sw_pv:          defb 0
+sw_py:          defb 0
 sw_pm:          defb 0
 sp_lo:          defb 0
 sp_hi:          defb 0
