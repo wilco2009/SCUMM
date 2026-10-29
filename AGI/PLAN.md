@@ -151,3 +151,13 @@ Sonido: AGI solo reproduce un sonido a la vez (`sound()` para el que suene), asi
 - Prueba: `AGI_BOOT="v80=6,room=6" sh test_vm.sh KQ1 40 ""` (gancho de pruebas `agi_read.testboot`: inyecta `if (v0 == 0) { v80 = 6; new.room(6) }` al principio de la logica 0, en el modelo y en `agi2log.py`): Z80 y modelo iguales, con la habichuela.
 - El nucleo queda en 11001 de 11008 bytes.
 
+## Limitaciones conocidas y rehacer el overlay A (2026-10-29)
+
+**Pendiente probablemente inevitable: partir el overlay A en dos y dar prioridad por pixel al dibujo por software.** El overlay A (sprites, rotulos, teclado) esta lleno (8154 de 8192 bytes) y el nucleo casi (10989 de 11008).
+
+- **Sintoma (SQ1, sala 9):** las letras del cartel de neon se salen de la ventana del cartel. Son los objetos `o2` y `o3` (vistas 17 y 39, celdas de 56-64 px = 7-8 mosaicos por fila, prioridad fija 4); como pasan de `SW_TILES` (6) se dibujan por software, y ese camino NO compara con el plano de prioridad de la imagen (los sprites por hardware si). En el dibujo, en las filas y = 48-50 la prioridad vale 4 solo en la ventana (x = 51-87 en pixeles de AGI) y 5, 11 o 15 fuera: el marco tapa las letras que salen, como en AGI.
+- **Por que no cabe hoy:** el dibujo por software compone cada linea sobre la copia limpia de la imagen (paginas `PG_BGB`/`PG_BGA` en el bloque 7) y la mascara de prioridad (`PG_PRI2`, `hg_okb`/`PROW`) usa la misma ventana: habria que alternar mapeos por linea; y el codigo no cabe en los 38 bytes libres.
+- **Idea de solucion:** overlay A1 (teclado, sprites) y A2 (rotulos por software + mascara de prioridad por pixel: `sw_part` pasa `m & hg_okb(8 * celda)` con la prioridad del objeto y el PROW de la linea decodificado); llamadas entre ellos solo desde el nucleo (regla de los overlays: ninguno llama a otro). Alternativa barata y solo para ese cartel: tabla de ventana visible por vista en el conversor.
+- **Otros sintomas del mismo problema:** las vistas de varios mosaicos por fila que se dibujan por software no se ocultan detras de lo que tenga mas prioridad (los sprites por hardware, que pintan encima, tampoco quedan detras de los objetos por software de mayor prioridad).
+- **Limite de 12 sprites por linea (hardware):** lo que sobra desaparece (el de indice mas bajo, y el personaje si esta por debajo en el orden). Parche por juego: `agi2spr.FORCE_SW` fuerza vistas a software; SQ1 sala 6: vista 175 (3 cupulas de 5 mosaicos por fila). Cada sala parecida necesitara su entrada.
+
