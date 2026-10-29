@@ -361,6 +361,8 @@ sh_y:           ld d,a
                 ret
 sh_n:           defb 0
 sh_pat:         defb 4,2, 4,2, 0,0, 0,0, 2,3, 2,3, 0,0, 0,0
+h_clear_text_rect: ld hl,OVB_CLRRECT      ; (overlay B)
+                jp call_b
 h_clear_lines:  ld hl,OVB_CLEAR
                 jp call_b
 h_set_text_attribute: ld hl,OVB_ATTR

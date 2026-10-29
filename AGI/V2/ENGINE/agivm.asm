@@ -107,6 +107,7 @@ OVB_DLGDONE     equ $203C
 OVB_MENURESET   equ $203F
 OVB_DLGINV      equ $2042
 OVB_GSDRAW      equ $2045
+OVB_CLRRECT     equ $2048
 OVC_ECHO        equ $2009
 OVC_CANCEL      equ $200C
 OVC_CURSOR      equ $200F
@@ -123,6 +124,7 @@ OVC_PRE         equ $2030
 OVC_CYCLES      equ $2033
 OVC_CLIP        equ $2036
 OVC_CMPSTR      equ $2039
+OVC_NEWROOM     equ $203C
 OVC_TEXTSCR     equ $2015
 OVD_READ        equ $2000               ; overlay D (ficheros de guardar/cargar): con call_d
 OVD_PREP        equ $2003
@@ -501,7 +503,22 @@ ll_slot:        ld (curslot),a
                 ld d,LGSLOT>>8
                 ld a,$FF
                 ld (de),a
-ll_free:        ld a,(curlg)
+ll_free:        ld a,(curslot)          ; logica nueva en la ranura: su sIP al principio
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,slot_sip
+                add hl,de
+                xor a
+                ld (hl),a
+                inc hl
+                ld (hl),a
+                ld a,(curslot)
+                ld e,a
+                ld d,0
+                ld hl,slot_lg
+                add hl,de
+                ld a,(curlg)
                 ld (hl),a
                 ld l,a
                 ld h,LGSLOT>>8
@@ -560,8 +577,36 @@ ll_get:         ld e,(hl)
 ll_set:         ld hl,LWIN
                 add hl,de
                 ld (lend),hl
+                ld a,(curslot)          ; empieza donde dijo set.scan.start (0 si no)
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,slot_sip
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
                 ld hl,LWIN
+                add hl,de
                 ld (ip),hl
+                ret
+; set.scan.start / reset.scan.start: el sIP de la logica en curso (offset en su codigo)
+h_set_scan_start: ld hl,(ip)
+                ld de,LWIN
+                or a
+                sbc hl,de
+                ex de,hl
+                jr ss_st
+h_reset_scan_start: ld de,0
+ss_st:          ld a,(curslot)
+                add a,a
+                ld c,a
+                ld b,0
+                ld hl,slot_sip
+                add hl,bc
+                ld (hl),e
+                inc hl
+                ld (hl),d
                 ret
 
 ; Z si la ranura A la usa algun marco de la pila (o la logica en curso). Conserva A.
@@ -824,18 +869,8 @@ do_new_room:    xor a                   ; la logica 0 se reinicia sin la linea t
                 call h_stop_sound
                 ld a,(VARS+0)
                 ld (VARS+1),a
-                ld ix,OBJ               ; newRoom: todos (tambien el ego) con paso, tiempo de paso y de ciclo a 1
-                ld de,32
-                ld b,NOBJ
-                ld a,1
-nr_s:           set 2,(ix+O_F1)         ; (fUpdate)
-                ld (ix+O_STEP),a
-                ld (ix+O_STIME),a
-                ld (ix+O_SCOUNT),a
-                ld (ix+O_CTIME),a
-                ld (ix+O_CCOUNT),a
-                add ix,de
-                djnz nr_s
+                ld hl,OVC_NEWROOM       ; newRoom: todos los objetos (tambien el ego) con paso y tiempos a 1, y las logicas (menos la 0) vuelven a su principio
+                call call_c
                 ld ix,OBJ+32            ; todos menos el ego dejan de estar animados y dibujados
                 ld de,32
                 ld b,NOBJ-1
@@ -1856,6 +1891,7 @@ c_orm:          defb 0
 c_orres:        defb 0
 c_neg:          defb 0
 slot_lg:        defs NSLOTS
+slot_sip:       defs NSLOTS*2
 slot_sz:        defs NSLOTS*2
 SNDP:           defs 8*3
 LSTK:           defs MAXDEPTH*6

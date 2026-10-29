@@ -26,6 +26,7 @@
                 jp t_cycles             ; OVC_CYCLES
                 jp clip_view            ; OVC_CLIP
                 jp t_cmpstr             ; OVC_CMPSTR
+                jp t_newroom            ; OVC_NEWROOM
 
 TXT             equ TMPM
 
@@ -39,6 +40,11 @@ t_restart:      ld hl,$ACE1             ; la semilla de los numeros aleatorios, 
                 ld de,LGSLOT+1
                 ld bc,255
                 ld (hl),$FF
+                ldir
+                ld hl,slot_sip
+                ld de,slot_sip+1
+                ld bc,NSLOTS*2-1
+                ld (hl),0
                 ldir
                 ld hl,slot_lg
                 ld de,slot_lg+1
@@ -1150,4 +1156,25 @@ on_w:           ld (de),a
                 jr ov_norm
 on_e:           xor a
                 ld (de),a
+                ret
+
+; newRoom: todos los objetos (tambien el ego) actualizan, con paso y tiempos a 1; las logicas que no son la 0 vuelven a empezar por el principio (set.scan.start)
+t_newroom:      ld ix,OBJ
+                ld de,32
+                ld b,NOBJ
+                ld a,1
+tn_l:           set 2,(ix+O_F1)         ; (fUpdate)
+                ld (ix+O_STEP),a
+                ld (ix+O_STIME),a
+                ld (ix+O_SCOUNT),a
+                ld (ix+O_CTIME),a
+                ld (ix+O_CCOUNT),a
+                add ix,de
+                djnz tn_l
+                ld hl,slot_sip+2
+                ld de,slot_sip+3
+                ld bc,NSLOTS*2-3
+                xor a
+                ld (hl),a
+                ldir
                 ret

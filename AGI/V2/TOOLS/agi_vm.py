@@ -88,6 +88,7 @@ class Interp:
         self.menus = []                 # [titulo, [[texto, controlador, activado]]]
         self.menu_ui = None
         self.margins = []
+        self.scan = {}                  # set.scan.start: por donde empieza cada logica (offset en su codigo)
         self.spans = []                 # add.to.pic: (fila 0 de la celda, prioridad, [(ax0, ax1) por fila])
         self.span_rows = 0
         self.pics_used = set()
@@ -510,7 +511,7 @@ class Interp:
         self.stack.append((code, msgs, n))
         if len(self.stack) > 40:
             raise Stop('recursion de logicas')
-        p = 0
+        p = self.scan.get(n, 0)
         end = len(code)
         try:
             while p < end and not self.exit_all and not self.stop:
@@ -571,6 +572,7 @@ class Interp:
                 p += 1 + len(types)
                 if name == 'return':
                     break
+                self.cur_ip = p
                 self.cmd(name, a)
         finally:
             self.stack.pop()
@@ -635,6 +637,7 @@ class Interp:
     def do_new_room(self, n):
         v = self.vars
         old = v[0]
+        self.scan = {k: v for k, v in self.scan.items() if k == 0}      # newRoom descarga las logicas (la 0 no): su sIP vuelve al principio
         self.flags[2] = 0               # la logica 0 se reinicia sin la linea tecleada ni la palabra desconocida, como en AGI
         self.flags[0] = self.flags[3] = 0       # agua y linea de aviso: las de la sala anterior no valen
         v[9] = 0
@@ -1089,7 +1092,7 @@ class Interp:
 
     def c_show_obj_v(self, v): self.c_show_obj(self.vars[v])
 
-    RESTART_FIELDS = ('vars', 'flags', 'strs', 'objs', 'inv', 'keys', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'horizon', 'blocks', 'pcontrol',
+    RESTART_FIELDS = ('scan', 'vars', 'flags', 'strs', 'objs', 'inv', 'keys', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'horizon', 'blocks', 'pcontrol',
                       'lastpic', 'ovl_n', 'lfsr', 'status_on', 'st_last', 'tfg', 'tbg', 'accept', 'sound_flags', 'input', 'said_done', 'keyq', 'textq', 'ctl', 'wtext', 'ext_bm', 'ext_at', 'box')
 
     def c_restart_game(self):
@@ -1176,6 +1179,16 @@ class Interp:
             self.pic_ops.append(('t', row, col, t, fg, bg))
         else:
             agi_text.put_line(self.ext_bm, self.ext_at, 0, row, col, t, fg, bg)
+
+    def c_set_scan_start(self): self.scan[self.stack[-1][2]] = self.cur_ip         # sIP = cIP: la logica empieza aqui las proximas veces
+    def c_reset_scan_start(self): self.scan.pop(self.stack[-1][2], None)
+
+    def c_clear_text_rect(self, r1, c1, r2, c2, color):
+        """cmdClearTextRect: el rectangulo de texto se rellena con el color (espacios con ese fondo)."""
+        n = min(c2, agi_text.COLS - 1) - c1 + 1
+        if n > 0:
+            for r in range(min(r1, agi_text.ROWS - 1), min(r2, agi_text.ROWS - 1) + 1):
+                self.text_line(r, c1, ' ' * n, color & 15, color & 15)
 
     def c_clear_lines(self, a, b, c):
         for r in range(min(a, agi_text.ROWS - 1), min(b, agi_text.ROWS - 1) + 1):

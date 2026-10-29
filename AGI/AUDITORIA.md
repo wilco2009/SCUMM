@@ -127,7 +127,7 @@ Implementadas distinto:
 12. **CORREGIDO** **`c_distance` (850)** — centros en x, `y` base, tope 254.
 13. **CORREGIDO** **`c_set_view/set_loop/set_cel` (786-810)** — `clipViewCoordinates` tras cambiar de celda.
 14. **CORREGIDO salvo "no usar ranuras de objeto" (sigue usando las ranuras 31-24, maximo 8; el valor 3 de borde no se admite)** **`c_add_to_pic` (671)** — bordes 2 y 3, caja completa (lados y techo) y `pri==0` → `priorityFromY`; no usar ranuras de objeto.
-15. **PARCIAL: hechos recorte superior de move, wander, reposition con recorte a 0, compare.strings con puntuacion y animate.obj sin tocar paso ni tiempos; SIN HACER: bandera 11 (ego invisible), set.scan.start, shake.screen, clear.text.rect** **Menores**: recorte superior de `move`, `wander` (dir 0..8, contador 6..49), `reposition` con recorte a 0, `compare.strings` con puntuación, bandera 11 (ego invisible), `set.scan.start`, `shake.screen`, `clear.text.rect`.
+15. **PARCIAL: hechos recorte superior de move, wander, reposition con recorte a 0, compare.strings con puntuacion y animate.obj sin tocar paso ni tiempos; tambien hechos clear.text.rect, set.scan.start y reset.scan.start (shake.screen ya estaba en el Z80); SIN HACER: bandera 11 (ego invisible: los sprites se componen por hardware y el Z80 no sabe que pixeles tapa la prioridad)** **Menores**: recorte superior de `move`, `wander` (dir 0..8, contador 6..49), `reposition` con recorte a 0, `compare.strings` con puntuación, bandera 11 (ego invisible), `set.scan.start`, `shake.screen`, `clear.text.rect`.
 
 ## Lo que no se pudo comprobar (WebFetch resume)
 - Cuerpos de `checkControlPixel`, `priorityToY`, `motionMoveObj` completo y `fixPosition` más allá del resumen.

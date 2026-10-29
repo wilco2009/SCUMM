@@ -34,6 +34,7 @@
                 jp t_menureset          ; OVB_MENURESET
                 jp t_dlginv             ; OVB_DLGINV
                 jp t_gsdraw             ; OVB_GSDRAW
+                jp t_clear_rect         ; OVB_CLRRECT
 
 TXT             equ TMPM
 
@@ -2185,3 +2186,54 @@ m_start:        defb 0
 
 FONT:
                 include "font6.inc"
+
+; clear.text.rect(fila1, col1, fila2, col2, color): el rectangulo de texto se rellena con el color (espacios con ese fondo); las filas pasan de 23 a 23
+t_clear_rect:   ld a,(ARGS+4)
+                call t_chroma
+                ld (dl_fg),a
+                ld (dl_bg),a
+                ld a,(ARGS+1)
+                ld c,a                  ; C = columna 1
+                ld a,(ARGS+3)
+                cp 42
+                jr c,cr_a
+                ld a,41
+cr_a:           sub c
+                ret c                   ; columna 2 < columna 1: nada
+                inc a
+                ld (cr_n),a
+                ld b,a
+                ld hl,TXT
+                ld a,' '
+cr_s:           ld (hl),a
+                inc hl
+                djnz cr_s
+                ld a,(ARGS+2)
+                cp 24
+                jr c,cr_e
+                ld a,23
+cr_e:           ld (cr_end),a
+                ld a,(ARGS)
+                cp 24
+                jr c,cr_b
+                ld a,23
+cr_b:           ld (cr_row),a
+cr_l:           ld a,(cr_n)
+                ld (dl_n),a
+                ld a,(ARGS+1)
+                ld (dl_col),a
+                ld a,(cr_row)
+                ld (dl_row),a
+                ld hl,TXT
+                ld (dl_ptr),hl
+                call draw_line
+                ld a,(cr_end)
+                ld hl,cr_row
+                cp (hl)
+                ret c
+                ret z
+                inc (hl)
+                jr cr_l
+cr_n:           defb 0
+cr_end:         defb 0
+cr_row:         defb 0
