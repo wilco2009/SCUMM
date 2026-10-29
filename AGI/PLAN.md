@@ -164,3 +164,14 @@ Sonido: AGI solo reproduce un sonido a la vez (`sound()` para el que suene), asi
 
 - **Ayuda de los seis juegos hecha (2026-10-29):** textos en `agi_read.HELP` por juego y logica (SQ1 92, KQ1 92, KQ2 95, SQ2 103, PQ1 102, Larry1 55); `text.screen` limpia con el fondo del texto (`set.text.attribute`, PQ1 y Larry1 usan el suyo) y `graphics` sin imagen dibujada no hace nada. Z80 y modelo iguales en las seis.
 
+
+## Trabajo decidido el 2026-10-29: copiar ScummVM en vez de suponer
+
+Las ultimas salas de SQ1 han fallado una tras otra por reglas del interprete que habiamos supuesto (banderas 0/3 en `new.room`, `ignore.blocks` y la linea de control 0, `block`, relleno de `show.obj`). Decision: **la referencia es el interprete AGI de ScummVM (`engines/agi`), se copia su logica, no se deduce.** Las URLs utiles: `raw.githubusercontent.com/scummvm/scummvm/master/engines/agi/{motion,checks,sprite,view,systemui,saveload,cycle,op_cmd}.cpp`.
+
+1. **Partir el overlay B** (esta al limite, 8188/8192) y, en la misma tanda, **partir el overlay A** (rotulo de neon de SQ1 sala 9: dibujo por software con mascara de prioridad por pixel, ver "Limitaciones conocidas").
+2. **Guardar/cargar como el original** (`systemui.cpp`): lista de ranuras con titulo "Use the arrow keys to select the slot in which you wish to save the game.", despues la descripcion ("How would you like to describe this saved game?", 30 caracteres, con la anterior como texto inicial) y la confirmacion "About to save the game / described as: / in file: ... Press ENTER to continue." Hoy la descripcion es automatica ("Room n  Score m"), invencion nuestra.
+3. **Auditoria del interprete contra ScummVM**, orden de prioridad: ciclo (`cycle.cpp`: orden de actualizacion, banderas por ciclo), movimiento (`motion.cpp`), colisiones y control (`checks.cpp`), `new.room` y `restart` (`op_cmd.cpp`), sprites/prioridades (`sprite.cpp`), texto y menus. Cada diferencia se anota aqui y se corrige en Z80 y en `agi_vm.py` a la vez.
+4. **Comandos no implementados** (los que SQ1 no usa): copiar su logica de `op_cmd.cpp` en vez de inventarla. Hay que listarlos (`agi_vm.noop` y la tabla de `agiin/agiobj`).
+
+Pendiente de la sesion: push de los commits locales (11), `get.string` sin limite de largo (ARGS+4, 18 caracteres).
