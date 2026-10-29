@@ -1807,8 +1807,6 @@ blkf:           defb 0
 curk:           defb 0
 nx:             defw 0
 ny:             defw 0
-mdx:            defw 0
-mdy:            defw 0
 ow:             defb 0
 oh:             defb 0
 qw:             defb 0

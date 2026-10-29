@@ -603,7 +603,9 @@ t_draw:         call argobj
                 ld a,127
                 ld (ix+O_CTIME),a
                 ld (ix+O_CCOUNT),a
-td_nf:          jp t_fixpos
+td_nf:          ld a,(ARGS)
+                ld (curk),a
+                jp t_fixpos
 
 ; fixPosition de ScummVM para el objeto IX: si su sitio no vale (fuera de la pantalla, horizonte, objetos, lineas de control) busca el mas cercano en espiral O, S, E, N
 ; (sin la zona de block); si la espiral cubre toda la pantalla lo deja como estaba. Acaba con set_pri. La posicion de entrada hace de posicion previa en la colision.

@@ -214,7 +214,9 @@ h_position_v:   call argobj
 h_reposition_to: call h_position
                 jr h_fixpos
 h_reposition_to_v: call h_position_v
-h_fixpos:       ld hl,OVC_FIXPOS        ; fixPosition de ScummVM, en el overlay C
+h_fixpos:       ld a,(ARGS)
+                ld (curk),a             ; can_be_here distingue al ego por curk
+                ld hl,OVC_FIXPOS        ; fixPosition de ScummVM, en el overlay C
                 jp call_c
 h_reposition:   call argobj
                 ld a,(ARGS+1)
@@ -554,10 +556,11 @@ mo_1:           ld a,(ARGS+4)
                 ld (hl),0
                 set 4,(ix+O_F1)
                 ld a,(ARGS)
+                ld (curk),a             ; (el update_objects lo vuelve a poner en cada objeto)
                 or a
-                ret nz
+                jr nz,mo_2
                 ld (pctl),a
-                ret
+mo_2:           jp mv_od                ; cmdMoveObj: la direccion se calcula ya
 h_move_obj_v:   call argobj
                 ld a,(ARGS+1)
                 call getv
@@ -749,28 +752,6 @@ s3_0:           ld a,1
 s3_n:           xor a
                 ret
 
-; HL = diferencia con signo; A = paso -> HL acotado a [-A, A]
-clampd:         ld c,a
-                ld b,0
-                bit 7,h
-                jr nz,cd_neg
-                push hl
-                or a
-                sbc hl,bc
-                pop hl
-                ret c
-                ld h,b
-                ld l,c
-                ret
-cd_neg:         call neg_hl
-                push hl
-                or a
-                sbc hl,bc
-                pop hl
-                jr c,cd_n2
-                ld h,b
-                ld l,c
-cd_n2:          jp neg_hl
 neg_hl:         ld a,l
                 cpl
                 ld l,a
@@ -778,19 +759,6 @@ neg_hl:         ld a,l
                 cpl
                 ld h,a
                 inc hl
-                ret
-
-; HL = signo de HL como 0, 1, 2 en A
-hlsign3:        ld a,h
-                or l
-                jr z,hs_0
-                bit 7,h
-                jr nz,hs_n
-                ld a,2
-                ret
-hs_0:           ld a,1
-                ret
-hs_n:           xor a
                 ret
 
 ; B = indice de signo de X (0-2), C = el de Y -> (ix+O_DIR)
@@ -947,12 +915,12 @@ mg_b:           ld a,(bdr)
                 jr nz,mg_o
                 ld a,b
                 ld (VARS+2),a
-                ret
+                jp mg_st
 mg_o:           ld a,(curk)
                 ld (VARS+4),a
                 ld a,b
                 ld (VARS+5),a
-                ret
+                jp mg_st
 
 ; A = -1, 0 o 1 (en DX/DYTAB) -> HL = A * paso del objeto, con signo
 mulstep:        ld l,(ix+O_STEP)
@@ -966,61 +934,75 @@ ms_z:           ld hl,0
                 ret
 
 ; move.obj: un paso hacia (tx, ty)
-mv_obj:         ld a,(ix+O_TX)
+mv_obj:         call mv_od
+                ld a,(ix+O_MOTION)
+                cp 3
+                ret nz                  ; el move.obj ha acabado
+                jp mv_gen
+
+; motionMoveObj de ScummVM: direccion hacia (tx, ty) con checkStep en cada eje (no aterriza exacto); con 0 acaba el move.obj
+mv_od:          ld a,(ix+O_TX)
                 sub (ix+O_X)
-                ld l,a
-                ld h,0
-                jr nc,mo_x1
-                dec h
-mo_x1:          ld a,(ix+O_STEP)
-                call clampd
-                ld (mdx),hl
+                call mo_cs
+                ld b,a
                 ld a,(ix+O_TY)
                 sub (ix+O_Y)
-                ld l,a
-                ld h,0
-                jr nc,mo_y1
-                dec h
-mo_y1:          ld a,(ix+O_STEP)
-                call clampd
-                ld (mdy),hl
-                call hlsign3
+                call mo_cs
                 ld c,a
-                ld hl,(mdx)
-                call hlsign3
-                ld b,a
                 call setdir
-                call pick_loop
-                ld a,(mdx)
-                add a,(ix+O_X)
-                ld (ix+O_X),a
-                ld a,(mdy)
-                add a,(ix+O_Y)
-                ld (ix+O_Y),a
-                ld a,(ix+O_X)
-                cp (ix+O_TX)
-                jr nz,mo_end
-                ld a,(ix+O_Y)
-                cp (ix+O_TY)
-                jr nz,mo_end
+                ld a,(curk)
+                or a
+                ld a,(ix+O_DIR)
+                jr nz,mo_nv
+                ld (VARS+6),a
+mo_nv:          or a
+                ret nz
+                jr mv_stop
+
+; A = diferencia (8 bits sin signo con acarreo = negativa) -> A = checkStep(delta, paso): 0 si delta <= -paso, 2 si delta >= paso, 1 en otro caso
+mo_cs:          ld l,a
+                ld h,0
+                jr nc,cs_p
+                dec h
+cs_p:           ld e,(ix+O_STEP)
+                ld d,0
+                push hl
+                add hl,de
+                bit 7,h
+                jr nz,cs_0
+                ld a,h
+                or l
+                jr z,cs_0
+                pop hl
+                or a
+                sbc hl,de
+                ld a,1
+                ret m
+                inc a
+                ret
+cs_0:           pop hl
+                xor a
+                ret
+
+; Acaba el move.obj del objeto IX (motionMoveObjStop): recupera el paso, pone la bandera y el ego recupera el control del jugador
+mg_st:          ld a,(ix+O_MOTION)
+                cp 3
+                ret nz
+mv_stop:        ld a,(ix+O_MSTEP)
+                ld (ix+O_STEP),a
                 ld a,(ix+O_MFLAG)
                 ld l,a
                 ld h,FLAGS>>8
                 ld (hl),1
                 xor a
                 ld (ix+O_MOTION),a
-                ld (ix+O_DIR),a
-                ld a,(ix+O_MSTEP)
+                ld a,(curk)
                 or a
-                jr z,mo_s
-                ld (ix+O_STEP),a
-mo_s:           ld a,(curk)
-                or a
-                jr nz,mo_end
+                ret nz
                 ld (VARS+6),a
-                inc a                   ; el ego que llega a su destino recupera el control del jugador (SQ1 no llama a player.control despues del move.obj)
+                inc a                   ; SQ1 no llama a player.control despues del move.obj
                 ld (pctl),a
-mo_end:         jp set_pri
+                ret
 
 ; bucle de la celda segun la direccion (vistas de 2 o mas bucles)
 pick_loop:      bit 6,(ix+O_F1)

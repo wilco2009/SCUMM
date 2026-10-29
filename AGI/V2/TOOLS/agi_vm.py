@@ -965,6 +965,7 @@ class Interp:
         o.mon = True
         if n == EGO:
             self.pcontrol = False
+        self.move_obj_dir(n, o)             # cmdMoveObj: la direccion se calcula ya (y si ya esta a menos de un paso, acaba)
 
     def c_move_obj_v(self, n, vx, vy, vs, f): self.c_move_obj(n, self.vars[vx], self.vars[vy], self.vars[vs], f)
 
@@ -1534,29 +1535,34 @@ class Interp:
         if t != 4 and t < n:
             o.loop = t
 
+    @staticmethod
+    def check_step(delta, step):
+        return 0 if -step >= delta else 2 if step <= delta else 1
+
+    def move_obj_dir(self, k, o):
+        """motionMoveObj de ScummVM: la direccion sale de checkStep en cada eje (sin aterrizar exacto); con 0 el move.obj acaba."""
+        sx = self.check_step(o.tx - o.x, o.step) - 1
+        sy = self.check_step(o.ty - o.y, o.step) - 1
+        o.dir = [d for d in range(9) if DX[d] == sx and DY[d] == sy][0]
+        if k == EGO:
+            self.vars[6] = o.dir
+        if o.dir == 0:
+            self.move_obj_stop(k, o)
+
+    def move_obj_stop(self, k, o):
+        o.step = o.mstep
+        self.flags[o.mflag] = 1
+        o.motion = 0
+        if k == EGO:
+            self.vars[6] = 0
+            self.pcontrol = True                # el ego que acaba su move.obj recupera el control del jugador
+
     def move(self, k, o):
         v = self.vars
         if o.motion == 3:
-            dx = max(-o.step, min(o.step, o.tx - o.x))
-            dy = max(-o.step, min(o.step, o.ty - o.y))
-            if o.x == o.tx and o.y == o.ty:
-                dx = dy = 0
-            sx = (dx > 0) - (dx < 0)
-            sy = (dy > 0) - (dy < 0)
-            o.dir = [d for d in range(9) if DX[d] == sx and DY[d] == sy][0]
-            nx, ny = o.x + dx, o.y + dy
-            self.pick_loop(o)
-            o.x, o.y = nx, ny
-            if o.x == o.tx and o.y == o.ty:
-                self.flags[o.mflag] = 1
-                o.motion = 0
-                o.dir = 0
-                o.step = o.mstep or o.step
-                if k == EGO:
-                    v[6] = 0
-                    self.pcontrol = True        # el ego que llega a su destino recupera el control del jugador
-            self.set_pri(o)
-            return
+            self.move_obj_dir(k, o)
+            if o.motion != 3:
+                return
         if o.motion == 2:
             ego = self.obj(EGO)
             if abs(o.x - ego.x) <= o.step * 2 and abs(o.y - ego.y) <= o.step:
@@ -1595,6 +1601,8 @@ class Interp:
             border = 0                        # updatePosition de ScummVM: si el paso se rechaza, el borde se descarta
             if o.motion == 1:
                 o.wander = 0
+        if border and o.motion == 3:
+            self.move_obj_stop(k, o)            # motionMoveObjStop: tocar el borde acaba el move.obj
         if border:
             if k == EGO:
                 v[2] = border
