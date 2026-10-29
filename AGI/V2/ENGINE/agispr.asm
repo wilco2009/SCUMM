@@ -8,7 +8,7 @@
 
 PG_PRI2         equ 30
 PG_OVB          equ 42
-PACE_V10        equ 0                   ; 1: cada ciclo dura v10 * 2,5 tramas (el ritmo del original, 10 ciclos/s); 0: solo se sincroniza con el VSYNC
+PACE_V10        equ 1                   ; 1: cada ciclo dura v10 * 2,5 tramas (el ritmo del original, 10 ciclos/s con v10 = 2: el contador de la explosion de SQ1, el menu Speed); 0: solo se sincroniza con el VSYNC (mas rapido que el original)
 PG_PMX          equ 43
 PG_BGB          equ 31
 PG_BGA          equ 32
