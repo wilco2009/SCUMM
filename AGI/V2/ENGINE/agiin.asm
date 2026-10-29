@@ -313,6 +313,9 @@ h_text_screen:  ld a,1
                 jp call_c
 h_graphics:     xor a
                 ld (txtm),a
+                ld a,(picvalid)         ; sin imagen dibujada no hay nada que rehacer
+                or a
+                jp z,sg_t
                 call rd_pic
                 jp sg_t
 ; overlay.pic: la imagen de la sala con la que se le superpone ya hecha (PIC/PICAnn.GFX, TOOLS/agi2hr.py), redibujada como graphics

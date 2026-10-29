@@ -63,7 +63,7 @@ Controlador y tecla del PC segun la logica 104. "Texto" = se puede escribir la o
    `agia.asm` (overlay A) esta casi lleno (8014 de 8192 bytes): cualquier tecla nueva obliga a hacer sitio.
 2. **Textos del menu**: sustituir `<F5>`, `<Alt-Z>`, `<Tab>`... por la tecla real del ZX81, o quitarlos (todo es accesible desde el menu con las flechas y ENTER). Los
    mensajes son de la logica 0; habria que cambiarlos al cargar el juego (en la conversion, `agi2log.py`) para no tocar los datos originales.
-3. **Pantalla de ayuda** (c2, logica 92): habla de las teclas del PC; hay que reescribirla con las del ZX81.
+3. **Pantalla de ayuda**: hecha para los seis juegos (2026-10-29) con `agi_read.HELP` (se aplica al convertir y en el modelo): las teclas del ZX81 y la tabla de simbolos; KQ1 y KQ2 explican saltar/agacharse/nadar (SHIFT+0, ENTER+J, ENTER+L); PQ1 dice que F4/F6/F8/F10 van por el menu; Larry1 cambia su pantalla KEYBOARD COMMANDS (las de joystick y raton se dejan).
 4. **Otros juegos** (KQ1, KQ2, PQ1, SQ2, Larry1): repetir esta tabla con su logica de teclas antes de fijar la correspondencia.
 5. Hecho el dibujo de `show.obj` (filas con huecos: solo la tinta sobre papel blanco).
 

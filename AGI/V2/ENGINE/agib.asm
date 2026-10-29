@@ -666,8 +666,6 @@ s_of:           defb " of ",0
 s_son:          defb "Sound:on"
 s_soff:         defb "Sound:off"
 
-tfg:            defb 15
-tbg:            defb 0
 tcol0:          defb 0
 tterm:          defb 0
 st_on:          defb 0

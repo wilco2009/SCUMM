@@ -162,3 +162,5 @@ Sonido: AGI solo reproduce un sonido a la vez (`sound()` para el que suene), asi
 - **Limite de 12 sprites por linea (hardware):** lo que sobra desaparece (el de indice mas bajo, y el personaje si esta por debajo en el orden). Parche por juego: `agi2spr.FORCE_SW` fuerza vistas a software; SQ1 sala 6: vista 175 (3 cupulas de 5 mosaicos por fila). Cada sala parecida necesitara su entrada.
   **Resuelto (2026-10-29, SQ1 sala 6, probado por el usuario):** la vista 175 (cupulas) va forzada a software (`FORCE_SW`) y ademas congelada (`agi2spr.FREEZE_VIEWS`: al dibujarla su tiempo de ciclo pasa a 127, el bit 15 del desplazamiento en `VIEWS.HDR` la marca): de 106.700 a 31.000 instrucciones por ciclo; las tres cupulas salen enteras y el personaje ya no queda tapado.
 
+- **Ayuda de los seis juegos hecha (2026-10-29):** textos en `agi_read.HELP` por juego y logica (SQ1 92, KQ1 92, KQ2 95, SQ2 103, PQ1 102, Larry1 55); `text.screen` limpia con el fondo del texto (`set.text.attribute`, PQ1 y Larry1 usan el suyo) y `graphics` sin imagen dibujada no hace nada. Z80 y modelo iguales en las seis.
+

@@ -1776,6 +1776,8 @@ rs_keep:        defb 0
 exitall:        defb 0
 lastpic:        defb 0                  ; la ultima imagen dibujada (para rehacerla al cargar una partida)
 ovl_on:         defb 0                  ; 1 = la imagen lleva su overlay.pic (va justo despues de lastpic: se guardan juntos)
+tfg:            defb 15                 ; el color del texto (set.text.attribute): tinta y fondo (los usan el overlay B y C)
+tbg:            defb 0
 nr_pend:        defb 0
 nr_val:         defb 0
 pctl:           defb 1

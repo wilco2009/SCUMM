@@ -1043,10 +1043,12 @@ class Interp:
         """La pantalla de texto: las filas 1-21 en negro y sin sprites hasta graphics."""
         self.txtm = True
         for r in range(1, 22):
-            self.pic_ops.append(('f', r, 0))
+            self.pic_ops.append(('f', r, self.tbg))          # con el color de fondo del texto (set.text.attribute)
 
     def c_graphics(self):
         self.txtm = False
+        if self.pic is None:                # sin imagen dibujada no hay nada que rehacer
+            return
         self.pic = self.build_pic()
         self.pic_ops = []
         self.spans = []

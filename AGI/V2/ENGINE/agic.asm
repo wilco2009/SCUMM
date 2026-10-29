@@ -448,16 +448,29 @@ cc_s:           ld (curchar),a
                 ld (kb_dirty),a
                 ret
 
-; text.screen: las filas de texto 1-21 (lineas 8-175) en negro
+; text.screen: las filas de texto 1-21 (lineas 8-175) con el color de fondo del texto (set.text.attribute): bitmap a 0 y papel = tinta = ese color
 t_textscr:      ld hl,HR_BM+256
                 ld de,HR_BM+257
                 ld bc,5375
                 ld (hl),0
                 ldir
+                ld a,(tbg)
+                and 15
+                ld e,a
+                ld d,0
+                ld hl,ega2ch
+                add hl,de
+                ld a,(hl)
+                ld c,a
+                rlca
+                rlca
+                rlca
+                rlca
+                or c
                 ld hl,HR_ATT+256
                 ld de,HR_ATT+257
                 ld bc,5375
-                ld (hl),0
+                ld (hl),a
                 ldir
                 ret
 
