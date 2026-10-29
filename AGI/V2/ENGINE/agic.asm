@@ -25,6 +25,7 @@
                 jp t_pre                ; OVC_PRE
                 jp t_cycles             ; OVC_CYCLES
                 jp clip_view            ; OVC_CLIP
+                jp t_cmpstr             ; OVC_CMPSTR
 
 TXT             equ TMPM
 
@@ -538,18 +539,12 @@ t_animate:  call argobj
                 and %00000010           ; conserva drawn
                 or %00011101            ; anim, upd, cycling, mon
                 ld (ix+O_F1),a
-                xor a
+                xor a                   ; (no toca paso ni tiempos: los pone new.room)
                 ld (ix+O_F2),a
                 ld (ix+O_MOTION),a
                 ld (ix+O_DIR),a
                 ld (ix+O_CTYPE),a
                 ld (ix+O_WATER),a
-                inc a
-                ld (ix+O_STEP),a
-                ld (ix+O_STIME),a
-                ld (ix+O_SCOUNT),a
-                ld (ix+O_CTIME),a
-                ld (ix+O_CCOUNT),a
                 ret
 
 ; get.num(m, v): el numero de la cola de cadenas (solo cifras; si no, 0)
@@ -1096,4 +1091,63 @@ ov_cv_h:           bit 7,(ix+O_F1)
                 inc a
                 ld (ix+O_Y),a
                 set 5,(ix+O_F2)
+                ret
+
+; compare.strings (cmdCompareStrings): sin espacios, tabuladores ni puntuacion (- . , : ; ! '), en minusculas; NZ = iguales
+t_cmpstr:       ld a,(ARGS)
+                cp 12
+                jr nc,tcs_f
+                call strptr
+                ld de,STMP
+                call ov_norm
+                ld a,(ARGS+1)
+                cp 12
+                jr nc,tcs_f
+                call strptr
+                ld de,STMP2
+                call ov_norm
+                ld hl,STMP
+                ld de,STMP2
+tcs_l:          ld a,(de)
+                cp (hl)
+                jr nz,tcs_f
+                or a
+                jr z,tcs_t
+                inc hl
+                inc de
+                jr tcs_l
+tcs_t:          or 1
+                ret
+tcs_f:          xor a
+                ret
+ov_norm:        ld a,(hl)
+                inc hl
+                or a
+                jr z,on_e
+                cp 33
+                jr c,ov_norm
+                cp '-'
+                jr z,ov_norm
+                cp '.'
+                jr z,ov_norm
+                cp ','
+                jr z,ov_norm
+                cp ':'
+                jr z,ov_norm
+                cp ';'
+                jr z,ov_norm
+                cp '!'
+                jr z,ov_norm
+                cp 39
+                jr z,ov_norm
+                cp 'A'
+                jr c,on_w
+                cp 'Z'+1
+                jr nc,on_w
+                add a,32
+on_w:           ld (de),a
+                inc de
+                jr ov_norm
+on_e:           xor a
+                ld (de),a
                 ret

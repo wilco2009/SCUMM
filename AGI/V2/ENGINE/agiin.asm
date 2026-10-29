@@ -817,28 +817,10 @@ n_e:            xor a
                 ld (de),a
                 ret
 
-hc_compare_strings: ld a,(ARGS)
-                cp 12
-                jp nc,ret_false
-                call strptr
-                ld de,STMP
-                call norm
-                ld a,(ARGS+1)
-                cp 12
-                jp nc,ret_false
-                call strptr
-                ld de,STMP2
-                call norm
-                ld hl,STMP
-                ld de,STMP2
-cs_l:           ld a,(de)
-                cp (hl)
-                jp nz,ret_false
-                or a
-                jp z,ret_true
-                inc hl
-                inc de
-                jr cs_l
+hc_compare_strings: ld hl,OVC_CMPSTR    ; en el overlay C (NZ = iguales)
+                call call_c
+                jp nz,ret_true
+                jp ret_false
 
 ; ---------------------------------------------------------------------
 ;  Parser

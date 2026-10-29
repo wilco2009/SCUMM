@@ -122,6 +122,7 @@ OVC_CYCEL       equ $202D
 OVC_PRE         equ $2030
 OVC_CYCLES      equ $2033
 OVC_CLIP        equ $2036
+OVC_CMPSTR      equ $2039
 OVC_TEXTSCR     equ $2015
 OVD_READ        equ $2000               ; overlay D (ficheros de guardar/cargar): con call_d
 OVD_PREP        equ $2003

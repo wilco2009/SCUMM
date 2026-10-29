@@ -48,12 +48,12 @@ class Obj:
         self.fixpri = self.fixloop = False
         self.cycling = True
         self.ctype = 0                 # 0 normal, 1 end.of.loop, 2 reverse.loop, 3 reverse
-        self.ctime = self.ccount = 1
+        self.ctime = self.ccount = 0
         self.cflag = 0
         self.motion = 0                # 0 normal, 1 wander, 2 follow, 3 move.obj
         self.mon = True
-        self.step = 1
-        self.stime = self.scount = 1
+        self.step = 0
+        self.stime = self.scount = 0
         self.dir = 0
         self.ign_horizon = self.ign_blocks = self.ign_objs = False
         self.water = 0                 # 0 cualquiera, 1 solo agua, 2 solo tierra
@@ -488,7 +488,8 @@ class Interp:
                 return True
             return False
         if name == 'compare.strings':
-            return self.strs[a[0]].lower().split() == self.strs[a[1]].lower().split()
+            norm = lambda t: re.sub(r"[ 	\-.,:;!']", '', t.lower())      # cmdCompareStrings: sin espacios ni puntuacion
+            return norm(self.strs[a[0]]) == norm(self.strs[a[1]])
         o = self.obj(a[0])
         w, h = self.cell(o) if o.drawn else (0, 0)
         if name == 'posn':
@@ -770,8 +771,7 @@ class Interp:
             o.ign_horizon = o.ign_blocks = o.ign_objs = False
             o.fixpri = o.fixloop = False
             o.motion = 0
-            o.dir = 0
-            o.step = o.stime = o.scount = o.ctime = o.ccount = 1
+            o.dir = 0                       # cmdAnimateObj: no toca paso ni tiempos (los pone new.room)
             o.ctype = 0
             o.water = 0
             o.static = False
