@@ -625,6 +625,7 @@ class Interp:
         ego.drawn = False
         ego.upd = ego.cycling = ego.mon = True      # el ego sale de la sala listo para andar y sin prioridad fija aunque la anterior le hiciera stop.motion o set.priority
         ego.fixpri = False
+        ego.ign_blocks = ego.ign_objs = False       # y observa bloques y objetos (la sala 7 de SQ1 lo deja con ignore.blocks e ignore.objs al cruzar su puerta)
         self.pcontrol = True
         self.blocks = None
         self.horizon = 36

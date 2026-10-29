@@ -868,6 +868,8 @@ nr_u:           res 0,(ix+O_F1)
                 and $DD                 ; el ego sin dibujar ni prioridad fija, y listo para andar (actualiza, cicla, se mueve) aunque la sala anterior le hiciera stop.motion o set.priority
                 or $1C
                 ld (ix+O_F1),a
+                xor a                   ; y observa bloques y objetos (la 7 lo deja con ignore.blocks e ignore.objs al cruzar su puerta)
+                ld (ix+O_F2),a
                 ld a,1
                 ld (pctl),a
                 xor a
