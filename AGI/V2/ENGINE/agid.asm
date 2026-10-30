@@ -242,8 +242,8 @@ sl_d:           ld a,PG_OVL
                 ld a,(sf_h)
                 call f_close
                 ld a,1
-                ld (FLAGS+6),a          ; restore.game acaba de ejecutarse
-                ld (rs_keep),a
+                ld (FLAGS+12),a         ; loadGame de ScummVM: VM_FLAG_RESTORE_JUST_RAN (la 6 y la 5 no se tocan); la logica 0 se repite en este ciclo
+                ld (rs_rerun),a
                 ld (sv_ok),a
                 xor a
                 ld (st_valid),a         ; la barra de estado se redibuja

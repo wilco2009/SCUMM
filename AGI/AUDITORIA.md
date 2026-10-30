@@ -87,7 +87,7 @@ Gravedad: **A** puede romper una sala; **M** probable efecto visible/temporizaci
 | Orden de dibujo | clave = `yPos` (o `priorityToY(pri)` con prioridad fija); ordenación estable ascendente por clave y por nº de objeto. Primero la lista estática (animated+drawn, sin update) y luego la normal | `draw_order` (194): por `(pri, y, n)`; los estáticos con `y = 0` | DIFERENTE (**M**, ya es una decisión de hardware: los sprites HW se ordenan por prioridad numérica, no por «y»). El cambio de ScummVM es que un sprite de prioridad fija mayor NO se pinta encima de uno de y mayor salvo que `priorityToY` lo ponga ahí. Ojo si se ve un objeto tapado/destapado mal |
 | Prioridad vs. pic | un píxel de la celda se pinta si `picPri > 2 && picPri <= viewPri`; píxeles con pic 0–2 (control) se pintan según `checkControlPixel` | modelo por tiras (`spans`) y sprites HW | verificar (no leído `checkControlPixel`) |
 | `show.obj` | pos x=((159−w)/2), y=167, pri 15, `messageBox` con descripción, restaura el fondo | resuelto hoy | IGUAL |
-| Ego invisible | si ningún píxel del ego se dibuja → `VM_FLAG_EGO_INVISIBLE` (bandera 11? numerada en agi.h) | no se calcula | FALTA (B/M): ninguna sala de SQ1 conocida la usa, pero KQ1/KQ2 sí (el ego tapado por una prioridad). Corrección: bandera 11 en `render`/`draw_order` |
+| Ego invisible | si ningún píxel del ego se dibuja → `VM_FLAG_EGO_INVISIBLE` (bandera 11? numerada en agi.h) | no se calcula | FALTA (B/M): ninguna sala de SQ1 conocida la usa, pero KQ1/KQ2 sí (el ego tapado por una prioridad). La bandera es la **1** (VM_FLAG_EGO_INVISIBLE; la 11 es LOGIC_ZERO_FIRST_TIME, error de la primera pasada). Los sprites van por hardware y el Z80 no sabe qué píxeles tapa la prioridad: limite de hardware, ver segunda pasada |
 | Rechazo de sprites | `buildSpriteListAdd` descarta si `x<0`, `y<0` o fuera | — | B |
 | `priorityFromY` | valores 5..14 por bandas de 12 desde y=48 (y<48 → 4) | `set_pri` (762): `4 if y<48 else min(15, (y-48)//12+5)` | IGUAL (la banda 15 no se alcanza con y≤167: 12*11+48=180; el `min` sobra) |
 
@@ -133,3 +133,47 @@ Implementadas distinto:
 - Cuerpos de `checkControlPixel`, `priorityToY`, `motionMoveObj` completo y `fixPosition` más allá del resumen.
 - Si ScummVM aplica la línea 1 a objetos que no sean el ego (el resumen lo dice: `p==1 && !fIgnoreBlocks`); comprobar con el original o con una sala concreta antes de cambiar.
 - `show.pic` frente a `draw.pic` y el momento real de refresco de pantalla.
+
+
+---
+
+# Segunda pasada (2026-10-30): criterio «igual que ScummVM salvo límite de hardware documentado»
+
+Motivo: `new.room` no quitaba fAnimated al ego (fila M) y rompió la sala 34 de SQ1. Se repasaron `newRoom`, `agiInit`/restart, `loadGame`, `cmdAnimateObj/Draw/Erase/UnanimateAll/StartUpdate/StopUpdate/ForceUpdate`, `cmdPosition/Reposition/ReleasePriority/SetPriority`, `cmdObjectOn*`, `cmdStep*/CycleTime`, `cmdDrawPic` y los apaños por juego, siguiendo el efecto en la sala siguiente. Versiones de intérprete (detection_tables.h): SQ1 2.2 = 0x2440, SQ2 2.0F = 0x2936, KQ1 2.0F = 0x2917, KQ2 2.2 = 0x2917, PQ1 2.0G = 0x2917/0x2440, LSL1 = 0x2440; todos > 0x2272, así que las ramas `version <= 0x2272` (bucle sin mirar stepTimeCount, move.obj sin moveObj inmediato) no se usan y el modelo (inmediato, `scount == 1`) es correcto.
+
+## Diferencias nuevas, corregidas en `agi_vm.py` y en el Z80
+
+| Regla | ScummVM | Antes | Ahora |
+|---|---|---|---|
+| `new.room` y banderas 0/3 | `newRoom` NO las toca; `checkPriority` las reescribe en cada `draw`/`fixPosition`/paso | se borraban en `do_new_room` (apaño de la sala 8 de SQ1 cuando `draw` aún no las refrescaba) | **no se borran**; las refresca `draw` (fix_position) como en ScummVM. Vigilar la sala 8/9 de SQ1 |
+| `new.room` y el ego | solo quita animated y drawn, pone update y step/tiempos a 1 | además upd, cycling, mon a 1, fixpri y ignore.* a 0 | solo lo de ScummVM (el `animate.obj` de la lógica 0 lo pone todo). Modelo y `do_new_room` |
+| `new.room` v16 | `VM_VAR_EGO_VIEW_RESOURCE = ego.currentViewNr` en cada sala | solo en `set.view` | también en `new.room` (`t_newroom`) |
+| `animate.obj` | `flags = Animated\|Update\|Cycling` (borra fDrawn) | conservaba drawn | borra drawn (`t_animate`) |
+| `object.on.water` / `on.land` | dos banderas independientes; con las dos todo se bloquea | un valor 0/1/2 (la segunda llamada pisaba la primera) | máscara de 2 bits (`O_WATER`, `check_priority`) |
+| `cmdPosition`, `cmdReleasePriority` | no tocan la prioridad (la pone `checkPriority` en el siguiente paso) | llamaban a `set_pri` | no la tocan (`h_position(_v)`, `h_release_priority`) |
+| `step.time`, `cycle.time` | `stepTime = stepTimeCount = var` sin mínimo (con 0, el objeto no cicla / no hace `checkMotion` ni cambia de bucle) | mínimo 1 | sin mínimo |
+| `updatePosition` y v2 | el borde del ego (v2) solo se pone a 0 si hay algún objeto animated+update+drawn; v4/v5 siempre | v2 siempre | v2 solo si hay objetos (`t_cycles` en el Z80) |
+| `resetControllers` | tras cada pasada de la lógica 0 (también la repetida tras `new.room`) | solo al empezar el ciclo | también tras `new.room` y tras restore (`clr_ctl`) |
+| `restore.game` | pone `VM_FLAG_RESTORE_JUST_RAN` (**12**), NO toca la 6 ni la 5; `exitAllLogics` y el bucle de `interpretCycle` repite la lógica 0 en el mismo ciclo; las banderas 5, 6 y 12 se borran al acabar el ciclo | ponía la **6** (RESTART_GAME) y `rs_keep` (la lógica 0 la veía el ciclo siguiente); la 12 nunca se ponía, así que el bloque `if (isset(f12))` de la lógica 0 de SQ1 (redibujar tras cargar) no se ejecutaba | bandera 12 + repetición de la lógica 0 (`rs_rerun`), la 12 se borra al final del ciclo |
+| `restart.game` y cadenas | `agiInit` con `_restartGame` no borra las cadenas | se borraban | se conservan (`rs_warm` en el Z80: el primer arranque sí las pone a 0) |
+| `set.game.id` / apaños por juego | `GID_SQ1`: `draw.pic 20` pone la bandera 103 a 0 (araña); `GID_LSL1`: `newRoom` borra la bandera 36 | no existían | `gfix` (1 = ID «SQ», 2 = «LLLLL») fijado por `set.game.id`; ambos apaños en modelo y Z80 |
+
+## Revisadas y IGUALES (sin cambio)
+
+`newRoom` (resto: playerControl, block, horizon 36, v0/v1, v4/v5, reposición por v2 con los cuatro bordes, v2 = 0, flag 5), `cmdDraw` (fUpdate, fixPosition, DontUpdate), `cmdErase`, `cmdUnanimateAll`, `cmdStartUpdate/StopUpdate` (solo fUpdate), `cmdForceUpdate` (visual), `cmdStart/StopCycling`, `cmdNormalCycle/ReverseCycle`, `cmdSetDir/GetDir`, `cmdStopMotion/StartMotion/PlayerControl/ProgramControl`, `cmdMoveObj/FollowEgo/Wander`, `cmdSetHorizon`, `cmdSetView/Loop/Cel` (clipViewCoordinates, DontUpdate), `cmdSetPriority`, `cmdGetPosn`, `cmdDistance`, `testSaid` (se contrastó el algoritmo caso a caso con el código real), `cmdIncrement/Decrement` (tope 255 / suelo 0). `load.*`, `discard.*`, `load.pic`: sin efecto en el estado visible.
+
+## Desviaciones que se mantienen (motivo)
+
+| Qué | Por qué |
+|---|---|
+| Bandera 1 (EGO_INVISIBLE) no se calcula | Los sprites se componen por hardware (FPGA) y el Z80 no ve qué píxeles tapa la prioridad de la imagen. Ningún juego del conjunto la comprueba en las salas probadas; si apareciera, habría que calcularla con las tiras (`spans`) en `render` |
+| `c_draw`: vistas congeladas (`agi2spr.frozen`) con `ctime = 127` | Límite de hardware/rendimiento (sprites por software); documentado en agi2spr |
+| Speed Fast/Fastest (v10 ≤ 1): los objetos estáticos no cambian de celda | Rendimiento; el estado que ve la lógica (cel, flags) solo difiere en la celda mostrada de objetos sin movimiento |
+| `show.pic`/`draw.pic` no se separan | La imagen se muestra al dibujarla; ScummVM la muestra con `show.pic` (transición). No cambia el estado que ve la lógica |
+| `shake.screen`, `force.update`, transiciones | Solo visual |
+| Orden de dibujo por (prioridad, y, nº) | Hardware: 64 sprites y tiras; ScummVM ordena por y (o `priorityToY`) |
+| Teclas asignadas a controlador también ponen v19 | ScummVM solo pone `VM_VAR_KEY` si la tecla no es un controlador (fuera de `have.key`); aquí `have.key` consume la misma cola. Pendiente de confirmar con `processAGIEvents` antes de tocar el Z80 (agiin.asm, do_events) |
+
+## Pendiente de verificar con el juego
+
+Sala 8/9 de SQ1 (ya no se borran las banderas 0/3 en `new.room`), restore.game en SQ1 (ahora se ejecuta el bloque de la bandera 12) y un restart.game (las cadenas se conservan).

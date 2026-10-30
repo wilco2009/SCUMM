@@ -201,8 +201,8 @@ h_position:     call argobj
                 ld a,(ARGS+1)
                 ld (ix+O_X),a
                 ld a,(ARGS+2)
-                ld (ix+O_Y),a
-                jp set_pri
+                ld (ix+O_Y),a           ; cmdPosition no toca la prioridad (la pone checkPriority)
+                ret
 h_position_v:   call argobj
                 ld a,(ARGS+1)
                 call getv
@@ -210,7 +210,7 @@ h_position_v:   call argobj
                 ld a,(ARGS+2)
                 call getv
                 ld (ix+O_Y),a
-                jp set_pri
+                ret
 h_reposition_to: call h_position
                 set 5,(ix+O_F2)
                 jr h_fixpos
@@ -339,8 +339,8 @@ h_set_priority_v: call argobj
                 call getv
                 jr sp_set
 h_release_priority: call argobj
-                res 5,(ix+O_F1)
-                jp set_pri
+                res 5,(ix+O_F1)         ; cmdReleasePriority: solo borra la bandera
+                ret
 h_get_priority: call argobj
                 ld a,(ix+O_PRI)
                 jr ov_put
@@ -361,10 +361,10 @@ h_set_horizon:  ld a,(ARGS)
                 ld (horizon),a
                 ret
 h_object_on_water: call argobj
-                ld (ix+O_WATER),1
+                set 0,(ix+O_WATER)      ; fOnWater y fOnLand son banderas independientes
                 ret
 h_object_on_land: call argobj
-                ld (ix+O_WATER),2
+                set 1,(ix+O_WATER)
                 ret
 h_object_on_anything: call argobj
                 ld (ix+O_WATER),0
@@ -547,10 +547,7 @@ h_reverse_cycle: call argobj
 h_cycle_time:   call argobj
                 ld a,(ARGS+1)
                 call getv
-                or a
-                jr nz,ct_1
-                inc a
-ct_1:           ld (ix+O_CTIME),a
+                ld (ix+O_CTIME),a       ; sin minimo: con 0 el objeto no cicla
                 ld (ix+O_CCOUNT),a
                 ret
 
@@ -582,10 +579,7 @@ h_step_size:    call argobj
 h_step_time:    call argobj
                 ld a,(ARGS+1)
                 call getv
-                or a
-                jr nz,st_1
-                inc a
-st_1:           ld (ix+O_STIME),a
+                ld (ix+O_STIME),a       ; sin minimo (cmdStepTime)
                 ld (ix+O_SCOUNT),a
                 ret
 

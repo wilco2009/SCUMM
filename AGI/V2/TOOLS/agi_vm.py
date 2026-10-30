@@ -134,6 +134,7 @@ class Interp:
         self.sound_flags = []
         self.noop = {}
         self.dirhold = 0
+        self.gid = ''                  # set.game.id: 'SQ' (SQ1) y 'LLLLL' (Larry 1) activan los apaños de ScummVM para esos juegos
         self.seed = random.Random(1)
         self.lfsr = 0xACE1                # igual que el Z80: LFSR de 16 bits (Galois)
         self.trace = None                 # lista de (logica, pc) de cada paso; None = sin traza
@@ -422,6 +423,7 @@ class Interp:
 
     wtext = []
     rs_keep = False
+    rerun = False
     txtm = False                # pantalla de texto (text.screen)
     ovl_n = None                # overlay.pic aplicado a lastpic
     hk_seen = False             # have.key sin tecla ya llamado en este ciclo
@@ -665,7 +667,6 @@ class Interp:
         old = v[0]
         self.scan = {k: v for k, v in self.scan.items() if k == 0}      # newRoom descarga las logicas (la 0 no): su sIP vuelve al principio
         self.flags[2] = 0               # la logica 0 se reinicia sin la linea tecleada ni la palabra desconocida, como en AGI
-        self.flags[0] = self.flags[3] = 0       # agua y linea de aviso: las de la sala anterior no valen
         v[9] = 0
         self.snd_stop()
         self.spans = []
@@ -681,10 +682,9 @@ class Interp:
             o.upd = True
             o.step = o.stime = o.scount = o.ctime = o.ccount = 1      # newRoom: tambien el ego
         ego = self.obj(EGO)
-        ego.drawn = False
-        ego.upd = ego.cycling = ego.mon = True      # el ego sale de la sala listo para andar y sin prioridad fija aunque la anterior le hiciera stop.motion o set.priority
-        ego.fixpri = False
-        ego.ign_blocks = ego.ign_objs = False       # y observa bloques y objetos (la sala 7 de SQ1 lo deja con ignore.blocks e ignore.objs al cruzar su puerta)
+        if self.gid == 'LLLLL':
+            self.flags[36] = 0              # newRoom de ScummVM: apano de Larry 1 (GID_LSL1)
+        v[16] = ego.view                    # VM_VAR_EGO_VIEW_RESOURCE
         self.pcontrol = True
         self.blocks = None
         self.horizon = 36
@@ -704,7 +704,6 @@ class Interp:
             ego.x = 160 - w
         v[2] = 0
         self.flags[5] = 1
-        self.flags[0] = 0
         self.log('sala %d (desde %d)' % (n, old))
         self.newroom = None
         self.exit_all = False
@@ -713,6 +712,8 @@ class Interp:
         n = self.vars[v]
         self.pics_used.add(n)
         self.lastpic = n
+        if self.gid == 'SQ' and n == 20:
+            self.flags[103] = 0             # cmdDrawPic de ScummVM: apano de SQ1 (el droide arana deja la bandera puesta)
         self.ovl_n = None
         d = self.g.resource('PIC', n)
         if d is None:
@@ -809,6 +810,7 @@ class Interp:
         o = self.obj(n)
         if not o.anim:
             o.anim = True
+            o.drawn = False                 # cmdAnimateObj: flags = fAnimated | fUpdate | fCycling (borra todo lo demas, fDrawn incluido)
             o.upd = o.cycling = o.mon = True
             o.ign_horizon = o.ign_blocks = o.ign_objs = False
             o.fixpri = o.fixloop = False
@@ -843,8 +845,7 @@ class Interp:
 
     def c_position(self, n, x, y):
         o = self.obj(n)
-        o.x, o.y = x, y
-        self.set_pri(o)
+        o.x, o.y = x, y                     # cmdPosition no toca la prioridad (la pone checkPriority en el siguiente paso)
 
     def c_position_v(self, n, vx, vy): self.c_position(n, self.vars[vx], self.vars[vy])
     def c_reposition_to(self, n, x, y):
@@ -953,8 +954,7 @@ class Interp:
 
     def c_release_priority(self, n):
         o = self.obj(n)
-        o.fixpri = False
-        self.set_pri(o)
+        o.fixpri = False                    # cmdReleasePriority: solo borra la bandera
 
     def c_get_priority(self, n, v): self.vars[v] = self.obj(n).pri
     def c_stop_update(self, n): self.obj(n).upd = False
@@ -963,8 +963,8 @@ class Interp:
     def c_ignore_horizon(self, n): self.obj(n).ign_horizon = True
     def c_observe_horizon(self, n): self.obj(n).ign_horizon = False
     def c_set_horizon(self, n): self.horizon = n
-    def c_object_on_water(self, n): self.obj(n).water = 1
-    def c_object_on_land(self, n): self.obj(n).water = 2
+    def c_object_on_water(self, n): self.obj(n).water |= 1          # fOnWater y fOnLand son banderas independientes
+    def c_object_on_land(self, n): self.obj(n).water |= 2
     def c_object_on_anything(self, n): self.obj(n).water = 0
     def c_ignore_objs(self, n): self.obj(n).ign_objs = True
     def c_observe_objs(self, n): self.obj(n).ign_objs = False
@@ -1007,7 +1007,7 @@ class Interp:
         o = self.obj(n)
         o.ctype, o.cycling = 3, True
 
-    def c_cycle_time(self, n, v): self.obj(n).ctime = self.obj(n).ccount = max(1, self.vars[v])
+    def c_cycle_time(self, n, v): self.obj(n).ctime = self.obj(n).ccount = self.vars[v]      # cmdCycleTime: sin minimo (con 0 el objeto no cicla)
     def c_stop_motion(self, n):
         o = self.obj(n)
         o.motion = 0                        # cmdStopMotion de ScummVM: sin movimiento y direccion 0 (no hay bandera de monitor)
@@ -1023,7 +1023,7 @@ class Interp:
             self.pcontrol = True
 
     def c_step_size(self, n, v): self.obj(n).step = self.vars[v]
-    def c_step_time(self, n, v): self.obj(n).stime = self.obj(n).scount = max(1, self.vars[v])
+    def c_step_time(self, n, v): self.obj(n).stime = self.obj(n).scount = self.vars[v]       # cmdStepTime: sin minimo (con 0 no hay motion ni cambio de bucle, solo updatePosition)
 
     def c_move_obj(self, n, x, y, step, f):
         o = self.obj(n)
@@ -1133,7 +1133,7 @@ class Interp:
 
     def c_show_obj_v(self, v): self.c_show_obj(self.vars[v])
 
-    RESTART_FIELDS = ('scan', 'vars', 'flags', 'strs', 'objs', 'inv', 'keys', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'statics', 'horizon', 'blocks', 'pcontrol',
+    RESTART_FIELDS = ('scan', 'vars', 'flags', 'objs', 'inv', 'keys', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'statics', 'horizon', 'blocks', 'pcontrol',
                       'lastpic', 'ovl_n', 'lfsr', 'status_on', 'st_last', 'tfg', 'tbg', 'accept', 'sound_flags', 'input', 'said_done', 'keyq', 'textq', 'ctl', 'wtext', 'ext_bm', 'ext_at', 'box')
 
     def c_restart_game(self):
@@ -1453,8 +1453,8 @@ class Interp:
         self.objs = st['objs']
         for k in ('horizon', 'blocks', 'pcontrol', 'lastpic', 'ovl_n', 'margins', 'statics', 'status_on', 'tfg', 'tbg', 'accept', 'ticks'):
             setattr(self, k, st[k])
-        self.flags[6] = 1
-        self.rs_keep = True
+        self.flags[12] = 1                  # loadGame de ScummVM: VM_FLAG_RESTORE_JUST_RAN (no toca la 6 ni la 5); la logica 0 vuelve a empezar en este mismo ciclo
+        self.rerun = True
         for t, its in self.menus:
             for it in its:
                 it[2] = True
@@ -1538,7 +1538,9 @@ class Interp:
         self.log('sound %d (%d ciclos)' % (n, self.sound_flags[-1][0] - self.cycle))
 
     def c_stop_sound(self): self.snd_stop()
-    def c_set_game_id(self, m): self.log('juego: ' + self.msg(m))
+    def c_set_game_id(self, m):
+        self.gid = self.msg(m)[:8]
+        self.log('juego: ' + self.gid)
     def c_log(self, m): pass
     def c_quit(self, n):
         self.log('quit')
@@ -1605,9 +1607,9 @@ class Interp:
             self.flags[3] = 1 if sig else 0
         if blocked:
             return False
-        if o.water == 1 and not water:          # on.water: todo el ancho sobre agua
+        if (o.water & 1) and not water:         # fOnWater: todo el ancho sobre agua
             return False
-        if o.water == 2 and water:              # on.land: no todo sobre agua
+        if (o.water & 2) and water:             # fOnLand: no todo sobre agua
             return False
         return True
 
@@ -1894,13 +1896,23 @@ class Interp:
                 return
             if self.newroom is not None:
                 self.do_new_room(self.newroom)
+                self.ctl = set()            # interpretCycle: resetControllers tras cada pasada de la logica 0
+                continue
+            if self.rerun:                  # restore.game: exitAllLogics y el bucle de interpretCycle repite la logica 0
+                self.rerun = False
+                self.exit_all = False
+                self.flags[2] = 0
+                v[4] = v[5] = v[9] = 0
+                self.ctl = set()
                 continue
             break
-        ego.dir = v[6]
-        v[2] = v[4] = v[5] = 0          # los codigos de borde se ponen a 0 antes de mover los objetos: el movimiento los pone y la logica del ciclo siguiente los ve
+        self.obj(EGO).dir = v[6]          # (restore.game cambia la tabla de objetos)
+        v[4] = v[5] = 0
+        if any(o.anim and o.drawn and o.upd for o in self.objs.values()):
+            v[2] = 0                    # updatePosition (solo si hay algun objeto que actualizar) pone a 0 el borde del ego; los codigos de borde se ponen a 0 antes de mover los objetos: el movimiento los pone y la logica del ciclo siguiente los ve
         self.update_objects()
         self.status_tick()
-        self.flags[2] = self.flags[4] = 0
+        self.flags[2] = self.flags[4] = self.flags[12] = 0
         if self.rs_keep:                # tras restart.game / restore.game las banderas 5 y 6 las ve la logica 0 del ciclo siguiente
             self.rs_keep = False
         else:

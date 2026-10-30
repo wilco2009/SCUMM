@@ -19,6 +19,16 @@ h_draw_pic:     call clr_static
                 ld a,(ARGS)
                 call getv
                 ld (lastpic),a
+                ld c,a
+                ld a,(gfix)             ; cmdDrawPic de ScummVM: apano de SQ1, imagen 20 -> bandera 103 a 0
+                dec a
+                jr nz,dp_g
+                ld a,c
+                cp 20
+                jr nz,dp_g
+                xor a
+                ld (FLAGS+103),a
+dp_g:           ld a,c
 dp_num:         call mk_nm3             ; (dp_num: A = imagen; lo usa cargar partida)
                 ld a,(ovl_on)           ; con overlay.pic: PICAnn.GFX (la cifra de las centenas pasa a letra: 0 -> A, 1 -> B, 2 -> C)
                 or a
@@ -361,17 +371,14 @@ ps_end:         ld a,(curk)             ; ego: bandera 0 = todo agua, bandera 3 
 ps_nf:          ld a,c
                 or a
                 jr nz,pk_no
-                ld a,(ix+O_WATER)
+                ld b,(ix+O_WATER)
+                ld a,d
                 or a
-                jr z,pk_ok
-                cp 2
-                jr z,ps_land
-                ld a,d                  ; on.water: todo el ancho sobre agua
-                or a
-                jr z,pk_no
+                jr nz,ps_allw
+                bit 0,b                 ; no todo agua y fOnWater: bloqueado
+                jr nz,pk_no
                 jr pk_ok
-ps_land:        ld a,d                  ; on.land: no todo sobre agua
-                or a
+ps_allw:        bit 1,b                 ; todo agua y fOnLand: bloqueado
                 jr nz,pk_no
 pk_ok:          ld a,1
                 ret

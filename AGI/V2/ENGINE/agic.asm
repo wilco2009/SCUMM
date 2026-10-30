@@ -28,6 +28,7 @@
                 jp t_cmpstr             ; OVC_CMPSTR
                 jp t_newroom            ; OVC_NEWROOM
                 jp mv_od                ; OVC_MVOD
+                jp t_gameid             ; OVC_GAMEID
 
 TXT             equ TMPM
 
@@ -87,11 +88,27 @@ rs_s:           ld (hl),$FF
                 ld bc,511
                 ld (hl),0
                 ldir
+                ld a,(rs_warm)          ; agiInit con _restartGame no borra las cadenas
+                or a
+                jr nz,rs_w
                 ld hl,ARGS
                 ld de,ARGS+1
                 ld bc,CLR_END-ARGS-1
                 ld (hl),0
                 ldir
+                jr rs_wd
+rs_w:           ld hl,ARGS
+                ld de,ARGS+1
+                ld bc,STRS-ARGS-1
+                ld (hl),0
+                ldir
+                ld hl,STRS+492
+                ld de,STRS+493
+                ld bc,CLR_END-STRS-493
+                ld (hl),0
+                ldir
+rs_wd:          ld a,1
+                ld (rs_warm),a
                 ld hl,OBJ
                 ld de,OBJ+1
                 ld bc,NOBJ*32-1
@@ -547,9 +564,7 @@ dd_a:           defb 0
 t_animate:  call argobj
                 bit 0,(ix+O_F1)
                 ret nz
-                ld a,(ix+O_F1)
-                and %00000010           ; conserva drawn
-                or %00011101            ; anim, upd, cycling, mon
+                ld a,%00011101          ; anim, upd, cycling, mon (cmdAnimateObj borra todo lo demas, drawn incluido)
                 ld (ix+O_F1),a
                 xor a                   ; (no toca paso ni tiempos: los pone new.room)
                 ld (ix+O_F2),a
@@ -1028,6 +1043,8 @@ ov_tc_l:           ld a,(ix+O_F1)
                 and 7
                 cp 7
                 jr nz,ov_tc_n
+                xor a                   ; updatePosition (hay algun objeto que actualizar) pone a 0 el borde del ego
+                ld (VARS+2),a
                 call t_pick
                 bit 3,(ix+O_F1)
                 jr z,ov_tc_n
@@ -1195,7 +1212,46 @@ tn_l:           set 2,(ix+O_F1)         ; (fUpdate)
                 xor a
                 ld (hl),a
                 ldir
+                ld a,(gfix)             ; apano de ScummVM (Larry 1): la bandera 36 se borra en cada sala nueva
+                cp 2
+                jr nz,tn_g
+                xor a
+                ld (FLAGS+36),a
+tn_g:           ld a,(OBJ+O_VIEW)       ; VM_VAR_EGO_VIEW_RESOURCE
+                ld (VARS+16),a
                 ret
+
+; set.game.id: SQ1 -> 1, Larry 1 -> 2 (los apanos de ScummVM por juego)
+t_gameid:       ld a,(ARGS)
+                ld b,a
+                ld a,(curlg)
+                ld (bs_lg),a
+                ld de,TXT
+                ld c,8
+                call build_str
+                ld hl,TXT
+                ld de,g_sq
+                call g_cmp
+                ld a,1
+                jr z,tg_set
+                ld hl,TXT
+                ld de,g_ll
+                call g_cmp
+                ld a,2
+                jr z,tg_set
+                xor a
+tg_set:         ld (gfix),a
+                ret
+g_cmp:          ld a,(de)
+                cp (hl)
+                ret nz
+                or a
+                ret z
+                inc de
+                inc hl
+                jr g_cmp
+g_sq:           defb "SQ",0
+g_ll:           defb "LLLLL",0
 
 ; motionMoveObj de ScummVM: direccion hacia (tx, ty) con checkStep en cada eje (no aterriza exacto); con 0 acaba el move.obj
 mv_od:          ld a,(ix+O_TX)

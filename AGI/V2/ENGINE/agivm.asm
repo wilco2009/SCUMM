@@ -141,6 +141,7 @@ OVC_CLIP        equ $2036
 OVC_CMPSTR      equ $2039
 OVC_NEWROOM     equ $203C
 OVC_MVOD        equ $203F
+OVC_GAMEID      equ $2042
 OVC_TEXTSCR     equ $2015
 OVD_READ        equ $2000               ; overlay D (ficheros de guardar/cargar): con call_d
 OVD_PREP        equ $2003
@@ -191,11 +192,7 @@ start:          di
 main_loop:      in a,(ClkPort)          ; las tramas se cuentan desde aqui (ver pace)
                 ld hl,hk_seen
                 ld (hl),0
-                ld hl,CTL
-                ld de,CTL+1
-                ld bc,255
-                ld (hl),0
-                ldir
+                call clr_ctl
                 call OVL_KDELIV
                 call kb_prompt
                 call do_events
@@ -216,14 +213,26 @@ ml_run:         xor a
                 jp nz,finish
                 ld a,(nr_pend)
                 or a
-                jr z,ml_end
+                jr z,ml_nr
                 call do_new_room
+                call clr_ctl            ; resetControllers tras cada pasada de la logica 0
+                jr ml_run
+ml_nr:          ld a,(rs_rerun)         ; restore.game: exitAllLogics y el bucle de interpretCycle repite la logica 0
+                or a
+                jr z,ml_end
+                xor a
+                ld (rs_rerun),a
+                ld (exitall),a
+                ld (FLAGS+2),a
+                ld (VARS+4),a
+                ld (VARS+5),a
+                ld (VARS+9),a
+                call clr_ctl
                 jr ml_run
 ml_end:         ld a,(VARS+6)           ; despues de la logica la direccion del ego es v6
                 ld (OBJ+O_DIR),a
-                xor a                   ; los codigos de borde se ponen a 0 antes de mover los objetos (el movimiento los pone y la logica del ciclo siguiente los ve)
-                ld (VARS+2),a
-                ld (VARS+4),a
+                xor a                   ; los codigos de borde se ponen a 0 antes de mover los objetos (el movimiento los pone y la logica del ciclo siguiente los ve); el del ego, solo
+                ld (VARS+4),a           ; si hay algun objeto que actualizar (t_cycles)
                 ld (VARS+5),a
                 call update_objects
                 ld hl,OVB_STATUS
@@ -235,6 +244,7 @@ ml_end:         ld a,(VARS+6)           ; despues de la logica la direccion del 
                 ld (keyn),a
                 ld (FLAGS+2),a
                 ld (FLAGS+4),a
+                ld (FLAGS+12),a         ; RESTORE_JUST_RAN
                 ld (VARS+9),a           ; la palabra desconocida y la tecla valen un solo ciclo (playGame)
                 ld (VARS+19),a
                 ld a,(rs_keep)          ; tras restart.game / restore.game las banderas 5 y 6 las ve la logica 0 del ciclo siguiente
@@ -877,8 +887,6 @@ ts_end:         pop de
 ; ---------------------------------------------------------------------
 do_new_room:    xor a                   ; la logica 0 se reinicia sin la linea tecleada (bandera 2) ni la palabra desconocida (v9), como en AGI
                 ld (FLAGS+2),a
-                ld (FLAGS+0),a          ; banderas 0 y 3 (agua, linea de aviso): las de la sala anterior no valen (la sala nueva las vuelve a calcular al mover el ego)
-                ld (FLAGS+3),a
                 ld (VARS+9),a
                 ld (st_n),a             ; los add.to.pic se olvidan (siguen pintados en la imagen hasta draw.pic)
                 call OVL_SPCLR
@@ -888,20 +896,14 @@ do_new_room:    xor a                   ; la logica 0 se reinicia sin la linea t
                 ld (VARS+1),a
                 ld hl,OVC_NEWROOM       ; newRoom: todos los objetos (tambien el ego) con paso y tiempos a 1, y las logicas (menos la 0) vuelven a su principio
                 call call_c
-                ld ix,OBJ+32            ; todos menos el ego dejan de estar animados y dibujados
+                ld ix,OBJ               ; todos, el ego tambien (newRoom de ScummVM), dejan de estar animados y dibujados; su animate.obj (logica 0) les pone el resto de banderas
                 ld de,32
-                ld b,NOBJ-1
+                ld b,NOBJ
 nr_u:           res 0,(ix+O_F1)
                 res 1,(ix+O_F1)
                 add ix,de
                 djnz nr_u
                 ld ix,OBJ
-                ld a,(ix+O_F1)
-                and $DC                 ; el ego sin animar (newRoom de ScummVM: su animate.obj de la logica 0 le restablece ignore.horizon), dibujar ni prioridad fija, y listo para andar (actualiza, cicla, se mueve) aunque la sala anterior le hiciera stop.motion o set.priority
-                or $1C
-                ld (ix+O_F1),a
-                xor a                   ; y observa bloques y objetos (la 7 lo deja con ignore.blocks e ignore.objs al cruzar su puerta)
-                ld (ix+O_F2),a
                 ld a,1
                 ld (pctl),a
                 xor a
@@ -937,7 +939,6 @@ nr_4:           cp 4
                 ld (ix+O_X),a
 nr_e:           xor a
                 ld (VARS+2),a
-                ld (FLAGS+0),a
                 ld (nr_pend),a
                 ld (exitall),a
                 inc a
@@ -1233,6 +1234,14 @@ varptr:         ld a,(ARGS)
 ;  Comandos (h_<nombre>); los que no estan aqui no hacen nada (h_nop) y gen_agitab.py los deja asi
 ; ---------------------------------------------------------------------
 h_nop:          ret
+h_set_game_id:  ld hl,OVC_GAMEID
+                jp call_c
+clr_ctl:        ld hl,CTL
+                ld de,CTL+1
+                ld bc,255
+                ld (hl),0
+                ldir
+                ret
 
 h_return:       ld hl,(lend)
                 ld (ip),hl
@@ -1810,6 +1819,9 @@ fh:             defb 0
 errc:           defb 0
 stopf:          defb 0
 rs_keep:        defb 0
+rs_rerun:       defb 0                  ; restore.game acaba de ejecutarse: la logica 0 se repite en este ciclo
+rs_warm:        defb 0                  ; ya hubo un arranque: el reinicio conserva las cadenas (agiInit no las borra con _restartGame)
+gfix:           defb 0                  ; set.game.id: 1 = SQ1, 2 = Larry 1 (apanos de ScummVM por juego)
 exitall:        defb 0
 lastpic:        defb 0                  ; la ultima imagen dibujada (para rehacerla al cargar una partida)
 ovl_on:         defb 0                  ; 1 = la imagen lleva su overlay.pic (va justo despues de lastpic: se guardan juntos)
