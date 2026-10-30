@@ -1140,7 +1140,7 @@ fw_done:        call unmap_win
 hc_said:        ld a,(inwvalid)
                 or a
                 jp z,ret_false
-                ld a,(said_done)
+                ld a,(FLAGS+4)         ; bandera 4 (SAID_ACCEPTED_INPUT) como en ScummVM: reset(f4) permite otro said
                 or a
                 jp nz,ret_false
                 ld a,(VARS+9)

@@ -471,7 +471,7 @@ class Interp:
         return nums
 
     def say(self, args):
-        if self.input is None or self.said_done or self.vars[9]:
+        if self.input is None or self.flags[4] or self.vars[9]:       # testSaid de ScummVM: la bandera 4 (SAID_ACCEPTED_INPUT) la pone said y la puede bajar la logica con reset(f4)
             return False
         w = self.input
         n = len(args)
