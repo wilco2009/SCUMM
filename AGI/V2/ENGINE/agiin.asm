@@ -332,6 +332,7 @@ hk_seen:        defb 0
 h_shake_screen: ld a,(ARGS)
                 or a
                 ret z
+
                 ld (sh_n),a
 sh_l:           ld hl,sh_pat
                 ld b,8
@@ -375,6 +376,17 @@ h_status_line_on: ld hl,OVB_SON
 h_status_line_off: ld hl,OVB_SOFF
                 jp call_b
 ; print: ventana de mensaje (overlay B) y espera de una tecla
+; close.window / show.pic (ScummVM closeWindow; show.pic ademas apaga VM_FLAG_OUTPUT_MODE): quita la ventana que dejo un print no bloqueante
+h_show_pic:     xor a
+                ld (FLAGS+15),a
+h_close_window: ld a,(win_act)
+                or a
+                ret z
+                xor a
+                ld (win_act),a
+                ld hl,OVB_BOXCLOSE
+                call call_b
+                jp OVL_FORCE
 h_print:        ld a,(ARGS)
 hp_s:           ld (pr_msg),a
                 ld a,255
@@ -416,7 +428,12 @@ pr_go:          call OVL_SPRINIT        ; con la ventana abierta los sprites se 
                 call call_c
                 xor a
                 ld (oc_pw),a
-pg_w:           call pr_wait
+pg_w:           ld a,(win_act)          ; bandera 15 (VM_FLAG_OUTPUT_MODE): la ventana queda abierta y no se espera (t_prt)
+                or a
+                ret nz
+                call pr_wait
+                ld hl,0
+                ld (pw_lim),hl
                 ld a,(stopf)
                 or a
                 ret nz                  ; se acabaron los ciclos (pruebas): la ventana se queda
@@ -456,7 +473,16 @@ pw_run:         call OVL_KDELIV
                 ld a,(tqn)
                 or a
                 ret nz
-pw_nt:          ld hl,(ncyc)
+pw_nt:          ld hl,(pw_lim)          ; temporizador de la ventana (v21): al llegar a 0 se cierra sin tecla
+                ld a,h
+                or l
+                jr z,pw_nl
+                dec hl
+                ld (pw_lim),hl
+                ld a,h
+                or l
+                jr z,pw_d
+pw_nl:          ld hl,(ncyc)
                 ld a,h
                 or l
                 call z,wait_frame
@@ -480,6 +506,8 @@ pr_w:           defb 0
 pw_k:           defb 0
 pw_last:        defb 0
 pw_v:           defb 0
+pw_lim:         defw 0
+win_act:        defb 0
 
 ; ---------------------------------------------------------------------
 ;  Menus: set.menu / set.menu.item / enable.item / disable.item guardan en el overlay B (agib.asm); menu.input es modal como print: cada vuelta es un ciclo, las
@@ -714,6 +742,8 @@ h_get_string:   ld a,(ARGS)
                 ret nc
                 call strptr
                 ex de,hl
+                ld a,(ARGS+4)           ; stringMaxLen (ed_ nunca pasa de 40, TEXT_STRING_MAX_SIZE)
+                ld (il_max),a
                 xor a
                 ld (il_n),a
                 ld (INBUF),a
@@ -751,7 +781,9 @@ gs_k:           ld a,(gs_cust)          ; descripcion de una partida: ESC cancel
                 jr gs_f
 gs_d:           ld de,(gs_dst)
                 call tq_pop
-gs_f:           xor a
+gs_f:           ld a,IL_MAX
+                ld (il_max),a
+                xor a
                 ld (gs_on),a
                 ld a,(gs_acc)
                 ld (accin),a

@@ -18,7 +18,7 @@
                 jp t_status_off         ; OVB_SOFF
                 jp t_set_attr           ; OVB_ATTR
                 jp t_prompt             ; OVB_PROMPT
-                jp t_print              ; OVB_PRINT
+                jp t_prt                ; OVB_PRINT
                 jp t_boxclose           ; OVB_BOXCLOSE
                 jp t_setmenu            ; OVB_SETMENU
                 jp t_setitem            ; OVB_SETITEM
@@ -788,6 +788,40 @@ LB:             defs 68
 ;  a t_boxclose (devuelve la imagen limpia). Mismo resultado que agi_text.wrap / box_geom / draw_box: lineas de como mucho pr_w caracteres (30 si 0 o mas de 36),
 ;  una celda de relleno a cada lado y una fila arriba y otra abajo, blanco con letras negras y un marco rojo de un pixel.
 ; ---------------------------------------------------------------------
+; print: cierra antes la ventana que dejo un print no bloqueante (drawMessageBox); con la bandera 15 la ventana se queda abierta, se apaga la bandera y no se espera
+; (win_act); si no, el temporizador (v21 en medios segundos, 25 ciclos de espera cada uno; ScummVM lo pone a 0 al cerrar) pasa a pw_lim
+t_prt:          ld a,(win_act)
+                or a
+                jr z,tpr_1
+                call t_boxclose
+                xor a
+                ld (win_act),a
+tpr_1:          call t_print
+                ld a,(FLAGS+15)
+                or a
+                jr z,tpr_t
+                xor a
+                ld (FLAGS+15),a
+                inc a
+                ld (win_act),a
+                ret
+tpr_t:          ld a,(VARS+21)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,de
+                ld e,a
+                ld d,0
+                add hl,de
+                ld (pw_lim),hl
+                xor a
+                ld (VARS+21),a
+                ret
 t_print:        ld a,(pr_raw)           ; 1 = pausa, 2 = reiniciar, 3 = el texto ya esta en TXT; 0 = el mensaje pr_msg de la logica
                 or a
                 jr z,tp_norm
@@ -795,6 +829,9 @@ t_print:        ld a,(pr_raw)           ; 1 = pausa, 2 = reiniciar, 3 = el texto
                 jr z,tp_fmt
                 cp 3
                 jr z,tp_have
+                cp 5
+                ld hl,s_mem
+                jr z,tp_cp
                 ld hl,s_pause
                 cp 1
                 jr z,tp_cp
@@ -2184,6 +2221,7 @@ mu_e:           ld (hl),1
 
 s_sav:          defb "Save game",0
 s_inv:          defb "You are carrying",0
+s_mem:          defb "Enough memory",0
 s_pause:        defb "Game paused.",10,10,"Press any key to continue.",0
 s_restart:      defb "Press ENTER to restart",10,"the game.",10,10,"Press ESC to continue",10,"this game.",0
 s_rst:          defb "Restore game",0

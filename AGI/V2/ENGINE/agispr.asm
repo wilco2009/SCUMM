@@ -330,6 +330,8 @@ sw_force:       defb 0
 kb_dirty:       defb 0
 kb_lacc:        defb 0
 accin:          defb 1
+IL_MAX          equ 39
+il_max:         defb IL_MAX     ; largo maximo de la linea de entrada; get.string lo cambia (gs_f lo devuelve)
 il_n:           defb 0
 INBUF:          defs 41
 

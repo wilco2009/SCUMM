@@ -42,7 +42,6 @@ SPH:            defs 8*SP_MAX
 ;  Cada caracter es un evento de tecla (v19, set.key); con accept.input tambien va a la linea de entrada, que ENTER entrega como texto.
 ; ---------------------------------------------------------------------
 PQ_MAX          equ 16
-IL_MAX          equ 39
 
 t_kpoll:        push af
                 push bc
@@ -203,7 +202,10 @@ ke_ed:          ld a,(accin)
                 cp 127
                 ret nc
                 ld a,(il_n)
-                cp IL_MAX
+                cp 40                   ; INBUF tiene 41 bytes
+                ret nc
+                ld hl,il_max
+                cp (hl)
                 ret nc
                 ld e,a
                 ld d,0

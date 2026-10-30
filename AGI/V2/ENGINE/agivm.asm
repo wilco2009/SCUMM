@@ -1542,6 +1542,8 @@ hs_txt:         ld hl,OVC_INVTXT
                 call call_c
                 ld a,3
                 jr pr_rawgo
+h_show_mem:     ld a,5                  ; show.mem: messageBox("Enough memory")
+                jr pr_rawgo
 h_show_obj_v:   ld a,(ARGS)
                 call getv
                 ld (ARGS),a

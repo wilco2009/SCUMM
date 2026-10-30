@@ -1134,7 +1134,7 @@ class Interp:
     def c_show_obj_v(self, v): self.c_show_obj(self.vars[v])
 
     RESTART_FIELDS = ('scan', 'vars', 'flags', 'objs', 'inv', 'keys', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'statics', 'horizon', 'blocks', 'pcontrol',
-                      'lastpic', 'ovl_n', 'lfsr', 'status_on', 'st_last', 'tfg', 'tbg', 'accept', 'sound_flags', 'input', 'said_done', 'keyq', 'textq', 'ctl', 'wtext', 'ext_bm', 'ext_at', 'box')
+                      'lastpic', 'ovl_n', 'lfsr', 'status_on', 'st_last', 'tfg', 'tbg', 'accept', 'sound_flags', 'input', 'said_done', 'keyq', 'textq', 'ctl', 'wtext', 'ext_bm', 'ext_at', 'box', 'win_act')
 
     def c_restart_game(self):
         """Confirmacion (ENTER reinicia, ESC sigue); el estado vuelve al del arranque y se sale de la logica en curso."""
@@ -1167,7 +1167,15 @@ class Interp:
         lines = agi_text.wrap(s, width)
         self.log('print: ' + ' / '.join(lines))
         self.box = (lines, agi_text.box_geom(lines, row, col, ((pic[0] + 7) >> 3) + 2 if pic else 0), pic)
+        self.win_act = False                # drawMessageBox cierra la ventana que dejo un print no bloqueante
+        if self.flags[15]:                  # TextMgr::messageBox con VM_FLAG_OUTPUT_MODE: la ventana se queda abierta, la bandera se apaga y no se espera
+            self.flags[15] = 0
+            self.win_act = True
+            return
         n, v19 = len(self.keyq), self.vars[19]
+        lim = self.vars[21] * 25            # v21 = cierre automatico en medios segundos (aqui 25 vueltas de espera cada uno); ScummVM lo pone a 0 al cerrar
+        self.vars[21] = 0
+        timeout = False
         while True:
             self.cycle += 1
             if self.cycle > self.max_cycles:
@@ -1175,10 +1183,35 @@ class Interp:
             self.apply_events(self.ev.get(self.cycle, []))
             if len(self.keyq) > n:
                 break
-        self.last_key = self.keyq[n]
+            if lim:
+                lim -= 1
+                if not lim:
+                    timeout = True
+                    break
+        if not timeout:
+            self.last_key = self.keyq[n]
         del self.keyq[n:]
         self.vars[19] = v19
         self.box = None
+
+    win_act = False
+
+    def close_window(self):
+        """TextMgr::closeWindow: quita la ventana que dejo un print no bloqueante."""
+        if self.win_act:
+            self.win_act = False
+            self.box = None
+
+    def c_close_window(self): self.close_window()
+
+    def c_show_pic(self):
+        """cmdShowPic: VM_FLAG_OUTPUT_MODE a 0 y cierra la ventana (la imagen ya se muestra con draw.pic)."""
+        self.flags[15] = 0
+        self.close_window()
+
+    def c_show_mem(self): self.do_print('Enough memory', None, None, 0)
+
+    def c_shake_screen(self): pass          # solo visual: lo hace el hardware (fino X/Y) en el Z80
     def c_text_screen(self):
         """La pantalla de texto: las filas 1-21 en negro y sin sprites hasta graphics."""
         self.txtm = True
@@ -1274,7 +1307,7 @@ class Interp:
             del self.keyq[n:]
             self.vars[19] = v19
         self.gs_on = False
-        self.strs[s] = self.textq.pop(0)[:40]
+        self.strs[s] = self.textq.pop(0)[:min(ln, 40)]      # stringMaxLen, como mucho TEXT_STRING_MAX_SIZE
 
     def save_desc(self):
         """La descripcion de la partida: una linea (evento `text` o `str`) o None si se cancela con ESC; la linea cuenta 30 caracteres."""

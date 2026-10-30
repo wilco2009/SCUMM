@@ -93,7 +93,26 @@ Gravedad: **A** puede romper una sala; **M** probable efecto visible/temporizaci
 
 ## 5. Comandos y condiciones
 
-Faltan en el modelo (se cuentan en `noop`): `load.logics(.v)`, `load.pic`, `load.view(.v)`, `load.sound`, `discard.pic`, `discard.view(.v)` — nulos sin consecuencia; `show.pic` (la pic ya se muestra con `draw.pic`; ScummVM sí distingue: `draw.pic` NO muestra hasta `show.pic`, y las lógicas dibujan pic + objetos antes de `show.pic`: **verificar** que no se vea un fotograma intermedio, B); `show.pri.screen` (depuración); `shake.screen` (**M** visual: explosiones en SQ1; no cambia lógica); `obj.status.v`, `show.mem`, `trace.*`, `script.size`, `configure.screen`, `init.disk`, `init.joy`, `toggle.monitor` (nulos); `set.scan.start` / `reset.scan.start` (**B**, v2.4+; cambia el punto de entrada de la lógica; verificar si lo usa algún juego con `grep -r` en las lógicas); `clear.text.rect`, `set.upper.left`, `open.dialogue`, `close.dialogue`, `close.window` (**B**; `clear.text.rect` puede dejar texto en pantalla).
+Comandos sin implementar, revisados contra `op_cmd.cpp` y `text.cpp` (2026-10-30):
+
+- **Hechos (modelo y Z80 iguales):**
+  - `show.pic`: `VM_FLAG_OUTPUT_MODE` (bandera 15) a 0 y `closeWindow`. La imagen ya sale con `draw.pic`, así que no hay fotograma intermedio.
+  - `close.window` (`closeWindow`).
+  - Bandera 15 en `print*`, `pause`, `status` y `show.obj` (`TextMgr::messageBox`): la ventana se dibuja, la bandera se apaga, no se espera y la ventana se queda hasta `close.window`, `show.pic` o el siguiente mensaje (`drawMessageBox` cierra la anterior). Lo usan PQ1, SQ2 y Larry1.
+  - Cierre automático de la ventana con la variable 21 (medios segundos; aquí 25 vueltas de espera por unidad), puesta a 0 al cerrar. Los juegos la usan para las ventanas con texto que se cierran solas.
+  - `show.mem`: `messageBox("Enough memory")`.
+  - `shake.screen`: se deja como está. Lo hace el hardware (fino X/Y), más fiel y más barato que copiar el original. ScummVM trata 100-109 como paleta AGIPAL, que ningún juego de Sierra usa (solo 1, 2 y 3).
+  - `get.string`: largo máximo `min(stringMaxLen, 40)` (`il_max`; el teclado `ed_` de A1 no pasa de él, y el modelo recorta la línea).
+  - `increment`/`decrement`: ya eran iguales (tope 255, suelo 0).
+- **Nulos como en ScummVM (no hay nada que copiar):** `discard.pic`, `set.upper.left`, `init.disk`, `trace.on`, `trace.info`, `init.joy`, `script.size` (solo `debug`) y `toggle.monitor` (solo `debug`).
+- **Nulos porque todo está residente:**
+  - `load.logics(.v)`, `load.pic`, `load.view(.v)` y `load.sound`: ScummVM carga el recurso.
+  - `discard.view(.v)`: ScummVM lo descarga. Un juego correcto carga antes de usar, así que no cambia nada observable.
+  - `load.pic` además hace `eraseSprites`/`buildAllSpriteLists`/`drawAllSpriteLists`, que aquí hace el ciclo de dibujo.
+- **`open.dialogue` / `close.dialogue`:** solo ponen `dialogue_Open`, cuyo único efecto en `text.cpp` es el largo máximo de la línea de comandos (`promptKeyPress`). La línea de entrada de este intérprete tiene su propio tope (`IL_MAX` = 39). No se modela (límite de memoria del núcleo).
+- **`configure.screen`:** `configureScreen` desplaza la zona de juego (`setRenderStartOffset`). La geometría del HiRes es fija. Límite de hardware.
+- **`show.pri.screen` y `obj.status.v`:** depuración, muestran el mapa de prioridades o una caja de estado y esperan una tecla. Solo se llaman bajo órdenes de depuración. No se implementan (núcleo al límite).
+- **Diferencia anotada (pendiente):** `messageBox_KeyPress` cierra la ventana solo con ENTER o ESC (y clic dentro). Aquí cierra cualquier tecla (`pr_wait`). No es de hardware: falta decidir el cambio, que toca todas las ventanas.
 
 Implementadas distinto:
 
