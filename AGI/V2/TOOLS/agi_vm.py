@@ -227,9 +227,24 @@ class Interp:
         k = 0
         if self.box is not None or self.menu_ui is not None or self.txtm:
             return out                  # con una ventana, un menu o la pantalla de texto abiertos los sprites se apagan
-        for n in self.draw_order():
+        order = self.draw_order()
+        res = 0                         # el ego tiene prioridad en los sprites: lo que se pinta antes que el no pasa de 64 - res
+        if 0 in order:
+            o = self.objs[0]
+            d = self.g.resource('VIEW', o.view)
+            if d is not None and o.x < 160 and o.loop < d[2]:
+                try:
+                    c = agi2spr.cel_of(o.view, d, o.loop, o.cel)
+                    if c is not None and not (agi2spr.meta(c[2], o.view)[0] or o.static):
+                        res = agi2spr.loop_maxt(d, o.loop)
+                except (IndexError, ValueError):
+                    pass
+        cap = 64 - res
+        for n in order:
             if True:
                 o = self.objs[n]
+                if n == 0:
+                    cap = 64
                 if o.x >= 160:
                     continue
                 d = self.g.resource('VIEW', o.view)
@@ -250,12 +265,12 @@ class Interp:
                 if agi2spr.meta(tiles, o.view)[0] or o.static:
                     continue                # rotulo ancho o objeto fijo: lo dibuja el Z80 en el bitmap (sw_blit)
                 start = k
-                k += agi2spr.loop_maxt(d, o.loop)
+                k = min(k + agi2spr.loop_maxt(d, o.loop), cap)
                 x0 = agi2spr.lo(o.x) + 32
                 top = 8 + o.y - h + 1 + 32
                 for j, (tx, ty, col, pix, msk) in enumerate(tiles):
                     slot = start + j
-                    if slot >= 64:
+                    if slot >= cap:
                         break
                     sx, sy = x0 + tx * 8, top + ty * 8
                     if sx <= 24 or sx >= 288 or sy <= 24 or sy >= 224:

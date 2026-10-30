@@ -117,10 +117,52 @@ cel_open:       ld a,(ix+O_X)
                 jp z,co_no
                 jp cel_rd
 ts_n:           defb 0
+hw_res:         defb 0                  ; sprites que reserva el ego (0 si no va por hardware)
+hw_res0:        defb 0                  ; la reserva con la que estan armados los objetos
+hw_aft:         defb 0                  ; 1 = ya se paso por el ego
+hw_cap:         defb 64
+hw_probe:       defb 0
+
+; hw_res = mosaicos que reserva el ego (el maximo de su bucle) si esta en ORD y va por hardware
+hq_res:         xor a
+                ld (hw_res),a
+                ld a,(hq_cnt)
+                or a
+                ret z
+                ld b,a
+                ld hl,ORD
+hr_f:           ld a,(hl)
+                or a
+                jr z,hr_g
+                inc hl
+                djnz hr_f
+                ret
+hr_g:           ld (rn),a
+                ld ix,OBJ
+                ld a,1
+                ld (hw_probe),a
+                call spr_obj2
+                xor a
+                ld (hw_probe),a
+                ret
 
 ; Tras el dibujo por software (overlay A2, que llama el nucleo): los sprites
-t_draw:         xor a
+t_draw:         call hq_res             ; el ego tiene prioridad en los sprites: los objetos que se pintan antes que el no pasan de 64 - hw_res
+                ld hl,hw_res
+                ld a,(hw_res0)
+                cp (hl)
+                jr z,hr_ok
+                ld a,(hl)
+                ld (hw_res0),a          ; cambia la reserva: todos se arman de nuevo
+                ld ix,OBJ
+                ld de,32
+                ld b,NOBJ
+hr_i:           res 1,(ix+O_SDR)
+                add ix,de
+                djnz hr_i
+hr_ok:          xor a
                 ld (sk),a
+                ld (hw_aft),a
                 xor a                   ; y ahora, en orden
                 ld (hq_k),a
 hq_it:          ld a,(hq_k)
@@ -133,6 +175,22 @@ hq_it:          ld a,(hq_k)
                 add hl,de
                 ld a,(hl)
                 ld (rn),a
+                ld c,64                 ; hw_cap: tope de sprites (el ego y lo que se pinta despues, 64; antes del ego, lo que deja reservado)
+                or a
+                jr nz,hq_nc
+                ld a,1
+                ld (hw_aft),a
+                jr hq_cp
+hq_nc:          ld a,(hw_aft)
+                or a
+                jr nz,hq_cp
+                ld a,64
+                ld hl,hw_res
+                sub (hl)
+                ld c,a
+hq_cp:          ld a,c
+                ld (hw_cap),a
+                ld a,(rn)
                 ld l,a
                 ld h,0
                 add hl,hl
@@ -361,7 +419,16 @@ spr_obj2:       ld a,(ix+O_VIEW)
                 ld (hw_tag+2),a
                 call cel_open
                 ret c
+                ld a,(hw_probe)
+                or a
+                jr z,so_np
                 ld a,(cv_fl)
+                and 1
+                jp nz,hw_end
+                ld a,(cv_mt)
+                ld (hw_res),a
+                jp unmap_win
+so_np:          ld a,(cv_fl)
                 and 1
                 jp nz,hw_end            ; rotulo ancho: lo dibuja agisw.asm
                 ld a,(sk)
@@ -460,7 +527,8 @@ hw_tl:          ld a,(hw_i)
                 ld hl,hw_base
                 add a,(hl)
                 ld (hw_slot),a          ; el mosaico j va al sprite reservado j
-                cp 64
+                ld hl,hw_cap
+                cp (hl)
                 jp nc,hw_skip
                 ld hl,(hw_p)
                 ld a,(hl)               ; tx
@@ -546,9 +614,11 @@ hf_d:           ld a,(hw_base)
                 ld hl,cv_mt
                 add a,(hl)
                 jr c,hf_c
-                cp 65
+                ld hl,hw_cap
+                cp (hl)
+                jr z,hf_s
                 jr c,hf_s
-hf_c:           ld a,64
+hf_c:           ld a,(hw_cap)
 hf_s:           ld (sk),a
                 jp unmap_win
 
