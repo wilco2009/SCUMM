@@ -821,8 +821,9 @@ tf_c1:          bit 3,(ix+O_F2)
                 ret
 tf_r:           sub c
                 inc a
-                ld b,a
+                ld c,a                  ; rand8 deja B a 0: el modulo se pasa a B despues
                 call rand8
+                ld b,c
                 call rem8
                 add a,(ix+O_STEP)
                 ld (ix+O_WANDER),a
