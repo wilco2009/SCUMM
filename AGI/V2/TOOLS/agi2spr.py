@@ -135,8 +135,9 @@ FORCE_SW = {'SQ1': {175}}
 # software, recomponen lineas cada ciclo y eran el 60 % del tiempo de la sala. SQ1, sala 6: las luces de las cupulas (vista 175).
 FREEZE_VIEWS = {'SQ1': {175}}
 # Vistas que van por hardware aunque tengan mas de SW_TILES mosaicos en una fila (hasta 12 por linea): SQ1, sala 33 (esquivar rocas): la nave (vistas 75, 95 y
-# 102, 7 mosaicos de ancho) por software recomponia lineas en cada paso y la animacion iba a 1/5 de la velocidad.
-FORCE_HW = {'SQ1': {75, 95, 102}}
+# 102, 7 mosaicos de ancho) por software recomponia lineas en cada paso y la animacion iba a 1/5 de la velocidad. Sala 70 (bar): el alienigena del mostrador
+# (vistas 73 y 251, 7 mosaicos), animado, recomponia lineas en cada ciclo; solo comparte linea con el ego y poco mas (menos de 12 sprites).
+FORCE_HW = {'SQ1': {75, 95, 102, 73, 251}}
 _force = set()
 _freeze = set()
 _hw = set()
