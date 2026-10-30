@@ -71,3 +71,5 @@ Controlador y tecla del PC segun la logica 104. "Texto" = se puede escribir la o
 ## 6. Que se puede hacer ya sin teclas nuevas
 
 Todo lo del menu se alcanza con ESC (tecla 9), las flechas (5/6/7/8) y ENTER, y casi todo tambien escribiendo la orden. Las teclas de la seccion 4 son comodidad.
+
+Nota sobre Speed: con **Fast** y **Fastest** (v10 <= 1) los objetos estaticos que solo ciclan celdas (luces, pantallas, droides parados; no el ego, ni los que se mueven, ni los de `end.of.loop`/`reverse.loop`) se quedan quietos para ganar velocidad; con Normal y Slow animan como siempre.

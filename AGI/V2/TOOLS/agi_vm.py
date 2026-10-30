@@ -1791,7 +1791,8 @@ class Interp:
             if o.cycling and o.ccount:
                 o.ccount -= 1
                 if o.ccount == 0:
-                    self.cycle_cel(o)
+                    if not (self.vars[10] <= 1 and k != 0 and o.ctype == 0 and o.motion == 0 and o.dir == 0):    # Speed Fast/Fastest: un objeto estatico no cambia de celda
+                        self.cycle_cel(o)
                     o.ccount = o.ctime
         for k, o in objs:
             if o.scount > 1:

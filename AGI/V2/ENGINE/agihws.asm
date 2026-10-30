@@ -145,6 +145,7 @@ hq_it:          ld a,(hq_k)
                 push hl
                 pop ix
                 call spr_obj
+                call t_kpoll            ; el armado de los sprites es lo que mas dura del ciclo: sin esto se perdian las pulsaciones cortas
                 ld hl,hq_k
                 inc (hl)
                 jr hq_it

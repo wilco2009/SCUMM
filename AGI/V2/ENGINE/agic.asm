@@ -1040,7 +1040,17 @@ ov_tc_l:           ld a,(ix+O_F1)
                 jr z,ov_tc_c
                 res 4,(ix+O_F2)
                 jr ov_tc_t
-ov_tc_c:           call cycle_cel
+ov_tc_c:           ld a,(VARS+10)          ; Speed Fast / Fastest (v10 <= 1): los objetos estaticos (ciclo normal, sin movimiento ni direccion, no el ego) no cambian de celda
+                cp 2
+                jr nc,ov_tc_y
+                ld a,(curk)
+                or a
+                jr z,ov_tc_y
+                ld a,(ix+O_CTYPE)
+                or (ix+O_MOTION)
+                or (ix+O_DIR)
+                jr z,ov_tc_t
+ov_tc_y:           call cycle_cel
                 call clip_view
 ov_tc_t:           ld a,(ix+O_CTIME)
                 ld (ix+O_CCOUNT),a
