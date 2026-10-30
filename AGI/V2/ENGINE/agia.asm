@@ -264,11 +264,14 @@ kq_put:         ld b,a
                 inc (hl)
                 ret
 
-; Direccion del ego con SHIFT + 5/6/7/8: bits arriba 1, derecha 2, abajo 4, izquierda 8 -> direccion de AGI
+; Direccion del ego con 5/6/7/8 (sin SHIFT ni ENTER): bits arriba 1, derecha 2, abajo 4, izquierda 8 -> direccion de AGI
 kb_dir:         ld a,(kb_shift)
                 or a
                 ld b,0
                 jr nz,kd_set            ; con SHIFT las cifras son cifras
+                ld a,(kb_enter)         ; con ENTER, 6/7/8/9 son las teclas de funcion F4/F6/F8/F10 y los simbolos
+                or a
+                jr nz,kd_set
                 ld a,(kb_cur+4)
                 ld c,a
                 bit 3,c
@@ -363,7 +366,7 @@ km_sym:         defb 0,':',';','?','/'
                 defb 0,92,0,126,96              ; S = \  F = ~  G = `
                 defb 39,123,125,91,95           ; Q = '  W = {  E = }  R = [  T = _
                 defb '!',64,'#',124,'%'         ; 1 = !  2 = @  3 = #  4 = |  5 = %
-                defb 2,0,0,0,'&'                ; 0 = (el digito 0 solo como texto)  6 = &
+                defb 2,26,25,31,29              ; 0 = (el digito 0 solo como texto)  9 = F10  8 = F8  7 = F6  6 = F4 (codigos de control 26/25/31/29)
                 defb 34,')','(','$',93          ; P = "  O = )  I = (  U = $  Y = ]
                 defb 0,'=','+','-',94           ; L = =  K = +  J = -  H = ^
                 defb ' ',',','>','<','*'        ; . = ,  M = >  N = <  B = *

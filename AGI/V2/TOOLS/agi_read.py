@@ -112,12 +112,15 @@ HELP = {
         5: '    2  saves your current game.',
         7: '    3  restores a saved game.',
         9: '    9  pops up the menus (ESC).',
-        11: '    5 6 7 8  left, down, up, right.',
+        11: '    5 6 7 8  left, down, up, right.\n    ENTER+6 7 8 9  F4 F6 F8 F10 (game keys)\n    ENTER+7 fires the Pulseray.',
         13: '    0  deletes the last character.',
         14: 'SHIFT + key: capitals and numbers.',
         15: 'ENTER + key: symbols:',
         16: SYMTAB,
         22: '',
+    }, 75: {
+        14: ' Press ENTER+9 ',
+        60: ' ENTER+6 Bets $1 +7 Bets $2 +8 Bets $3',
     }},
     'KQ1': {92: {
         2: '          ZX81 keys',
@@ -165,7 +168,7 @@ HELP = {
         3: ' 1  clears the typed line.',
         4: ' 4  retypes the last line typed.',
         5: ' 2  saves your current game.',
-        6: 'F4 F6 F8 F10: use the menu.',
+        6: ' ENTER+6 7 8 9 = F4 F6 F8 F10 keys.',
         7: ' 3  restores a saved game.',
         8: '', 10: '', 12: '', 18: '', 22: '', 23: '', 24: '', 27: '',
         9: ' 9  pops up the menus (ESC).',
@@ -175,7 +178,7 @@ HELP = {
         13: 'ENTER + key: symbols:\n' + SYMTAB,
         14: '',
         20: '',
-        21: 'F4 F6 F8 F10: use the menu.',
+        21: ' ENTER+6 7 8 9 vary throughout game.',
     }},
     'LARRY1': {55: {
         4: 'Use 5 6 7 8 to move Larry',
@@ -191,12 +194,15 @@ HELP = {
 }
 
 
+FKEYS = {'F4': 'ENTER+6', 'F6': 'ENTER+7', 'F8': 'ENTER+8', 'F10': 'ENTER+9'}    # teclas de funcion con codigo propio en el ZX81
+
+
 def help_override(path, n, msgs):
-    """La lista de mensajes de la logica n con los textos sustitutos del juego (path = carpeta del juego), si los hay."""
+    """La lista de mensajes de la logica n con los textos sustitutos del juego (path = carpeta del juego), si los hay; las teclas F4/F6/F8/F10 se nombran con las del ZX81."""
+    msgs = [re.sub(r'(?<![<\w])F(4|6|8|10)', lambda m: FKEYS[m.group(0)], t) if t else t for t in msgs]
     ov = HELP.get(os.path.basename(os.path.normpath(path)).upper(), {}).get(n)
     if not ov:
         return msgs
-    msgs = list(msgs)
     for i, t in ov.items():
         if i <= len(msgs):
             msgs[i - 1] = t

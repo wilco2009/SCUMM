@@ -140,14 +140,16 @@ kp_m:           ld a,c
 h_set_key:      ld a,(ARGS)             ; ascii, scan, controlador
                 or a
                 jr nz,sk_a
-                ld a,(ARGS+1)           ; teclas de funcion: F5 (63) y F7 (65) viven en los codigos de control 28 y 30 (teclas 2 y 3 del ZX81)
-                cp 63
-                ld a,28
-                jr z,sk_a
-                ld a,(ARGS+1)
-                cp 65
-                ret nz
-                ld a,30
+                ld a,(ARGS+1)           ; teclas de funcion F4..F10 (62..68, salvo F9 y F3) viven en codigos de control (teclas 2/3 y ENTER+6..9 del ZX81)
+                ld hl,sk_fn
+                ld b,6
+sk_f:           cp (hl)
+                inc hl
+                jr z,sk_g
+                inc hl
+                djnz sk_f
+                ret
+sk_g:           ld a,(hl)
 sk_a:           and 127
                 ld l,a
                 ld h,0
@@ -159,6 +161,7 @@ sk_a:           and 127
                 inc hl
                 ld (hl),1
                 ret
+sk_fn:          defb 62,29,63,28,64,31,65,30,66,25,68,26   ; F4 F5 F6 F7 F8 F10
 
 hc_controller:  ld a,(ARGS)
                 ld l,a

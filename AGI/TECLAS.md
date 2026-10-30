@@ -19,7 +19,7 @@ tienen el mismo esquema con pequenas diferencias.
 | SHIFT | letras en mayuscula y cifras |
 | ENTER + tecla | simbolos (`: ; ? / \ ~ \` ' { } [ _ ! @ # \| % & " ) ( $ ] = + - ^`); ENTER solo = retorno de carro (al soltar) |
 | ENTER + 0 (2026-10-29) | el digito `0` **solo como texto**, sin el evento de tecla: KQ1 liga el `0` al salto, y SHIFT+0 salta (y tambien escribe un 0); ENTER+0 escribe el 0 sin saltar |
-| Funciones (2026-10-28) | `1` = borrar la linea de entrada (Ctrl-C, ASCII 3), `2` = guardar (F5), `3` = cargar (F7), `4` = repetir la orden (Ctrl-E, ASCII 5); solo generan el evento, no editan la linea. F5 y F7 son teclas de barrido que `set.key(0, 63/65, c)` liga a un controlador: el interprete las guarda en los codigos de control 28 y 30. El resto de teclas de funcion no se implementan: se usa el menu. Los textos de las opciones del menu pierden la tecla del PC (`<F5>`...), salvo F5/F7, que pasan a `<2>`/`<3>` (generico, para todos los juegos) |
+| Funciones (2026-10-28) | `1` = borrar la linea de entrada (Ctrl-C, ASCII 3), `2` = guardar (F5), `3` = cargar (F7), `4` = repetir la orden (Ctrl-E, ASCII 5); solo generan el evento, no editan la linea. F5 y F7 son teclas de barrido que `set.key(0, 63/65, c)` liga a un controlador: el interprete las guarda en los codigos de control 28 y 30. **F4, F6, F8 y F10 (2026-10-30)**: `ENTER + 6/7/8/9` generan los codigos de control 29, 31, 25 y 26, que `set.key(0, 62/64/66/68, c)` liga a c4, c6, c8 y c29 (los usa la tragaperras de SQ1, sala 75: f128, f130, c29; con ENTER pulsado las cifras 5-8 ya no mueven al ego). Los textos del juego que dicen F4/F6/F8/F10 se sustituyen al convertir por ENTER+6/7/8/9 (`agi_read.help_override`). Las demas teclas de funcion no se implementan: se usa el menu. Los textos de las opciones del menu pierden la tecla del PC (`<F5>`...), salvo F5/F7, que pasan a `<2>`/`<3>` (generico, para todos los juegos) |
 
 ## 3. Opciones del menu de SQ1 (ESC)
 
@@ -49,8 +49,8 @@ Controlador y tecla del PC segun la logica 104. "Texto" = se puede escribir la o
 | c9 | F3, Ctrl-E | `echo.line`: repite la ultima orden en la linea de entrada | **util**: el comando ya esta hecho, falta una tecla |
 | c17 | Ctrl-C | `cancel.line`: borra la linea de entrada | **util** (hoy se borra con la tecla 0) |
 | c26 / c27 | `+` / `-` | volumen (v23, de 0 a 15) | **no se hace** (decidido 2026-10-28): el volumen no se implementa |
-| c6 / c8 | F6 / F8 | ponen las banderas 128 / 130 (usos propios de SQ1) | no hace falta |
-| c29 | F10 | uso propio del juego | no hace falta |
+| c6 / c8 | F6 / F8 | ponen las banderas 128 / 130 (usos propios de SQ1) | **hecho**: ENTER + 7 / ENTER + 8 |
+| c29 | F10 | uso propio del juego (SQ1: salir de la tragaperras) | **hecho**: ENTER + 9 (y F4 = c4, ENTER + 6) |
 | c13 | Alt-1 | `show.mem` (depuracion) | no aplica |
 | c14 | Alt-D | `version` (depuracion) | no aplica |
 | c19 | Esc | menu | hecho (tecla 9) |
@@ -64,7 +64,7 @@ Controlador y tecla del PC segun la logica 104. "Texto" = se puede escribir la o
    `agia.asm` (overlay A) esta casi lleno (8014 de 8192 bytes): cualquier tecla nueva obliga a hacer sitio.
 2. **Textos del menu**: sustituir `<F5>`, `<Alt-Z>`, `<Tab>`... por la tecla real del ZX81, o quitarlos (todo es accesible desde el menu con las flechas y ENTER). Los
    mensajes son de la logica 0; habria que cambiarlos al cargar el juego (en la conversion, `agi2log.py`) para no tocar los datos originales.
-3. **Pantalla de ayuda**: hecha para los seis juegos (2026-10-29) con `agi_read.HELP` (se aplica al convertir y en el modelo): las teclas del ZX81 y la tabla de simbolos; KQ1 y KQ2 explican saltar/agacharse/nadar (SHIFT+0, ENTER+J, ENTER+L); PQ1 dice que F4/F6/F8/F10 van por el menu; Larry1 cambia su pantalla KEYBOARD COMMANDS (las de joystick y raton se dejan).
+3. **Pantalla de ayuda**: hecha para los seis juegos (2026-10-29) con `agi_read.HELP` (se aplica al convertir y en el modelo): las teclas del ZX81 y la tabla de simbolos; KQ1 y KQ2 explican saltar/agacharse/nadar (SHIFT+0, ENTER+J, ENTER+L); PQ1 y SQ1 explican ENTER+6/7/8/9 = F4/F6/F8/F10; Larry1 cambia su pantalla KEYBOARD COMMANDS (las de joystick y raton se dejan).
 4. **Otros juegos** (KQ1, KQ2, PQ1, SQ2, Larry1): repetir esta tabla con su logica de teclas antes de fijar la correspondencia.
 5. Hecho el dibujo de `show.obj` (filas con huecos: solo la tinta sobre papel blanco).
 

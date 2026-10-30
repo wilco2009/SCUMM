@@ -1313,7 +1313,7 @@ class Interp:
     def c_cancel_line(self): pass
     def c_set_cursor_char(self, m): self.cursor = self.msg(m)[:1] or ' '
     def c_accept_input(self): self.accept = True
-    def c_set_key(self, a, s, c): self.keys[a if a else {63: 28, 65: 30}.get(s, s << 8)] = c      # F5 y F7: codigos 28 y 30
+    def c_set_key(self, a, s, c): self.keys[a if a else {62: 29, 63: 28, 64: 31, 65: 30, 66: 25, 68: 26}.get(s, s << 8)] = c      # F4..F10: codigos de control 29, 28, 31, 30, 25, 26
     # ------------------------------------------------------------ menus
     def c_set_menu(self, m):
         if len(self.menus) < 8:
