@@ -137,19 +137,37 @@ FREEZE_VIEWS = {'SQ1': {175}}
 # Vistas que van por hardware aunque tengan mas de SW_TILES mosaicos en una fila (hasta 12 por linea): SQ1, sala 33 (esquivar rocas): la nave (vistas 75, 95 y
 # 102, 7 mosaicos de ancho) por software recomponia lineas en cada paso y la animacion iba a 1/5 de la velocidad. Sala 70 (bar): el alienigena del mostrador
 # (vistas 73 y 251, 7 mosaicos), animado, recomponia lineas en cada ciclo; solo comparte linea con el ego y poco mas (menos de 12 sprites).
-FORCE_HW = {'SQ1': {75, 95, 102, 73, 251}}
+FORCE_HW = {'SQ1': {75, 95, 102, 73, 251, 62}}
+# Vistas cuya animacion se salta: todas sus celdas dibujan la ultima del bucle (la huella es igual y no se recompone nada; el ciclo y sus banderas, los de
+# siempre). SQ1, sala 29: el holograma que se compone (vista 63, 9 mosaicos x 8 filas, no cabe en los 64 sprites) por software tardaba muchisimo.
+FINAL_CEL = {'SQ1': {63}}
+# Vistas que no dibujan nada (sus celdas conservan tamano y bucles; la logica no cambia): SQ1, sala 29: las dos mitades del holograma (vista 64, 72 mosaicos cada
+# una) se deslizan 2 pixeles por ciclo hasta juntarse y por software recomponian 9 x 8 mosaicos por mitad en cada ciclo; ahora aparece la cabeza (vista 63).
+BLANK_VIEWS = {'SQ1': {64}}
 _force = set()
 _freeze = set()
 _hw = set()
+_final = set()
+_blank = set()
 
 
 def set_game(path):
     """Elige las vistas forzadas a software del juego (carpeta `path`)."""
-    global _force, _freeze, _hw
+    global _force, _freeze, _hw, _final, _blank
     name = os.path.basename(os.path.normpath(path)).upper()
     _force = FORCE_SW.get(name, set())
     _freeze = FREEZE_VIEWS.get(name, set())
     _hw = FORCE_HW.get(name, set())
+    _final = FINAL_CEL.get(name, set())
+    _blank = BLANK_VIEWS.get(name, set())
+
+
+def cel_of(view, d, loop, cel, framed=False):
+    """cel_tiles de la celda que se dibuja: en las vistas de FINAL_CEL, siempre la ultima del bucle."""
+    if view in _final:
+        cel = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)] - 1
+    r = cel_tiles(d, loop, cel, framed)
+    return (r[0], r[1], []) if view in _blank else r
 
 
 def frozen(view):
@@ -178,7 +196,7 @@ def build_loop(d, loop, view=None):
     ncels = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)]
     recs = []
     for cel in range(ncels):
-        hrw, h, tiles = cel_tiles(d, loop, cel, framed=loop == 0 and cel == 0 and has_desc(d))
+        hrw, h, tiles = cel_of(view, d, loop, cel, framed=loop == 0 and cel == 0 and has_desc(d))
         sw, hh = meta(tiles, view)
         r = bytearray((len(tiles), hrw, h, sw, hh & 255, hh >> 8))
         for tx, ty, col, pix, msk in tiles:

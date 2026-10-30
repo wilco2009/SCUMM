@@ -243,7 +243,7 @@ class Interp:
                         self.spr_big[key] = True
                 if self.spr_big[key]:
                     continue
-                c = agi2spr.cel_tiles(d, o.loop, o.cel)
+                c = agi2spr.cel_of(o.view, d, o.loop, o.cel)
                 if c is None:
                     continue
                 hrw, h, tiles = c
@@ -323,7 +323,7 @@ class Interp:
                 self.spr_big[key] = True
         if self.spr_big[key]:
             return None
-        return agi2spr.cel_tiles(d, o.loop, o.cel)
+        return agi2spr.cel_of(o.view, d, o.loop, o.cel)
 
     def blit_cel(self, sb, sa, off, o, c, pri2):
         """La celda c de o al bitmap sb / sa, cuya linea 0 es la `off` de la pantalla (0 la pantalla, 8 el plano de la imagen)."""
