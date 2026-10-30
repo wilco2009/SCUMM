@@ -827,6 +827,7 @@ class Interp:
         o = self.obj(n)
         if not o.drawn:
             o.drawn = True
+            o.upd = True                    # cmdDraw: fUpdate
             self.cell(o)
             if agi2spr.frozen(o.view):              # vista congelada (agi2spr.FREEZE_VIEWS): casi no cicla
                 o.ctime = o.ccount = 127

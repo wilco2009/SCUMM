@@ -613,6 +613,7 @@ t_draw:         call argobj
                 bit 1,(ix+O_F1)
                 ret nz
                 set 1,(ix+O_F1)
+                set 2,(ix+O_F1)        ; cmdDraw: fUpdate
                 call obj_cell
                 call map_views
                 ld l,(ix+O_VIEW)
