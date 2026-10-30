@@ -134,16 +134,21 @@ FORCE_SW = {'SQ1': {175}}
 # Vistas cuya animacion se congela al dibujarlas (tiempo de ciclo 127: casi no cambian de celda y conservan la de set.cel): sus cambios de celda, dibujadas por
 # software, recomponen lineas cada ciclo y eran el 60 % del tiempo de la sala. SQ1, sala 6: las luces de las cupulas (vista 175).
 FREEZE_VIEWS = {'SQ1': {175}}
+# Vistas que van por hardware aunque tengan mas de SW_TILES mosaicos en una fila (hasta 12 por linea): SQ1, sala 33 (esquivar rocas): la nave (vistas 75, 95 y
+# 102, 7 mosaicos de ancho) por software recomponia lineas en cada paso y la animacion iba a 1/5 de la velocidad.
+FORCE_HW = {'SQ1': {75, 95, 102}}
 _force = set()
 _freeze = set()
+_hw = set()
 
 
 def set_game(path):
     """Elige las vistas forzadas a software del juego (carpeta `path`)."""
-    global _force, _freeze
+    global _force, _freeze, _hw
     name = os.path.basename(os.path.normpath(path)).upper()
     _force = FORCE_SW.get(name, set())
     _freeze = FREEZE_VIEWS.get(name, set())
+    _hw = FORCE_HW.get(name, set())
 
 
 def frozen(view):
@@ -158,7 +163,7 @@ def meta(tiles, view=None):
         per[ty] = per.get(ty, 0) + 1
         for b in (tx, ty) + tuple(msk):
             h = ((h ^ b) * 0x0101) & 0xFFFF
-    return (1 if per and (max(per.values()) > SW_TILES or view in _force) else 0), h
+    return (1 if per and view not in _hw and (max(per.values()) > SW_TILES or view in _force) else 0), h
 
 
 def loop_maxt(d, loop):
