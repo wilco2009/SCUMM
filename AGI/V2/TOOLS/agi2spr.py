@@ -134,10 +134,12 @@ FORCE_SW = {'SQ1': {175}}
 # Vistas cuya animacion se congela al dibujarlas (tiempo de ciclo 127: casi no cambian de celda y conservan la de set.cel): sus cambios de celda, dibujadas por
 # software, recomponen lineas cada ciclo y eran el 60 % del tiempo de la sala. SQ1, sala 6: las luces de las cupulas (vista 175).
 FREEZE_VIEWS = {'SQ1': {175}}
+# (vista, bucle) en lugar de una vista: solo ese bucle. SQ1, sala 37: el despegue de la nave (vista 109, bucle 1, 12 mosaicos por fila) por software iba
+# muy lento; su bucle 0 (58 mosaicos) se queda en software porque con el ego y lo demas no cabe en los 64 sprites.
 # Vistas que van por hardware aunque tengan mas de SW_TILES mosaicos en una fila (hasta 12 por linea): SQ1, sala 33 (esquivar rocas): la nave (vistas 75, 95 y
 # 102, 7 mosaicos de ancho) por software recomponia lineas en cada paso y la animacion iba a 1/5 de la velocidad. Sala 70 (bar): el alienigena del mostrador
 # (vistas 73 y 251, 7 mosaicos), animado, recomponia lineas en cada ciclo; solo comparte linea con el ego y poco mas (menos de 12 sprites).
-FORCE_HW = {'SQ1': {75, 95, 102, 73, 251, 62}}
+FORCE_HW = {'SQ1': {75, 95, 102, 73, 251, 62, (109, 1)}}
 # Vistas cuya animacion se salta: todas sus celdas dibujan la ultima del bucle (la huella es igual y no se recompone nada; el ciclo y sus banderas, los de
 # siempre). SQ1, sala 29: el holograma que se compone (vista 63, 9 mosaicos x 8 filas, no cabe en los 64 sprites) por software tardaba muchisimo.
 FINAL_CEL = {'SQ1': {63}}
@@ -174,7 +176,7 @@ def frozen(view):
     return view in _freeze
 
 
-def meta(tiles, view=None):
+def meta(tiles, view=None, loop=None):
     """(software, huella de 16 bits) de los mosaicos de una celda."""
     per = {}
     h = 0x811C
@@ -182,7 +184,7 @@ def meta(tiles, view=None):
         per[ty] = per.get(ty, 0) + 1
         for b in (tx, ty) + tuple(msk):
             h = ((h ^ b) * 0x0101) & 0xFFFF
-    return (1 if per and view not in _hw and (max(per.values()) > SW_TILES or view in _force) else 0), h
+    return (1 if per and view not in _hw and (view, loop) not in _hw and (max(per.values()) > SW_TILES or view in _force) else 0), h
 
 
 def loop_maxt(d, loop):
@@ -197,7 +199,7 @@ def build_loop(d, loop, view=None):
     recs = []
     for cel in range(ncels):
         hrw, h, tiles = cel_of(view, d, loop, cel, framed=loop == 0 and cel == 0 and has_desc(d))
-        sw, hh = meta(tiles, view)
+        sw, hh = meta(tiles, view, loop)
         r = bytearray((len(tiles), hrw, h, sw, hh & 255, hh >> 8))
         for tx, ty, col, pix, msk in tiles:
             r.extend((tx, ty))

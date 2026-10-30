@@ -235,7 +235,7 @@ class Interp:
             if d is not None and o.x < 160 and o.loop < d[2]:
                 try:
                     c = agi2spr.cel_of(o.view, d, o.loop, o.cel)
-                    if c is not None and not (agi2spr.meta(c[2], o.view)[0] or o.static):
+                    if c is not None and not (agi2spr.meta(c[2], o.view, o.loop)[0] or o.static):
                         res = agi2spr.loop_maxt(d, o.loop)
                 except (IndexError, ValueError):
                     pass
@@ -262,7 +262,7 @@ class Interp:
                 if c is None:
                     continue
                 hrw, h, tiles = c
-                if agi2spr.meta(tiles, o.view)[0] or o.static:
+                if agi2spr.meta(tiles, o.view, o.loop)[0] or o.static:
                     continue                # rotulo ancho o objeto fijo: lo dibuja el Z80 en el bitmap (sw_blit)
                 start = k
                 k = min(k + agi2spr.loop_maxt(d, o.loop), cap)
@@ -318,7 +318,7 @@ class Interp:
         for n in self.draw_order():
             o = self.objs[n]
             c = self.cel_of(o)
-            if c is None or not agi2spr.meta(c[2], o.view)[0]:
+            if c is None or not agi2spr.meta(c[2], o.view, o.loop)[0]:
                 continue
             self.blit_cel(sb, sa, 0, o, c, pri2)
 
