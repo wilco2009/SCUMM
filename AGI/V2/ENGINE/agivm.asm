@@ -1542,7 +1542,7 @@ h_show_obj:     ld hl,OVC_OBJDESC
                 ld a,(oc_res)
                 or a
                 ret z
-                ld a,3
+                ld a,4
                 jr pr_rawgo
 pr_raw:         defb 0
 oc_res:         defb 0

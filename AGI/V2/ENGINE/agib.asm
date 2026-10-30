@@ -791,6 +791,8 @@ LB:             defs 68
 t_print:        ld a,(pr_raw)           ; 1 = pausa, 2 = reiniciar, 3 = el texto ya esta en TXT; 0 = el mensaje pr_msg de la logica
                 or a
                 jr z,tp_norm
+                cp 4
+                jr z,tp_fmt
                 cp 3
                 jr z,tp_have
                 ld hl,s_pause
@@ -806,6 +808,21 @@ tp_norm:        ld a,(pr_msg)
                 ld de,TXT
                 ld c,250
                 call build_str
+                jr tp_have
+tp_fmt:         ld a,(curlg)            ; 4 = el texto esta en TXT y lleva formato (%vN...): se expande
+                ld (bs_lg),a
+                ld hl,TXT
+                ld de,MSGBUF
+                ld bc,240
+                ldir
+                ld de,TXT
+                ld c,239
+                xor a
+                ld (bs_n),a
+                ld (bs_dp),de
+                ld a,c
+                ld (bs_max),a
+                call bs_fmt
 tp_have:        ld a,(pr_w)
                 or a
                 jr z,tp_w30

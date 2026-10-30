@@ -1119,6 +1119,7 @@ class Interp:
             return
         q = d.find(b'\x00', off)
         s = bytes(d[off:q if q >= 0 else len(d)]).decode('latin-1')[:239]
+        s = self.fmt(s, self.stack[-1][2])[:239]
         pic = None
         if s:
             try:

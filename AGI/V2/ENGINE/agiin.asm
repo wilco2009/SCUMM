@@ -1273,7 +1273,7 @@ build_str:      ld (bs_dp),de
                 ld a,(bs_lg)
                 ld de,MSGBUF
                 call msg_raw
-                ld hl,MSGBUF
+bs_fmt:         ld hl,MSGBUF
                 ld (bs_sp),hl
 bl_l:           ld hl,(bs_sp)
                 ld a,(hl)
