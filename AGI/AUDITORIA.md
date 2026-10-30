@@ -126,7 +126,7 @@ Implementadas distinto:
 | `increment`/`decrement` | tope 255 / suelo 0 (sin wrap) | (564-571) no revisadas aquí | verificar (B) |
 | `add/sub/mul/div` | `byte` (wrap) | wrap `& 255`; div por 0 → 0 | IGUAL |
 | `controller` | `controllerOccurred[c]` | `a[0] in self.ctl` | IGUAL |
-| `have.key` | si v19≠0 true; si no, un sondeo | cola `keyq` | DIFERENTE (B, ver v19 en §1) |
+| `have.key` | si v19≠0 true (sin consumirla); si no, un sondeo | CORREGIDO (2026-10-30, modelo y Z80): v19≠0 es cierta sin tocar la cola; si no, en la pantalla de texto espera una tecla nueva. Antes miraba la cola de teclas del ciclo: el ENTER de la frase tecleada seguía en ella aunque la lógica pusiera v19 a 0 (SQ1 sala 10, `look screen`: la pantalla de texto se cerraba al instante) | IGUAL |
 | `restart.game` | pone flag6 y `restartGame` | (1001) | IGUAL |
 | `reposition` negativo | `dx` con signo; si `x < −dx` → 0 | (775-780) sin recorte a 0 | DIFERENTE (B): `o.x` puede quedar negativo |
 

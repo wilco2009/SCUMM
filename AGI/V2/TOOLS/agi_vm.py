@@ -502,20 +502,23 @@ class Interp:
             return self.inv[a[0]] == v[a[1]]
         if name == 'controller':
             return a[0] in self.ctl
-        if name == 'have.key':
-            if not self.keyq and self.txtm and not self.hk_seen:        # en la pantalla de texto un bucle apretado (2a llamada del ciclo sin tecla) espera la tecla
+        if name == 'have.key':          # condHaveKey: v19 distinta de 0 es cierta (no se consume; la logica puede ponerla a 0); si no, una tecla nueva
+            if v[19]:
+                return True
+            if not self.txtm:
+                return False
+            if not self.hk_seen:        # en la pantalla de texto un bucle apretado (2a llamada del ciclo sin tecla) espera la tecla
                 self.hk_seen = True
                 return False
-            if not self.keyq and self.txtm:
-                while not self.keyq:
-                    self.cycle += 1
-                    if self.cycle > self.max_cycles:
-                        raise Stop('fin de los ciclos en la pantalla de texto')
-                    self.apply_events(self.ev.get(self.cycle, []))
-            if self.keyq:
-                v[19] = self.keyq.pop(0)
-                return True
-            return False
+            n = len(self.keyq)
+            while len(self.keyq) == n:
+                self.cycle += 1
+                if self.cycle > self.max_cycles:
+                    raise Stop('fin de los ciclos en la pantalla de texto')
+                self.apply_events(self.ev.get(self.cycle, []))
+            v[19] = self.keyq[n]
+            del self.keyq[n:]           # la tecla que llega aqui no se queda en la cola (como pr_wait en el Z80)
+            return True
         if name == 'compare.strings':
             norm = lambda t: re.sub(r"[ 	\-.,:;!']", '', t.lower())      # cmdCompareStrings: sin espacios ni puntuacion
             return norm(self.strs[a[0]]) == norm(self.strs[a[1]])

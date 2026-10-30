@@ -171,10 +171,12 @@ hc_controller:  ld a,(ARGS)
                 jp z,ret_false
                 jp ret_true
 
-hc_have_key:    ld a,(keyn)
+; condHaveKey: con la tecla del ciclo (v19) distinta de 0 es cierta, sin consumirla (la logica puede ponerla a 0, p. ej. tras el ENTER de una frase); si no, hay que
+; esperar una tecla nueva: en la pantalla de texto un bucle apretado (ayuda: la 2a llamada del ciclo sin tecla) espera la tecla
+hc_have_key:    ld a,(VARS+19)
                 or a
-                jr nz,hk_k
-                ld a,(txtm)             ; en la pantalla de texto, un bucle apretado (ayuda: la 2a llamada del ciclo sin tecla) espera la tecla
+                jp nz,ret_true
+                ld a,(txtm)
                 or a
                 jp z,ret_false
                 ld a,(hk_seen)
@@ -189,16 +191,6 @@ hk_w:           call pr_wait
                 jp nz,ret_false
                 ld a,(pw_last)
                 ld (VARS+19),a
-                jp ret_true
-hk_k:
-                ld a,(KEYQ)
-                ld (VARS+19),a
-                ld hl,KEYQ+1
-                ld de,KEYQ
-                ld bc,7
-                ldir
-                ld hl,keyn
-                dec (hl)
                 jp ret_true
 
 ; ---------------------------------------------------------------------
