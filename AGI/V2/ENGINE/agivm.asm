@@ -897,7 +897,7 @@ nr_u:           res 0,(ix+O_F1)
                 djnz nr_u
                 ld ix,OBJ
                 ld a,(ix+O_F1)
-                and $DD                 ; el ego sin dibujar ni prioridad fija, y listo para andar (actualiza, cicla, se mueve) aunque la sala anterior le hiciera stop.motion o set.priority
+                and $DC                 ; el ego sin animar (newRoom de ScummVM: su animate.obj de la logica 0 le restablece ignore.horizon), dibujar ni prioridad fija, y listo para andar (actualiza, cicla, se mueve) aunque la sala anterior le hiciera stop.motion o set.priority
                 or $1C
                 ld (ix+O_F1),a
                 xor a                   ; y observa bloques y objetos (la 7 lo deja con ignore.blocks e ignore.objs al cruzar su puerta)
@@ -914,8 +914,7 @@ nr_u:           res 0,(ix+O_F1)
                 ld (VARS+4),a
                 ld (VARS+5),a
                 ld de,0
-                bit 0,(ix+O_F1)
-                call nz,obj_cell        ; D = ancho del ego
+                call obj_cell           ; D = ancho del ego
                 ld a,(VARS+2)           ; por que borde entra
                 cp 1
                 jr nz,nr_2

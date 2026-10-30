@@ -677,8 +677,7 @@ class Interp:
                 self.objs[k] = Obj()
                 self.objs[k].cycling = self.objs[k].mon = False       # (un objeto sin usar: todo a 0 salvo lo que newRoom pone)
         for k, o in self.objs.items():
-            if k != EGO:
-                o.anim = o.drawn = False
+            o.anim = o.drawn = False        # newRoom de ScummVM: tambien el ego pierde fAnimated; su animate.obj (logica 0) le restablece todas las banderas (ignore.horizon de las salas 17-23)
             o.upd = True
             o.step = o.stime = o.scount = o.ctime = o.ccount = 1      # newRoom: tambien el ego
         ego = self.obj(EGO)
@@ -693,7 +692,7 @@ class Interp:
         v[0] = n
         v[4] = 0
         v[5] = 0
-        w, h = self.cell(ego) if ego.anim else (0, 0)
+        w, h = self.cell(ego)
         b = v[2]
         if b == 1:
             ego.y = 167
