@@ -268,7 +268,7 @@ Las tres que más pesan (para decidir qué corregir primero): **A3-10** (12 cade
 Regla: se copia la lógica de ScummVM (`engines/agi`, f7403b6) en el modelo (`TOOLS/agi_vm.py`, `agi_read.py`) y en el Z80 (`ENGINE/*.asm`) a la vez. Cada grupo se comprobó con la misma bateria que `dump/runall.sh`
 (SQ1, KQ2, PQ1, SQ2, KQ1: Z80 == modelo, 5 OK, 0 DIFs; se ejecutó en una copia del árbol para poder seguir editando) y con la batería nueva `ENGINE/test_audit3.sh`
 (los casos T-nn de §6 que se pueden automatizar; el código de prueba se inyecta con `AGI_BOOT`, que ahora admite `if=`, `all` y `cyc=`; `agi_vm.py --show` imprime variables y banderas).
-Decisiones del usuario: **A3-01 y A3-19 no se corrigen.** Commits: **C1 = 871ba0f**, **C2 = 98bb7f9**, **C3 = 3e9de06**.
+Decisiones del usuario: **A3-01 y A3-19 no se corrigen.** Commits: **C1 = 871ba0f**, **C2 = 98bb7f9**, **C4 = e88c0de** (A3-25), **C5 = c9788fe** (A3-28), **C3 = 3e9de06**.
 
 | Id | Estado | Detalle |
 |---|---|---|
@@ -295,10 +295,10 @@ Decisiones del usuario: **A3-01 y A3-19 no se corrigen.** Commits: **C1 = 871ba0
 | A3-22 | CORREGIDA (C3) | `move.obj`, `follow.ego` y `wander` ponen fUpdate. T-22 |
 | A3-23 | CORREGIDA (C3) | `end.of.loop`/`reverse.loop` pisan wander_count / follow_stepSize / move_x con su bandera (`cyclerActivated`). T-22 (unidad en el modelo + Z80 == modelo) |
 | A3-24 | SIN CAMBIO (O) | |
-| A3-25 | PENDIENTE | Exige guardar la posición previa (x, y) de cada objeto (64 bytes de RAM) y reescribir `can_be_here` (núcleo, al límite de 11008) y el cálculo de fDidntMove; riesgo alto de regresiones sin poder comparar con ScummVM. No se ha tocado |
+| A3-25 | CORREGIDA (C4) | `OBJP` ($7EA0, 64 bytes; `CLR_END` pasa a $7EE0 y la pila queda en 288 bytes; se guarda en las partidas y entra en la suma de objetos) = xPos_prev/yPos_prev. Las ponen `position(.v)` y `draw` (tras `fixPosition`), no `reposition.to`; `t_show` (overlay C) = `showSprites`: tras mover a todos los objetos, los que acaban de dar su paso (stepTimeCount == stepTime) ponen fDidntMove si no se movieron o actualizan la previa; `checkCollision` usa las y previas de los dos objetos (estricto, sin el empate del Z80 anterior). T-25a-d |
 | A3-26 | CORREGIDA (C3) | `set.view`: bucle fuera de rango → 0; celda fuera de rango tras cambiar de bucle → 0; `set.loop` fuera de rango → último; `set.cel` fuera de rango → última; `set.view` ya no escribe v16 (solo `new.room`). Cuidado: `set.loop` recorta ya contra la vista que haya en ese momento (ScummVM), así que un `set.loop` anterior al `set.view` de una vista con más bucles pierde el bucle (si algún juego depende de ello, será visible en la sala). T-26 |
 | A3-27 | CORREGIDA en parte (C3) | Margen 3 (caja de control con prioridad 3). Sin `fixPosition` en `add.to.pic` (con prioridad 15 solo recorta a la pantalla; sin efecto en los datos). T-27 |
-| A3-28 | PENDIENTE | La bandera 1 (ego invisible) la pone `drawCel` cuando ningún píxel del ego se pinta; en el Z80 habría que acumular la máscara de los sprites del ego (`hw_mask`, overlay A1) y la del dibujo por software. KQ2, SQ2 y PQ1 la leen. Se deja a 0 |
+| A3-28 | CORREGIDA (C5) | Bandera 1 = ningún píxel del ego se pinta: se acumula en `agihws.asm` (`hw_hid`) al armar los sprites del ego (mosaicos con máscara tras la prioridad del plano) y se reescribe `FLAGS+1 = ego_hid` en cada ciclo en que el ego pasa por `spr_obj` (aunque el sprite esté en caché), así lo que ponga o borre la lógica se pisa como en ScummVM. Límites: si el ego va por software (celda ancha), está fuera (x ≥ 160) o sin datos, conserva el último valor; se calcula al armar los sprites (fin de ciclo), no en el instante de `draw`. T-28a/b |
 | A3-29 | CORREGIDA (C3) | `obj.in.box`/`center.posn`/`right.posn` usan el tamaño de la celda aunque el objeto no esté dibujado (si tiene vista). T-29 |
 | A3-30 | CORREGIDA (C3) | `reposition` satura en 255 (Z80 y modelo; `fixPosition` lo devuelve a la pantalla). T-30 |
 | A3-31..A3-33 | SIN CAMBIO (O / H / igual) | |
@@ -308,3 +308,6 @@ Decisiones del usuario: **A3-01 y A3-19 no se corrigen.** Commits: **C1 = 871ba0
 Tamaños al terminar: núcleo `agivm.bin` 10943 de 11008 bytes; overlays (límite 8192, el A2 4096): A1 5921, B 8175, C 3335, D 854, A2 3454.
 Para que el núcleo cupiera: el parser y `said` pasaron al overlay C (con `call_c`); `OVB_MENURESET` (nunca llamado) quedó vacío.
 Los datos de los tests que usan el comando `restart.game` solo comparan el modelo (ver A3-18).
+
+Notas de C4/C5: núcleo 10981, A1 5987, B 8175, C 3417, D 854, A2 3454. Hallazgo previo no corregido: en SQ1 sala 1 el Z80 y el modelo difieren en la máscara del borde derecho de los sprites a x = 253 (un píxel); `cmp_vm.py` admite `AGI_NOSPR=1` (no comparar sprites) y `AGI_VERBOSE=1` (máscaras) para esos casos.
+Sin hacer de la tarea opcional: A3-16 (dos columnas desde v25) y A3-17 (memoria por menú): el overlay B está a 8175 de 8192 y hay que repartirlo.
