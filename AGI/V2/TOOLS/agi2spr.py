@@ -132,8 +132,8 @@ SW_TILES = 6
 # deja sin dibujar a los de abajo del orden (una cupula y la mitad del ego): {juego: {vista}}. SQ1, sala 6: tres cupulas de 5 mosaicos por fila (vista 175) y el ego.
 FORCE_SW = {'SQ1': {175}}
 # Vistas cuya animacion se congela al dibujarlas (tiempo de ciclo 127: casi no cambian de celda y conservan la de set.cel): sus cambios de celda, dibujadas por
-# software, recomponen lineas cada ciclo y eran el 60 % del tiempo de la sala. SQ1, sala 6: las luces de las cupulas (vista 175).
-FREEZE_VIEWS = {'SQ1': {175}}
+# software, recomponen lineas cada ciclo y eran el 60 % del tiempo de la sala. SQ1, sala 6: las luces de las cupulas (vista 175); sala 31: la maquina del hangar (vista 78).
+FREEZE_VIEWS = {'SQ1': {175, 78}}
 # (vista, bucle) en lugar de una vista: solo ese bucle. SQ1, sala 37: el despegue de la nave (vista 109, bucle 1, 12 mosaicos por fila) por software iba
 # muy lento; su bucle 0 (58 mosaicos) se queda en software porque con el ego y lo demas no cabe en los 64 sprites.
 # Vistas que van por hardware aunque tengan mas de SW_TILES mosaicos en una fila (hasta 12 por linea): SQ1, sala 33 (esquivar rocas): la nave (vistas 75, 95 y

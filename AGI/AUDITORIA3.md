@@ -313,4 +313,4 @@ Notas de C4/C5: núcleo 10981, A1 5987, B 8175, C 3417, D 854, A2 3454. Hallazgo
 Sin hacer de la tarea opcional: A3-16 (dos columnas desde v25) y A3-17 (memoria por menú): el overlay B está a 8175 de 8192 y hay que repartirlo.
 Corrección posterior a C5: la reubicación de búferes de C1 dejó `MSGBUF` (= `PROW`, la fila de prioridad de las máscaras de los sprites) en $7930, sin alinear a página, y los sprites del borde derecho se veían sin recortar (SQ1 sala 1, el doctor moribundo). Ahora `MSGBUF` = $7A00 y los búferes pequeños (`STMP`, `STMP2`, `INW`, `KEYQ`, `SREC`, `TRREC`) ocupan $7930-$79DF; `CLR_END` = $7F00, pila de 256 bytes. Caso T-MASK.
 
-Excepcion de hardware (2026-10-31): SQ1 sala 31 no dibuja el droide decorativo (o3) por el limite de 12 sprites por linea; ver PLAN.md y `ADAPT` en TOOLS/agi_read.py.
+Excepcion de hardware (2026-10-31): SQ1 sala 31 no dibuja el droide decorativo (o3) y deja quieta la maquina (vista 78) por el limite de 12 sprites por linea; ver PLAN.md y `ADAPT` en TOOLS/agi_read.py.
