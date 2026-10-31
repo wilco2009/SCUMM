@@ -86,6 +86,10 @@ export AGI_NOSPR=1
 t T-28a SQ1 8 "room=1,all,cmd=position:0:70:120,cmd=set.priority:0:1" "" f1 f1=1
 t T-28b SQ1 8 "room=1,all,cmd=position:0:70:120,cmd=set.priority:0:15" "" f1 f1=0
 unset AGI_NOSPR
+# SQ1 sala 3: coger la keycard suma el punto (v3) cuando se cierra la ventana con ENTER (caso del usuario); con otra tecla la ventana sigue abierta (ScummVM)
+t T-KEY1 SQ1 14 "room=3,all,cmd=position:0:130:70" "8:text:take keycard 10:key:13" v3 v3=1
+t T-KEY2 SQ1 14 "room=3,all,cmd=position:0:130:70" "8:text:get card 10:key:65 11:key:13" v3 v3=1
+t T-KEY3 SQ1 14 "room=3,all,cmd=position:0:130:70" "8:text:take keycard 10:key:65" v3 v3=0
 # A3-11/A3-12: set.string guarda el texto sin formato; stringPrintf (%vN|W, %0 de relleno, recursion de %m, %s)
 t T-11 SQ1 1 "v3=7,cmd=set.string:1:30,if=compare.strings:1:1>assignn:100:7" "" v100 v100=7
 t T-12a SQ1 1 "all,if=equaln:9:1>assignn:100:7,cmd=display:5:5:10" "1:text:xyzzy" v100 v100=7
