@@ -1,7 +1,7 @@
 # AUDITORIA3 — intérprete AGI v2 (Z80 + modelo) contra ScummVM `engines/agi`
 
 Tercera auditoría. Parte de [AUDITORIA2.md](AUDITORIA2.md) (no se borra ni se edita) y rellena lo que esa dejó sin leer.
-**Solo informe: no se ha tocado código (ni `ENGINE/` ni `TOOLS/`).** No se ha ejecutado nada del clon de ScummVM.
+**Las secciones 1-7 son el informe original; la 8 recoge las correcciones posteriores, fila por fila.** No se ha ejecutado nada del clon de ScummVM.
 
 - ScummVM: `C:\ClaudeCode\scummvm_src`, commit `f7403b6efaae` (el mismo de AUDITORIA2). Rutas `ScummVM fichero:línea` = `engines/agi/`.
 - Nuestro lado: `V2/TOOLS/agi_vm.py` (modelo, `py:línea`) y `V2/ENGINE/*.asm` (Z80, `asm fichero:línea`).
@@ -260,3 +260,51 @@ Formato: *lógica de prueba* → *resultado esperado según ScummVM* (T-nn ↔ A
 Filas de §2 (A3-01…A3-40): **E 22, H 8, O 3, AC 6, IGUAL 1** (A3-33, comprobada ahora contra el código literal). Las AC son: A3-05 (dirección por soltar tecla), A3-20 (valores iniciales, efecto nulo comprobado), A3-28 (f1), A3-34 (set.pri.base, descartada), A3-36 (put/put.v, a nuestro favor), A3-38 (versión por juego). Las filas mixtas (A3-14, A3-17, A3-21, A3-27, A3-37) se han contado por su componente de mayor peso.
 
 Las tres que más pesan (para decidir qué corregir primero): **A3-10** (12 cadenas: rompe PQ1/Larry1), **A3-01** (reloj por ciclos, en 4 juegos) y **A3-18** (`f16`, PQ1/Larry1).
+
+---
+
+## 8. Estado de las correcciones (sesión de correcciones, rama main de SCUMM)
+
+Regla: se copia la lógica de ScummVM (`engines/agi`, f7403b6) en el modelo (`TOOLS/agi_vm.py`, `agi_read.py`) y en el Z80 (`ENGINE/*.asm`) a la vez. Cada grupo se comprobó con la misma bateria que `dump/runall.sh`
+(SQ1, KQ2, PQ1, SQ2, KQ1: Z80 == modelo, 5 OK, 0 DIFs; se ejecutó en una copia del árbol para poder seguir editando) y con la batería nueva `ENGINE/test_audit3.sh`
+(los casos T-nn de §6 que se pueden automatizar; el código de prueba se inyecta con `AGI_BOOT`, que ahora admite `if=`, `all` y `cyc=`; `agi_vm.py --show` imprime variables y banderas).
+Decisiones del usuario: **A3-01 y A3-19 no se corrigen.** Commits: **C1 = 871ba0f**, **C2 = 98bb7f9**, **C3 = 3e9de06**.
+
+| Id | Estado | Detalle |
+|---|---|---|
+| A3-01 | SIN CAMBIO (decisión del usuario) | El reloj cuenta ciclos y se para en menús/ventanas: intencionado (velocidad; el tiempo real sería demasiado difícil) |
+| A3-02 | SIN CAMBIO (H) | `pace`, documentado en `PLAN.md:105` |
+| A3-03 | CORREGIDA (C2) | `key_push`/`kp_m`: una tecla con controlador no pone v19 (modelo igual). T-03, T-03b |
+| A3-04 | CORREGIDA (C2) | `ev_text` deja v19 = 13 (si ENTER no tiene controlador). SQ1 sala 10 `look screen` sigue esperando la tecla: esa lógica hace `assignn(v19, 0)` antes de `text.screen` (comprobado en el listado), así que `have.key` espera igual. T-04 |
+| A3-05 | SIN CAMBIO (AC) | La dirección sigue a la tecla mantenida (`dirhold`): decisión de jugabilidad documentada en `PLAN.md:89,97`; los 6 juegos no usan `hold.key` |
+| A3-06, A3-07 | SIN CAMBIO (O / H) | Como estaban |
+| A3-08 | CORREGIDA (C2) | `do_if` con cortocircuito (`skip_until` = `skipInstructionsUntil`); modelo igual. T-08a/b/c |
+| A3-09 | SIN CAMBIO | Se comprobó que la lógica 0 de los 6 juegos acaba en `return`; el caso patológico no ocurre |
+| A3-10 | CORREGIDA (C1) | 13 cadenas (`NSTR`); los búferes de $7930 a $7EA0 se desplazaron; el formato de guardado cambia (las partidas anteriores no se cargan). T-10 |
+| A3-11 | CORREGIDA (C2) | `set.string` guarda el texto sin formato (39 caracteres). T-11 |
+| A3-12 | CORREGIDA (C2) | `stringPrintf`: `%vN` con `\|W` (relleno de ceros), `%mN` y `%sN` recursivos, `%gN`, barra + carácter, otro `%x` se traga la letra. Límites propios (H): un mensaje anidado como máximo (búfer `SUBBUF`) y 6 fuentes anidadas. **`%0N`/`%oN` (nombre de objeto) no se implementa**: el clon de ScummVM usa `case '0'` (como su `put`, parece un fallo del snapshot) y los datos de los juegos solo usan `%o` en mensajes de depuración (`log`, nop). T-12 |
+| A3-13 | CORREGIDA (C2) | `parse_text` (overlay C) = `cleanUpInput` + `findWordInDictionary`; f2 = hay palabras, f4 = 0; `said` = `testSaid` (overlay C). El vocabulario sigue normalizado (`agi_read.norm_word`, H del teclado). Palabras: tope 16. T-13a-i |
+| A3-14 | CORREGIDA (C2) | La ventana de `print`/pause/restart solo se cierra con ENTER o ESC (`pw_ent`); `have.key` sigue con cualquier tecla. Sin caso automático (el modelo no distingue teclas en la espera de la ventana más allá de ENTER/ESC) |
+| A3-15 | CORREGIDA (C2) | `get.num` modal como `get.string` (3 caracteres, atoi módulo 256). T-15 |
+| A3-16 | CORREGIDA en parte (C3) | Inventario vacío con f13: ofrece "Nothing" (ENTER → v25 = 0, ESC → 255). **Sigue sin hacer** (H de interfaz): lista de una columna en vez de dos y el cursor empieza en el primero, no en el objeto de v25. T-16a/b |
+| A3-17 | CORREGIDA en parte (C3) | El menú principal recuerda menú y elemento de la última vez (solo el del último menú; los demás empiezan por su primer elemento); `restart.game` reactiva todos los elementos (`itemEnableAll`). Sin hacer (aceptado en el informe): ejecutar fuera de la lógica / exigir `submit.menu`. No hay caso automático |
+| A3-18 | CORREGIDA (C3) | `restart.game` con f16 no pregunta; hace `stopSound` antes. T-18 solo en el modelo: **el estado de los objetos tras reiniciar difiere entre Z80 y modelo desde antes** (suma de objetos 37 frente a 65 en el ciclo del reinicio, también con la confirmación por ENTER en HEAD~; no es de esta sesión): queda como pendiente aparte |
+| A3-19 | SIN CAMBIO (decisión del usuario) | sIP, block y v8 al cargar partida |
+| A3-20 | SIN CAMBIO (AC) | Efecto nulo comprobado en los 6 juegos |
+| A3-21 | SIN CAMBIO (H/O) | |
+| A3-22 | CORREGIDA (C3) | `move.obj`, `follow.ego` y `wander` ponen fUpdate. T-22 |
+| A3-23 | CORREGIDA (C3) | `end.of.loop`/`reverse.loop` pisan wander_count / follow_stepSize / move_x con su bandera (`cyclerActivated`). T-22 (unidad en el modelo + Z80 == modelo) |
+| A3-24 | SIN CAMBIO (O) | |
+| A3-25 | PENDIENTE | Exige guardar la posición previa (x, y) de cada objeto (64 bytes de RAM) y reescribir `can_be_here` (núcleo, al límite de 11008) y el cálculo de fDidntMove; riesgo alto de regresiones sin poder comparar con ScummVM. No se ha tocado |
+| A3-26 | CORREGIDA (C3) | `set.view`: bucle fuera de rango → 0; celda fuera de rango tras cambiar de bucle → 0; `set.loop` fuera de rango → último; `set.cel` fuera de rango → última; `set.view` ya no escribe v16 (solo `new.room`). Cuidado: `set.loop` recorta ya contra la vista que haya en ese momento (ScummVM), así que un `set.loop` anterior al `set.view` de una vista con más bucles pierde el bucle (si algún juego depende de ello, será visible en la sala). T-26 |
+| A3-27 | CORREGIDA en parte (C3) | Margen 3 (caja de control con prioridad 3). Sin `fixPosition` en `add.to.pic` (con prioridad 15 solo recorta a la pantalla; sin efecto en los datos). T-27 |
+| A3-28 | PENDIENTE | La bandera 1 (ego invisible) la pone `drawCel` cuando ningún píxel del ego se pinta; en el Z80 habría que acumular la máscara de los sprites del ego (`hw_mask`, overlay A1) y la del dibujo por software. KQ2, SQ2 y PQ1 la leen. Se deja a 0 |
+| A3-29 | CORREGIDA (C3) | `obj.in.box`/`center.posn`/`right.posn` usan el tamaño de la celda aunque el objeto no esté dibujado (si tiene vista). T-29 |
+| A3-30 | CORREGIDA (C3) | `reposition` satura en 255 (Z80 y modelo; `fixPosition` lo devuelve a la pantalla). T-30 |
+| A3-31..A3-33 | SIN CAMBIO (O / H / igual) | |
+| A3-34, A3-36, A3-38 | SIN CAMBIO (AC) | `set.pri.base` no se usa; `put`/`put.v` a nuestro favor; versión de cada juego |
+| A3-35, A3-37, A3-39, A3-40 | SIN CAMBIO (H) | |
+
+Tamaños al terminar: núcleo `agivm.bin` 10943 de 11008 bytes; overlays (límite 8192, el A2 4096): A1 5921, B 8175, C 3335, D 854, A2 3454.
+Para que el núcleo cupiera: el parser y `said` pasaron al overlay C (con `call_c`); `OVB_MENURESET` (nunca llamado) quedó vacío.
+Los datos de los tests que usan el comando `restart.game` solo comparan el modelo (ver A3-18).
