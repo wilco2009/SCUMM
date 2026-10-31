@@ -209,6 +209,19 @@ def help_override(path, n, msgs):
     return msgs
 
 
+# Excepciones de hardware: ordenes de la logica que se cambian en una sala por otras del mismo tamano, {juego: {logica: [(bytes que preceden, orden, sustituta)]}}.
+# SQ1, sala 31 (hangar): demasiados objetos animados (el ego dejaba de verse a ratos y la sala iba muy lenta); no se dibuja la maquina del fondo (o6, vista 78,
+# de adorno: solo se dibuja al entrar y no se vuelve a usar): draw(o6) -> erase(o6).
+ADAPT = {'SQ1': {31: [(bytes((88, 4, 37, 4, 142, 130)), bytes((35, 6)), bytes((36, 6)))]}}
+
+
+def adapt(path, n, d):
+    """La logica n con las excepciones de hardware del juego (ADAPT); igual en el modelo y en agi2log.py."""
+    for pre, old, new in ADAPT.get(os.path.basename(os.path.normpath(path)).upper(), {}).get(n, ()):
+        d = bytes(d).replace(pre + old, pre + new)
+    return d
+
+
 def testboot(n, d):
     """Solo para pruebas (variable de entorno AGI_BOOT="v80=6,room=6"): codigo inyectado al principio de la logica 0; igual en agi2log.py.
     Elementos separados por comas: vN=valor, room=N, cmd=orden:arg:arg (una orden con argumentos literales), ign, pri=N,
