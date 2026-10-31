@@ -133,7 +133,9 @@ SW_TILES = 6
 FORCE_SW = {'SQ1': {175}}
 # Vistas cuya animacion se congela al dibujarlas (tiempo de ciclo 127: casi no cambian de celda y conservan la de set.cel): sus cambios de celda, dibujadas por
 # software, recomponen lineas cada ciclo y eran el 60 % del tiempo de la sala. SQ1, sala 6: las luces de las cupulas (vista 175); sala 31: los pistones de la maquina (vista 78).
-FREEZE_VIEWS = {'SQ1': {175, 78}}
+# KQ1, salas 1 y 2 (castillo): la bandera de la torre (vista 97, 8-9 mosaicos por fila: por software) y los cocodrilos del foso (vista 107, dos objetos) cambiaban de
+# celda cada ciclo y el ego iba muy lento; ahora casi no ciclan (solo esas dos salas usan estas vistas).
+FREEZE_VIEWS = {'SQ1': {175, 78}, 'KQ1': {97, 107}}
 # (vista, bucle) en lugar de una vista: solo ese bucle. SQ1, sala 37: el despegue de la nave (vista 109, bucle 1, 12 mosaicos por fila) por software iba
 # muy lento; su bucle 0 (58 mosaicos) se queda en software porque con el ego y lo demas no cabe en los 64 sprites.
 # Vistas que van por hardware aunque tengan mas de SW_TILES mosaicos en una fila (hasta 12 por linea): SQ1, sala 33 (esquivar rocas): la nave (vistas 75, 95 y
