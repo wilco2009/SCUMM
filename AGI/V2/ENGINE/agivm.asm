@@ -41,26 +41,26 @@ KEYMAP          equ $7100               ; por tecla ASCII (0-127): controlador y
 CTL             equ $7200               ; controladores activos en este ciclo
 NSTR            equ 13                  ; s0-s12 (PQ1 y Larry1 usan la 12); ScummVM tiene 24 + 1
 STRS            equ $7710               ; NSTR cadenas de 41 bytes ($7710-$7924)
-MSGBUF          equ $7930
+MSGBUF          equ $7A00               ; alineado a pagina: PROW (fila de prioridad de los sprites) lo usa asi; con $7930 las mascaras del borde derecho fallaban
 ROWBUF          equ MSGBUF              ; una fila de prioridad bajo el objeto (pic_check)
-TMPM            equ $7A30
-WTEXT           equ $7B30
-STMP            equ $7BF0
-STMP2           equ $7C20
-PHR             equ $7CD0
-WBUF            equ $7D00
-TOKS            equ $7C50
-SUBBUF          equ TOKS                ; mensaje anidado (%m) en stringPrintf: 256 bytes, $7C50-$7D4F (TOKS, PHR y WBUF son del parser y no coinciden en el tiempo)
+TMPM            equ $7B00
+WTEXT           equ $7C00
+STMP            equ $7930
+STMP2           equ $7960
+PHR             equ $7D40
+WBUF            equ $7D70
+TOKS            equ $7CC0
+SUBBUF          equ TOKS                ; mensaje anidado (%m) en stringPrintf: 256 bytes, $7CC0-$7DBF (TOKS, PHR y WBUF son del parser y no coinciden en el tiempo)
 BSFRN           equ 6                   ; fuentes de texto anidadas (%s, %m)
-TOKP            equ $7CB0
-INW             equ $7D50
-KEYQ            equ $7D70
-TQ              equ $7D80
-EVBUF           equ $7E30
-SREC            equ $7E80
-TRREC           equ $7E90
-OBJP            equ $7EA0               ; x, y previos de cada objeto (xPos_prev, yPos_prev de ScummVM), 2 bytes por objeto
-CLR_END         equ $7EE0
+TOKP            equ $7D20
+INW             equ $7990
+KEYQ            equ $79B0
+TQ              equ $7DC0
+EVBUF           equ $7E70
+SREC            equ $79C0
+TRREC           equ $79D0
+OBJP            equ $7EC0               ; x, y previos de cada objeto (xPos_prev, yPos_prev de ScummVM), 2 bytes por objeto
+CLR_END         equ $7F00
 PG_VIEWS        equ 24
 PG_WORDS        equ 25
 PG_SND          equ 26

@@ -311,3 +311,4 @@ Los datos de los tests que usan el comando `restart.game` solo comparan el model
 
 Notas de C4/C5: núcleo 10981, A1 5987, B 8175, C 3417, D 854, A2 3454. Hallazgo previo no corregido: en SQ1 sala 1 el Z80 y el modelo difieren en la máscara del borde derecho de los sprites a x = 253 (un píxel); `cmp_vm.py` admite `AGI_NOSPR=1` (no comparar sprites) y `AGI_VERBOSE=1` (máscaras) para esos casos.
 Sin hacer de la tarea opcional: A3-16 (dos columnas desde v25) y A3-17 (memoria por menú): el overlay B está a 8175 de 8192 y hay que repartirlo.
+Corrección posterior a C5: la reubicación de búferes de C1 dejó `MSGBUF` (= `PROW`, la fila de prioridad de las máscaras de los sprites) en $7930, sin alinear a página, y los sprites del borde derecho se veían sin recortar (SQ1 sala 1, el doctor moribundo). Ahora `MSGBUF` = $7A00 y los búferes pequeños (`STMP`, `STMP2`, `INW`, `KEYQ`, `SREC`, `TRREC`) ocupan $7930-$79DF; `CLR_END` = $7F00, pila de 256 bytes. Caso T-MASK.

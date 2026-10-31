@@ -90,6 +90,8 @@ unset AGI_NOSPR
 t T-KEY1 SQ1 14 "room=3,all,cmd=position:0:130:70" "8:text:take keycard 10:key:13" v3 v3=1
 t T-KEY2 SQ1 14 "room=3,all,cmd=position:0:130:70" "8:text:get card 10:key:65 11:key:13" v3 v3=1
 t T-KEY3 SQ1 14 "room=3,all,cmd=position:0:130:70" "8:text:take keycard 10:key:65" v3 v3=0
+# mascaras de prioridad de los sprites (SQ1 sala 1: los sprites del borde derecho; PROW = MSGBUF tiene que estar alineado a pagina)
+t T-MASK SQ1 8 "room=1" "" v0 v0=1
 # A3-11/A3-12: set.string guarda el texto sin formato; stringPrintf (%vN|W, %0 de relleno, recursion de %m, %s)
 t T-11 SQ1 1 "v3=7,cmd=set.string:1:30,if=compare.strings:1:1>assignn:100:7" "" v100 v100=7
 t T-12a SQ1 1 "all,if=equaln:9:1>assignn:100:7,cmd=display:5:5:10" "1:text:xyzzy" v100 v100=7
