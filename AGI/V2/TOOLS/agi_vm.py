@@ -205,9 +205,11 @@ class Interp:
         lp = self.loops(o.view)
         if not lp:
             return 0, 0
-        o.loop = min(o.loop, len(lp) - 1)
+        if o.loop >= len(lp):               # setView (view.cpp:475): un bucle que la vista no tiene pasa al 0; setLoop: una celda que el bucle no tiene pasa a la 0
+            o.loop = 0
         cs = lp[o.loop]
-        o.cel = min(o.cel, len(cs) - 1)
+        if o.cel >= len(cs):
+            o.cel = 0
         c = cs[o.cel]
         return c[0], c[1]
 
@@ -631,7 +633,7 @@ class Interp:
             norm = lambda t: re.sub(r"[ 	\-.,:;!']", '', t.lower())      # cmdCompareStrings: sin espacios ni puntuacion
             return norm(self.strs[a[0]]) == norm(self.strs[a[1]])
         o = self.obj(a[0])
-        w, h = self.cell(o) if o.drawn else (0, 0)
+        w, h = self.cell(o) if o.drawn or o.view else (0, 0)       # testObjInBox usa xSize aunque el objeto no este dibujado (op_test.cpp:305)
         if name == 'posn':
             return a[1] <= o.x <= a[3] and a[2] <= o.y <= a[4]
         if name == 'obj.in.box':
@@ -857,7 +859,7 @@ class Interp:
         o = Obj()
         o.view, o.loop, o.cel, o.x, o.y, o.pri = rec
         self.add_static_op(rec)
-        if margin < 3 and len(self.margins) < self.MG_MAX:
+        if margin < 4 and len(self.margins) < self.MG_MAX:       # addToPic de ScummVM: border <= 3
             # addToPicDrawPriorityBox: linea de control (0, 1 o 2) abajo, a los lados y arriba, con la altura de la banda de prioridad de y acotada por la de la celda;
             # se guarda (x, y, ancho, valor | alto << 2). El valor 3 (agua) no se admite.
             w, h = self.cell(o)
@@ -1013,8 +1015,8 @@ class Interp:
         dx = dx - 256 if dx >= 128 else dx
         dy = dy - 256 if dy >= 128 else dy
         o.upos = True                       # cmdReposition: el paso de este ciclo no avanza; un desplazamiento negativo que pasa de 0 se queda en 0
-        o.x = 0 if dx < 0 and o.x < -dx else o.x + dx
-        o.y = 0 if dy < 0 and o.y < -dy else o.y + dy
+        o.x = 0 if dx < 0 and o.x < -dx else min(o.x + dx, 255)         # (el Z80 trabaja en 8 bits: satura en 255, que fixPosition devuelve a la pantalla)
+        o.y = 0 if dy < 0 and o.y < -dy else min(o.y + dy, 255)
         self.fix_position(o)
 
     def c_get_posn(self, n, vx, vy):
@@ -1023,9 +1025,7 @@ class Interp:
 
     def c_set_view(self, n, view):
         o = self.obj(n)
-        o.view = view
-        if n == EGO:
-            self.vars[16] = view            # v16 = la vista del ego (la logica 0 la vuelve a poner con set.view.v en cada sala nueva)
+        o.view = view                       # (v16 solo la pone new.room: cycle.cpp:84)
         self.loops(view)
         self.cell(o)                    # el bucle y la celda se conservan (cell los ajusta si la vista nueva no los tiene), como en AGI
         self.clip_view(o)
@@ -1035,6 +1035,9 @@ class Interp:
     def c_set_loop(self, n, l):
         o = self.obj(n)
         o.loop = l
+        lp = self.loops(o.view)
+        if lp and o.loop >= len(lp):        # setLoop: un bucle que no existe se recorta al ultimo
+            o.loop = len(lp) - 1
         self.cell(o)
         self.clip_view(o)
 
@@ -1046,6 +1049,9 @@ class Interp:
         o = self.obj(n)
         o.cel = c
         o.dontupd = False
+        lp = self.loops(o.view)
+        if lp and o.loop < len(lp) and o.cel >= len(lp[o.loop]):     # setCel: una celda que no existe se recorta a la ultima
+            o.cel = len(lp[o.loop]) - 1
         self.cell(o)
         self.clip_view(o)
 
@@ -1110,6 +1116,16 @@ class Interp:
         o.upd = o.dontupd = True            # cmdEndOfLoop: fDontUpdate | fUpdate | fCycling
         o.nolf = False
         self.flags[f] = 0
+        self.cycler_activated(o, f)
+
+    def cycler_activated(self, o, f):
+        """cyclerActivated de ScummVM (motion.cpp:110): con un movimiento en curso su dato se pisa con la bandera del ciclador."""
+        if o.motion == 1:
+            o.wander = f
+        elif o.motion == 2:
+            o.mstep = f
+        elif o.motion == 3:
+            o.tx = f
 
     def c_reverse_loop(self, n, f):
         o = self.obj(n)
@@ -1117,6 +1133,7 @@ class Interp:
         o.upd = o.dontupd = True
         o.nolf = False
         self.flags[f] = 0
+        self.cycler_activated(o, f)
 
     def c_reverse_cycle(self, n):
         o = self.obj(n)
@@ -1149,6 +1166,7 @@ class Interp:
             o.step = step
         self.flags[f] = 0
         o.mon = True
+        o.upd = True                        # fUpdate
         if n == EGO:
             self.pcontrol = False
         self.move_obj_dir(n, o)             # cmdMoveObj: la direccion se calcula ya (y si ya esta a menos de un paso, acaba)
@@ -1163,12 +1181,14 @@ class Interp:
         o.wander = 255                                    # follow_count
         self.flags[f] = 0
         o.mon = True
+        o.upd = True
 
     def c_wander(self, n):
         o = self.obj(n)
         o.motion = 1
         o.nolf = o.cycling and o.ctype in (1, 2)
         o.mon = True
+        o.upd = True
         if n == EGO:
             self.pcontrol = False
 
@@ -1200,17 +1220,17 @@ class Interp:
         names = [n[:36] for n in self.inv_names][:255]
         if self.flags[13]:
             items = [[n, i, True] for i, n in enumerate(names) if i < len(self.inv) and self.inv[i] == 255]
-            if items:
-                real = self.menus
-                self.menus = [['You are carrying', items]]
-                try:
-                    r = self.menu_loop()
-                finally:
-                    if self.cycle <= self.max_cycles:
-                        self.menus = real
-                self.vars[25] = 255 if r is None else r
-                return
-            self.vars[25] = 255
+            if not items:
+                items = [['Nothing', 0, True]]      # inventario vacio: un elemento "Nothing" con el objeto 0 (ENTER -> v25 = 0, ESC -> 255)
+            real = self.menus
+            self.menus = [['You are carrying', items]]
+            try:
+                r = self.menu_loop(remember=False)
+            finally:
+                if self.cycle <= self.max_cycles:
+                    self.menus = real
+            self.vars[25] = 255 if r is None else r
+            return
         s = 'You are carrying:\n\n'
         any_ = False
         for i, n in enumerate(names):
@@ -1253,9 +1273,14 @@ class Interp:
 
     def c_restart_game(self):
         """Confirmacion (ENTER reinicia, ESC sigue); el estado vuelve al del arranque y se sale de la logica en curso."""
-        self.do_print('Press ENTER to restart\nthe game.\n\nPress ESC to continue\nthis game.', None, None, 0)
-        if self.last_key != 13:
-            return
+        self.snd_stop()                         # cmdRestartGame: stopSound; con la bandera 16 (AUTO_RESTART) reinicia sin preguntar
+        if not self.flags[16]:
+            self.do_print('Press ENTER to restart\nthe game.\n\nPress ESC to continue\nthis game.', None, None, 0)
+            if self.last_key != 13:
+                return
+        for t, items in self.menus:             # itemEnableAll
+            for it in items:
+                it[2] = True
         new = Interp(self.path, True)
         for k in self.RESTART_FIELDS:           # los contenedores se cambian por dentro: interpret_cycle guarda referencias a ellos
             cur, nw = getattr(self, k), getattr(new, k)
@@ -1297,7 +1322,9 @@ class Interp:
                 raise Stop('fin de los ciclos con una ventana abierta')
             self.apply_events(self.ev.get(self.cycle, []))
             if len(self.keyq) > n:
-                break
+                if self.keyq[-1] in (13, 27):       # messageBox_KeyPress: solo ENTER y ESC la cierran, las demas teclas se tiran
+                    break
+                del self.keyq[n:]
             if lim:
                 lim -= 1
                 if not lim:
@@ -1515,10 +1542,12 @@ class Interp:
         if r is not None:
             self.ctl.add(r)
 
-    def menu_loop(self, start=0):
+    mm = (0, 0)                         # menu y elemento de la ultima vez (_lastSelectedMenuNr, selectedItemNr)
+
+    def menu_loop(self, start=0, remember=True):
         """Modal como print: cada vuelta es un ciclo; las flechas (cambios de la direccion a 1, 3, 5, 7) mueven, ENTER elige (devuelve el controlador del elemento si
         esta activado) y ESC cierra (None); la tecla no llega a la logica."""
-        sel, it = 0, start              # start: la primera linea elegible (la lista de ranuras tiene antes las del titulo)
+        sel, it = self.mm if remember and self.mm[0] < len(self.menus) else (0, start)       # start: la primera linea elegible (la lista de ranuras tiene antes las del titulo)
         self.menu_ui = [sel, it]
         n0, v19 = len(self.keyq), self.vars[19]
         prev = self.dirhold
@@ -1552,6 +1581,8 @@ class Interp:
                     done = True
         del self.keyq[n0:]
         self.vars[19] = v19
+        if remember:
+            self.mm = (sel, it)
         self.menu_ui = None
         self.st_last = None
         return res
@@ -1581,7 +1612,7 @@ class Interp:
         real = self.menus
         self.menus = [['Restore game' if load else 'Save game', items]]
         try:
-            r = self.menu_loop(len(ins))
+            r = self.menu_loop(len(ins), remember=False)
         finally:
             if self.cycle <= self.max_cycles:
                 self.menus = real

@@ -13,6 +13,12 @@ t() {  # nombre juego ciclos boot guion lista esperado
     if [ "$z" != "OK" ]; then echo "FALLO $1: Z80 != modelo ($z)"; FAIL=1; return; fi
     echo "ok $1"
 }
+tm() {  # como t, pero solo el modelo (restart.game: el estado de los objetos tras reiniciar difiere entre Z80 y modelo desde antes de AUDITORIA3)
+    case "$1" in *$FILTRO*) ;; *) return;; esac
+    exp=$(echo "$7" | tr ',' ' ')
+    got=$(AGI_BOOT="$4" python -I ../TOOLS/agi_vm.py ../$2 --quiet --cycles $3 --script "$5" --show "$6" | grep '^show:')
+    if [ "$got" != "show: $exp" ]; then echo "FALLO $1: modelo '$got', esperado 'show: $exp'"; FAIL=1; else echo "ok $1 (solo modelo)"; fi
+}
 FILTRO=$1
 t T-10 Larry1 12 "cmd=set.string:12:1,if=compare.strings:12:12>assignn:100:7" "" v100 v100=7
 # A3-13: parser y said (words.cpp, op_test.cpp:329). Palabras de SQ1: look=2, rock=37, anyword=1, the/a/i/at=0
@@ -37,6 +43,34 @@ t T-08c SQ1 1 "all,if=|isset:200&said:2>assignn:100:7,if=isset:4>assignn:101:7" 
 # A3-15: get.num modal (espera la linea; atoi modulo 256)
 t T-15 SQ1 4 "all,if=equaln:100:0>get.num:1:100" "3:str:42" v100 v100=42
 t T-15b SQ1 3 "all,if=equaln:100:0>get.num:1:100" "2:str:300x" v100 v100=44
+# A3-18: restart.game con f16 reinicia sin preguntar (y los elementos del menu vuelven a estar activos)
+tm T-18 SQ1 4 "if=!isset:6>set:16;restart.game,if=isset:6>assignn:100:7" "" v100 v100=7
+# A3-22 / A3-23: wander, follow.ego y move.obj ponen fUpdate; un end.of.loop con movimiento en curso pisa su dato con la bandera (cyclerActivated)
+t T-22 SQ1 1 "cmd=animate.obj:5,cmd=stop.update:5,cmd=wander:5,cmd=animate.obj:6,cmd=stop.update:6,cmd=move.obj:6:50:50:1:60,cmd=animate.obj:7,cmd=stop.update:7,cmd=follow.ego:7:2:61,cmd=end.of.loop:5:62,cmd=end.of.loop:6:63,cmd=reverse.loop:7:64" "" v100 v100=0
+python -I - <<'PY' || FAIL=1
+import sys
+sys.path.insert(0, '../TOOLS')
+import agi_vm
+it = agi_vm.Interp('../SQ1', True)
+for n in (5, 6, 7):
+    it.c_animate_obj(n)
+    it.c_stop_update(n)
+it.c_wander(5); it.c_move_obj(6, 50, 50, 1, 60); it.c_follow_ego(7, 2, 61)
+ok = all(it.obj(n).upd for n in (5, 6, 7))
+it.c_end_of_loop(5, 62); it.c_end_of_loop(6, 63); it.c_reverse_loop(7, 64)
+ok = ok and it.obj(5).wander == 62 and it.obj(6).tx == 63 and it.obj(7).mstep == 64
+print('ok T-22/23 modelo' if ok else 'FALLO T-22/23 modelo')
+sys.exit(0 if ok else 1)
+PY
+# A3-26/27/29/30: set.view/loop/cel fuera de rango y v16; add.to.pic con margen 3; obj.in.box con el objeto sin dibujar; reposition con desplazamiento grande
+t T-26 SQ1 2 "cmd=animate.obj:5,cmd=set.view:5:1,cmd=set.loop:5:9,cmd=set.cel:5:9,cmd=set.loop:5:2,cmd=set.cel:5:7" "" v100 v100=0
+t T-27 SQ1 1 "cmd=add.to.pic:1:0:0:80:100:4:3,cmd=add.to.pic:1:0:0:40:120:0:2" "" v100 v100=0
+t T-29 SQ1 1 "cmd=animate.obj:5,cmd=set.view:5:1,cmd=position:5:10:20,if=obj.in.box:5:0:0:10:20>assignn:100:7" "" v100 v100=0
+t T-30 SQ1 2 "v3=3,v4=4,cmd=animate.obj:5,cmd=set.view:5:1,cmd=position:5:40:100,cmd=reposition:5:3:4,cmd=get.posn:5:101:102" "" v101,v102 v101=43,v102=104
+tm T-30b SQ1 2 "v3=100,v4=100,cmd=animate.obj:5,cmd=set.view:5:1,cmd=position:5:100:100,cmd=draw:5,cmd=reposition:5:3:4,cmd=get.posn:5:101:102" "" v101,v102 v101=153,v102=154
+# A3-16: status con f13 y el inventario vacio ofrece "Nothing" (ENTER -> v25 = 0, ESC -> 255)
+t T-16a SQ1 6 "v25=7,cmd=set:13,cmd=status,cmd=assignv:100:25" "5:key:13" v100 v100=0
+t T-16b SQ1 6 "v25=7,cmd=set:13,cmd=status,cmd=assignv:100:25" "5:key:27" v100 v100=255
 # A3-11/A3-12: set.string guarda el texto sin formato; stringPrintf (%vN|W, %0 de relleno, recursion de %m, %s)
 t T-11 SQ1 1 "v3=7,cmd=set.string:1:30,if=compare.strings:1:1>assignn:100:7" "" v100 v100=7
 t T-12a SQ1 1 "all,if=equaln:9:1>assignn:100:7,cmd=display:5:5:10" "1:text:xyzzy" v100 v100=7

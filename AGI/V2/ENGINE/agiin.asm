@@ -956,86 +956,12 @@ wg_none:        scf
 ; ---------------------------------------------------------------------
 ;  said
 ; ---------------------------------------------------------------------
-hc_said:        ld a,(FLAGS+4)         ; testSaid de ScummVM: f4 (SAID_ACCEPTED_INPUT) o sin f2 (ENTERED_CLI) -> falso; reset(f4) permite otro said
-                or a
-                jp nz,ret_false
-                ld a,(FLAGS+2)
-                or a
-                jp z,ret_false
-                ld hl,(saidp)
-                ld a,(saidk)
-                ld b,a                  ; B = nwords
-                ld c,0                  ; C = c (palabra de la orden; n = inwcnt - c)
-                ld de,0                 ; DE = z, la ultima palabra del said
-hz_l:           ld a,b
-                or a
-                jr z,hz_post
-                ld a,(inwcnt)
-                cp c
-                jr z,hz_post
-                ld e,(hl)
-                inc hl
-                ld d,(hl)
-                inc hl
-                ld a,d
-                cp $27
-                jr nz,hz_n
-                ld a,e
-                cp $0F
-                jr nz,hz_n
-                ld b,1                  ; 9999: el resto vale
-                jr hz_nx
-hz_n:           ld a,d
-                or a
-                jr nz,hz_cmp
-                ld a,e
-                cp 1
-                jr z,hz_nx              ; 1: cualquier palabra (tambien la desconocida)
-hz_cmp:         push hl
-                ld a,c
-                add a,a
-                ld l,a
-                ld h,0
-                push de
-                ld de,INW
-                add hl,de
-                pop de
-                ld a,(hl)
-                cp e
-                jr nz,hz_f1
-                inc hl
-                ld a,(hl)
-                cp d
-                jr nz,hz_f1
-                pop hl
-hz_nx:          inc c
-                dec b
-                jr hz_l
-hz_f1:          pop hl
-                jp ret_false
-hz_post:        ld a,(inwcnt)           ; if (n && z != 9999) falso
-                cp c
-                jr z,hz_p2
-                call hz_9999
-                jp nz,ret_false
-hz_p2:          ld a,b                  ; if (nwords != 0 && la siguiente != 9999) falso
-                or a
-                jr z,hz_ok
-                ld e,(hl)
-                inc hl
-                ld d,(hl)
-                call hz_9999
-                jp nz,ret_false
-hz_ok:          ld a,1
-                ld (said_done),a
-                ld (FLAGS+4),a
-                jp ret_true
-hz_9999:        ld a,d                  ; Z si DE = 9999
-                cp $27
-                ret nz
-                ld a,e
-                cp $0F
+; said(...): el codigo (testSaid de ScummVM) esta en el overlay C; el resultado vuelve en said_res
+hc_said:        ld hl,OVC_SAID
+                call call_c
+                ld a,(said_res)
                 ret
+said_res:       defb 0
 
 ; ---------------------------------------------------------------------
 ;  Mensajes (LOGnnn.MSG) y su formato

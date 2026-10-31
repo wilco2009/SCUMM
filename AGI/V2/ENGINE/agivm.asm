@@ -146,6 +146,7 @@ OVC_NEWROOM     equ $203C
 OVC_MVOD        equ $203F
 OVC_GAMEID      equ $2042
 OVC_PARSETEXT   equ $2045
+OVC_SAID        equ $2048
 OVC_TEXTSCR     equ $2015
 OVD_READ        equ $2000               ; overlay D (ficheros de guardar/cargar): con call_d
 OVD_PREP        equ $2003
@@ -1525,14 +1526,20 @@ h_quit:         ld a,1
                 ld (stopf),a
                 ret
 ; restart.game: confirmacion y, con ENTER, el estado vuelve al del arranque (overlay C) y se sale de la logica en curso
-h_restart_game: ld a,2
+h_restart_game: call h_stop_sound       ; cmdRestartGame: stopSound; con la bandera 16 (AUTO_RESTART) reinicia sin preguntar
+                ld a,(FLAGS+16)
+                or a
+                jr nz,hr_go
+                ld a,2
                 call pr_rawgo
                 ld a,(stopf)
                 or a
                 ret nz
                 ld a,(pw_last)
                 cp 13
-                ret nz                  ; ESC (o cualquier otra tecla): sigue la partida
+                ret nz                  ; ESC: sigue la partida
+hr_go:          ld hl,OVB_MENUON        ; itemEnableAll
+                call call_b
                 ld hl,OVC_RESTART
                 call call_c
                 ld a,1

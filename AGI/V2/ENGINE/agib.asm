@@ -1299,19 +1299,7 @@ MP_SIZE         equ 1500
 MP_LIM          equ mp_pool+MP_SIZE-40
 
 ; restart.game: los menus que definio el juego, la barra de estado y los colores del texto vuelven al arranque
-t_menureset:    xor a
-                ld (mn_n),a
-                ld (it_n),a
-                ld (st_on),a
-                ld (st_valid),a
-                ld (tbg),a
-                ld a,255
-                ld (m_only),a
-                ld a,15
-                ld (tfg),a
-                ld hl,mp_pool
-                ld (mp_free),hl
-                ret
+t_menureset:    ret                     ; (OVB_MENURESET no se llama: los menus sobreviven a restart.game, solo se reactivan sus elementos)
 
 ; mensaje ARGS[0] -> a la reserva (mp_last = donde queda); C si no cabe
 mp_text:        ld hl,(mp_free)
@@ -1823,8 +1811,10 @@ mo_ok:          ld a,255
                 ld a,(m_only)
                 cp 255
                 jr nz,mo_sx
-                xor a
-mo_sx:           ld (m_sel),a
+                ld a,(mm_it)            ; el menu principal recuerda el menu y el elemento de la ultima vez (_lastSelectedMenuNr, selectedItemNr)
+                ld (m_it),a
+                ld a,(mm_sel)
+mo_sx:          ld (m_sel),a
                 call mn_bar
                 jp mn_drop
 
@@ -1924,7 +1914,14 @@ t_menusel:      ld a,(m_cnt)
                 ld (mn_res),a
                 ret
 
-t_menuclose:    call mn_restore
+t_menuclose:    ld a,(m_only)
+                inc a
+                jr nz,mcl_x
+                ld a,(m_sel)
+                ld (mm_sel),a
+                ld a,(m_it)
+                ld (mm_it),a
+mcl_x:          call mn_restore
                 ld a,(st_on)
                 or a
                 jr z,mc_off
@@ -1935,6 +1932,8 @@ mc_off:         xor a
                 ld (dl_row),a
                 jp fill_row
 
+mm_sel:         defb 0
+mm_it:          defb 0
 mn_n:           defb 0
 it_n:           defb 0
 bk_mn:          defb 0
@@ -2153,7 +2152,20 @@ dv_c:           ld a,(hl)
                 jr z,dv_y
                 inc hl
                 djnz dv_c
-dv_x:           jp unmap_win
+dv_x:           ld a,2                  ; inventario vacio (InventoryMgr::getPlayerInventory): un unico elemento, "Nothing", con el objeto 0
+                ld (sf_mode),a
+                call dg_head
+                ld hl,s_nothing
+                call dg_cp
+                call mp_cp
+                xor a
+                ld (dg_ctl),a
+                inc a
+                call dg_add
+                ld a,1
+                ld (oc_res),a
+                jp unmap_win
+s_nothing:      defb "Nothing",0
 dv_y:           ld a,2
                 ld (sf_mode),a
                 call dg_head

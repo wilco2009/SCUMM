@@ -104,8 +104,7 @@ vs_1:           res 7,d                 ; bit 15 = vista congelada (agi2log.py)
                 ld a,(vclamp)
                 or a
                 jp z,vs_zero
-                ld a,b
-                dec a
+                xor a                   ; setView: un bucle que la vista no tiene pasa al 0
                 ld (ix+O_LOOP),a
 vs_2:           ld d,a
                 ld c,0
@@ -129,8 +128,7 @@ vs_3:           ld a,(hl)
                 ld a,(vclamp)
                 or a
                 jr z,vs_zp
-                ld a,b
-                dec a
+                xor a                   ; setLoop: una celda que el bucle no tiene pasa a la 0
                 ld (ix+O_CEL),a
 vs_4:           add a,c
                 add a,a
@@ -251,7 +249,9 @@ rpa_s:          sub b
                 ld (hl),a
                 ret
 rpa_p:          add a,(hl)
-                ld (hl),a
+                jr nc,rpa_q
+                ld a,255                ; satura (ScummVM trabaja en 16 bits y fixPosition lo devuelve a la pantalla)
+rpa_q:          ld (hl),a
                 ret
 h_get_posn:     call argobj
                 ld a,(ARGS+1)
@@ -267,14 +267,8 @@ h_get_posn:     call argobj
 
 h_set_view:     call argobj
                 ld a,(ARGS+1)
-sv_set:         ld (ix+O_VIEW),a
-                ld c,a
-                ld a,(ARGS)
-                or a
-                jr nz,sv_nv
-                ld a,c                  ; v16 = la vista del ego
-                ld (VARS+16),a
-sv_nv:          jp clipv             ; el bucle y la celda se conservan (obj_cell los ajusta si la vista nueva no los tiene), como en AGI: SQ1 pone set.loop y luego set.view
+sv_set:         ld (ix+O_VIEW),a        ; (v16 solo la pone new.room, cycle.cpp:84)
+                jp clipv                ; el bucle y la celda se conservan; obj_cell pasa a 0 lo que la vista nueva no tiene (setView)
 h_set_view_v:   call argobj
                 ld a,(ARGS+1)
                 call getv
@@ -282,7 +276,18 @@ h_set_view_v:   call argobj
 h_set_loop:     call argobj
                 ld a,(ARGS+1)
 sl_set:         ld (ix+O_LOOP),a
-                jp clipv
+                call obj_info           ; setLoop: un bucle que no existe se recorta al ultimo
+                ld a,(ocn)
+                or a
+                jr z,sl_c
+                ld b,a
+                ld a,(ix+O_LOOP)
+                cp b
+                jr c,sl_c
+                ld a,b
+                dec a
+                ld (ix+O_LOOP),a
+sl_c:           jp clipv
 h_set_loop_v:   call argobj
                 ld a,(ARGS+1)
                 call getv
@@ -297,7 +302,18 @@ h_set_cel:      call argobj
                 ld a,(ARGS+1)
 sc_set:         ld (ix+O_CEL),a
                 res 4,(ix+O_F2)         ; set.cel quita el fDontUpdate
-                jp clipv
+                call obj_info           ; setCel: una celda que no existe se recorta a la ultima
+                ld a,(occ)
+                or a
+                jr z,sc_c
+                ld b,a
+                ld a,(ix+O_CEL)
+                cp b
+                jr c,sc_c
+                ld a,b
+                dec a
+                ld (ix+O_CEL),a
+sc_c:           jp clipv
 h_set_cel_v:    call argobj
                 ld a,(ARGS+1)
                 call getv
@@ -412,8 +428,8 @@ ap_q:           ld (SCR+O_PRI),a
                 ld ix,SCR
                 call obj_cell           ; bucle y celda ajustados a la vista; D = ancho, E = alto
                 ld a,(ARGS+6)
-                cp 3
-                jr nc,ap_log            ; solo las lineas 0, 1 y 2
+                cp 4
+                jr nc,ap_log            ; solo las lineas 0, 1, 2 y 3 (border <= 3)
                 ld a,(mg_n)
                 cp MG_MAX
                 jr nc,ap_log
@@ -537,6 +553,18 @@ eol_set:        call argobj
                 ld l,a
                 ld h,FLAGS>>8
                 ld (hl),0
+                ld c,(ix+O_MOTION)      ; cyclerActivated: con un movimiento en curso, su dato se pisa con la bandera del ciclador
+                dec c
+                jr z,ec_w
+                dec c
+                jr z,ec_f
+                dec c
+                ret nz
+                ld (ix+O_TX),a          ; move.obj: move_x
+                ret
+ec_w:           ld (ix+O_WANDER),a      ; wander_count
+                ret
+ec_f:           ld (ix+O_MSTEP),a       ; follow_stepSize
                 ret
 h_reverse_loop: ld b,2
                 jr eol_set
@@ -608,6 +636,7 @@ mo_1:           ld a,(ARGS+4)
                 ld h,FLAGS>>8
                 ld (hl),0
                 set 4,(ix+O_F1)
+                set 2,(ix+O_F1)         ; fUpdate (cmdMoveObj, cmdFollowEgo y cmdWander)
                 ld a,(ARGS)
                 ld (curk),a             ; (el update_objects lo vuelve a poner en cada objeto)
                 or a
@@ -641,11 +670,13 @@ fe_s:           ld a,(ix+O_STEP)
 fe_1:           ld (ix+O_MSTEP),a
                 ld (ix+O_WANDER),255
                 set 4,(ix+O_F1)
+                set 2,(ix+O_F1)
                 ret
 h_wander:       call argobj
                 call motact
                 ld (ix+O_MOTION),1
                 set 4,(ix+O_F1)
+                set 2,(ix+O_F1)
                 ld a,(ARGS)
                 or a
                 ret nz
@@ -681,8 +712,11 @@ h_get_dir:      call argobj
 cond_obj:       call argobj
                 ld de,0
                 bit 1,(ix+O_F1)
+                jr nz,co_c              ; testObjInBox usa xSize aunque el objeto no este dibujado (con vista)
+                ld a,(ix+O_VIEW)
+                or a
                 ret z
-                jp obj_cell
+co_c:           jp obj_cell
 
 ; HL = X minimo, DE = X maximo; la Y es la del objeto (IX). x1 <= HL, DE <= x2, y1 <= y <= y2
 boxtest:        push de
