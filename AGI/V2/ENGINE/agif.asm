@@ -552,11 +552,12 @@ mo_ok:          ld a,255
                 ld a,(m_only)
                 cp 255
                 jr nz,mo_sx
-                ld a,(mm_it)            ; el menu principal recuerda el menu y el elemento de la ultima vez (_lastSelectedMenuNr, selectedItemNr)
-                ld (m_it),a
-                ld a,(mm_sel)
+                ld a,(mm_sel)           ; el menu principal recuerda el menu de la ultima vez (_lastSelectedMenuNr) y el elemento de cada menu (selectedItemNr)
+                ld (m_sel),a
+                call mm_ld
+                jr mo_gg
 mo_sx:          ld (m_sel),a
-                call mn_bar
+mo_gg:          call mn_bar
                 jp mn_drop
 
 ; La imagen limpia bajo la lista
@@ -629,10 +630,16 @@ nv_r:           ld a,(m_only)
                 xor a
 nv_m:           push af
                 call mn_restore
+                ld a,(m_only)
+                inc a
+                call z,mm_st            ; menu principal: el elemento del menu que se deja se recuerda
                 pop af
                 ld (m_sel),a
                 ld a,(m_start)
                 ld (m_it),a
+                ld a,(m_only)
+                inc a
+                call z,mm_ld            ; y el del nuevo vuelve a ser el que tenia
                 call mn_bar
                 jp mn_drop
 
@@ -666,8 +673,7 @@ t_menuclose:    ld a,(iv_on)
                 jr nz,mcl_x
                 ld a,(m_sel)
                 ld (mm_sel),a
-                ld a,(m_it)
-                ld (mm_it),a
+                call mm_st
 mcl_x:          call mn_restore
                 ld a,(st_on)
                 or a
@@ -680,7 +686,22 @@ mc_off:         xor a
                 jp fill_row
 
 mm_sel:         defb 0
-mm_it:          defb 0
+mm_its:         defs MN_MAX             ; el elemento elegido de cada menu (relativo al primero)
+; m_it = el elemento recordado del menu m_sel / lo recuerda
+mm_ld:          call mm_p
+                ld a,(hl)
+                ld (m_it),a
+                ret
+mm_st:          call mm_p
+                ld a,(m_it)
+                ld (hl),a
+                ret
+mm_p:           ld a,(m_sel)
+                ld e,a
+                ld d,0
+                ld hl,mm_its
+                add hl,de
+                ret
 mn_n:           defb 0
 it_n:           defb 0
 bk_mn:          defb 0

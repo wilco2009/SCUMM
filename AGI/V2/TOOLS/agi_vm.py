@@ -102,6 +102,7 @@ class Interp:
         self.lastpic = 0
         self.menus = []                 # [titulo, [[texto, controlador, activado]]]
         self.menu_ui = None
+        self.mm_its = {}
         self.margins = []
         self.scan = {}                  # set.scan.start: por donde empieza cada logica (offset en su codigo)
         self.spans = []                 # add.to.pic: (fila 0 de la celda, prioridad, [(ax0, ax1) por fila])
@@ -1645,12 +1646,17 @@ class Interp:
         if r is not None:
             self.ctl.add(r)
 
-    mm = (0, 0)                         # menu y elemento de la ultima vez (_lastSelectedMenuNr, selectedItemNr)
+    mm_sel = 0                          # el menu de la ultima vez (_lastSelectedMenuNr)
+    # self.mm_its (en __init__): el elemento elegido de cada menu (selectedItemNr de GuiMenuEntry, relativo al primero)
 
     def menu_loop(self, start=0, remember=True):
         """Modal como print: cada vuelta es un ciclo; las flechas (cambios de la direccion a 1, 3, 5, 7) mueven, ENTER elige (devuelve el controlador del elemento si
         esta activado) y ESC cierra (None); la tecla no llega a la logica."""
-        sel, it = self.mm if remember and self.mm[0] < len(self.menus) else (0, start)       # start: la primera linea elegible (la lista de ranuras tiene antes las del titulo)
+        if remember:
+            sel = self.mm_sel if self.mm_sel < len(self.menus) else 0
+            it = self.mm_its.get(sel, 0)
+        else:
+            sel, it = 0, start              # start: la primera linea elegible (la lista de ranuras tiene antes las del titulo)
         self.menu_ui = [sel, it]
         n0, v19 = len(self.keyq), self.vars[19]
         prev = self.dirhold
@@ -1665,10 +1671,11 @@ class Interp:
             if d != prev:
                 prev = d
                 cnt = len(self.menus[sel][1])
-                if d == 7:
-                    sel, it = (sel - 1) % len(self.menus), start
-                elif d == 3:
-                    sel, it = (sel + 1) % len(self.menus), start
+                if d in (7, 3):
+                    if remember:
+                        self.mm_its[sel] = it
+                    sel = (sel + (-1 if d == 7 else 1)) % len(self.menus)
+                    it = self.mm_its.get(sel, 0) if remember else start
                 elif d == 5 and cnt:
                     it = it + 1 if it + 1 < cnt else start
                 elif d == 1 and cnt:
@@ -1685,7 +1692,8 @@ class Interp:
         del self.keyq[n0:]
         self.vars[19] = v19
         if remember:
-            self.mm = (sel, it)
+            self.mm_sel = sel
+            self.mm_its[sel] = it
         self.menu_ui = None
         self.st_last = None
         return res

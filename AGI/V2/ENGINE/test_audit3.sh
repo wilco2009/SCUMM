@@ -131,4 +131,7 @@ t T-16i SQ1 30 "cyc=10,v25=7,cmd=status,cmd=assignn:100:9" "12:key:65" v25,v100 
 unset AGI_INV255
 t T-16j SQ1 30 "cyc=10,v25=5,$IV" "12:key:13" v25 v25=0
 t T-16k SQ1 30 "cyc=10,v25=5,$IV" "12:key:27" v25 v25=255
+# A3-17: el menu principal recuerda el menu (_lastSelectedMenuNr) y el elemento de cada menu (selectedItemNr): Sierra (0) elemento 1, Archivo (1) elemento 3 y de vuelta a Sierra
+# -> ENTER da el controlador 2; abrir otra vez, a la derecha: Archivo con su elemento 3 -> controlador 7
+t T-17a SQ1 40 "cyc=10,cmd=set:14,cmd=menu.input,if=controller:2>assignn:100:2,if=controller:21>assignn:100:21,cmd=menu.input,if=controller:7>assignn:101:7" "11:dir:5 12:dir:0 13:dir:3 14:dir:0 15:dir:5 16:dir:0 17:dir:5 18:dir:0 19:dir:5 20:dir:0 21:dir:7 22:dir:0 23:key:13 24:dir:3 25:dir:0 26:key:13" v100,v101 v100=2,v101=7
 [ $FAIL = 0 ] && echo "AUDIT3: todos OK" || echo "AUDIT3: HAY FALLOS"
