@@ -69,6 +69,19 @@ class Obj:
         self.nolf = False               # ignoreLoopFlag: el end.of.loop / reverse.loop en curso no pone su bandera
 
 
+def skip_until(code, q, target):
+    """skipInstructionsUntil de ScummVM: q = posicion tras un codigo de condicion; salta condiciones hasta el byte `target` (inclusive)."""
+    while True:
+        c = code[q]
+        q += 1
+        if c == target:
+            return q
+        if c >= 0xFC:
+            continue
+        types = CONDS[c][1]
+        q += 1 + 2 * code[q] if types is None else len(types)
+
+
 class Interp:
     def __init__(self, path, quiet=False):
         self.path = path
@@ -419,25 +432,63 @@ class Interp:
                     if pri2[row * 160 + ax] < pri:
                         pri2[row * 160 + ax] = pri
 
-    def fmt(self, s, lognum):
-        def rep(m):
-            k, n = m.group(1), int(m.group(2))
-            if k == 'v':
-                return str(self.vars[n])
-            if k == 'm':
-                ms = self.logic(lognum)[1]
-                return ms[n - 1] if 0 < n <= len(ms) and ms[n - 1] else ''
-            if k == 's':
-                return self.strs[n] if n < NSTR else ''
-            if k == 'g':
-                ms = self.logic(0)[1]
-                return ms[n - 1] if 0 < n <= len(ms) and ms[n - 1] else ''
-            if k == 'w':
-                return self.wtext[n - 1] if n - 1 < len(self.wtext) else ''
-            return m.group(0)
-        return re.sub(r'%([vmsgw])(\d+)(?:\|\d+)?', rep, s)
+    def fmt(self, s, lognum, md=1, depth=0):
+        """TextMgr::stringPrintf de ScummVM (text.cpp:1296): %vN[|W], %mN y %sN con formato (recursivos), %gN y %wN tal cual, barra + caracter = el caracter; otro %x se traga la letra y las cifras.
+        Limites del Z80 (bufer de mensaje: raiz + 1 anidado; 6 fuentes anidadas): el modelo los copia."""
+        out = []
+        i = 0
+        n = len(s)
+        while i < n:
+            ch = s[i]
+            i += 1
+            if ch == chr(92):
+                if i >= n:
+                    break
+                out.append(s[i])
+                i += 1
+                continue
+            if ch != '%':
+                out.append(ch)
+                continue
+            if i >= n:
+                break
+            spec = s[i]
+            i += 1
+            j = i
+            while j < n and s[j].isdigit():
+                j += 1
+            num = int(s[i:j] or 0) & 255
+            i = j
+            width = 99
+            if spec == 'v' and i < n and s[i] == '|':
+                j = i + 1
+                while j < n and s[j].isdigit():
+                    j += 1
+                width = int(s[i + 1:j] or 0) & 255
+                i = j
+            if spec == 'v':
+                v = self.vars[num]
+                if width == 99:
+                    out.append(str(v))
+                else:
+                    out.append(('%015d' % v)[15 - min(width, 15):])
+            elif spec == 'w':
+                if 0 < num <= len(self.wtext):
+                    out.append(self.wtext[num - 1])
+            elif spec == 's':
+                if num < NSTR and depth < 6:
+                    out.append(self.fmt(self.strs[num], lognum, md, depth + 1))
+            elif spec in 'mg' and md < 2:
+                ms = self.logic(lognum if spec == 'm' else 0)[1]
+                t = ms[num - 1] if 0 < num <= len(ms) and ms[num - 1] else ''
+                if spec == 'g':
+                    out.append(t)
+                elif depth < 6:
+                    out.append(self.fmt(t, lognum, 2, depth + 1))
+        return ''.join(out)
 
     wtext = []
+    egow = []
     rs_keep = False
     rerun = False
     txtm = False                # pantalla de texto (text.screen)
@@ -451,46 +502,87 @@ class Interp:
 
     # ------------------------------------------------------------ parser
     def parse(self, text):
-        t = ag.norm_word(text.lower()).split()     # ' ` - " . se quitan sin separar (don't = dont); lo demas separa
+        """Words::parseUsingDictionary de ScummVM (words.cpp:324): cleanUpInput + findWordInDictionary. Devuelve los numeros de las palabras (0 la desconocida);
+        f2 = hay palabras, f4 = 0, v9 = posicion de la palabra desconocida. El vocabulario es el normalizado (agi_read.norm_word, una opcion nuestra para el teclado)."""
+        c = []
+        inw = False
+        for ch in text:
+            if 'A' <= ch <= 'Z':
+                ch = ch.lower()
+            if ch in "'`-\\\"":
+                continue
+            if ch in ' ,.?!();:[]{}':
+                if inw:
+                    c.append(' ')
+                    inw = False
+                continue
+            c.append(ch)
+            inw = True
+        if c and c[-1] == ' ':
+            c.pop()
+        c = ''.join(c)
         self.wtext = []
-        nums = []
-        self.vars[9] = 0
-        i = 0
-        while i < len(t):
-            for k in range(min(self.maxw, len(t) - i), 0, -1):
-                w = ' '.join(t[i:i + k])
-                if w in self.wmap:
-                    if self.wmap[w] != 0:
-                        nums.append(self.wmap[w])
-                        self.wtext.append(w)
-                    i += k
+        ids = []
+        pos = 0
+        while pos < len(c) and len(ids) < 16:
+            if c[pos] == ' ':
+                pos += 1
+            unk, num, ln = True, 0, 0
+            f = c[pos]
+            if f.isascii() and (f.isdigit() or 'a' <= f <= 'z'):
+                if f in 'ai' and pos + 1 < len(c) and c[pos + 1] == ' ':
+                    unk = False                         # "a" / "i" sueltas: se ignoran
+                for w, n in self.words:
+                    if w[:1] != f or not c.startswith(w, pos):
+                        continue
+                    e = pos + len(w)
+                    if e < len(c) and c[e] != ' ':
+                        continue
+                    unk, num, ln = False, n, len(w)
+                    if e >= len(c):
+                        break
+            if ln == 0:
+                e = c.find(' ', pos)
+                ln = (len(c) if e < 0 else e) - pos
+            if unk or num:
+                ids.append(0 if unk else num)
+                self.wtext.append(c[pos:pos + ln])
+                if unk:
+                    self.vars[9] = len(ids)
                     break
-            else:
-                self.vars[9] = len(nums) + 1
-                self.wtext.append(t[i])
-                return nums
-        return nums
+            pos += ln
+        self.flags[2] = 1 if ids else 0
+        self.flags[4] = 0
+        self.egow = ids                 # las palabras de la ultima orden (clearEgoWords solo al analizar otra)
+        return ids
 
     def say(self, args):
-        if self.input is None or self.flags[4] or self.vars[9]:       # testSaid de ScummVM: la bandera 4 (SAID_ACCEPTED_INPUT) la pone said y la puede bajar la logica con reset(f4)
+        """testSaid de ScummVM (op_test.cpp:329)."""
+        if self.flags[4] or not self.flags[2]:
             return False
-        w = self.input
-        n = len(args)
-        for i, a in enumerate(args):
-            if a == 9999:
-                ok = True
-                break
-            if i >= len(w):
+        w = self.egow
+        n = len(w)
+        nw = len(args)
+        c = 0
+        z = 0
+        k = 0
+        while nw and n:
+            z = args[k]
+            k += 1
+            if z == 9999:
+                nw = 1
+            elif z != 1 and w[c] != z:
                 return False
-            if a != 1 and a != w[i]:
-                return False
-        else:
-            if n != len(w):
-                return False
-            ok = True
+            c += 1
+            nw -= 1
+            n -= 1
+        if n and z != 9999:
+            return False
+        if nw != 0 and (args[k] if k < len(args) else 0) != 9999:
+            return False
         self.said_done = True
         self.flags[4] = 1
-        return ok
+        return True
 
     # ------------------------------------------------------------ condiciones
     def cond(self, op, a, p, code):
@@ -570,9 +662,8 @@ class Interp:
                     q = p + 1
                     res = True
                     orm = False
-                    orres = False
                     neg = False
-                    while True:
+                    while True:             # testIfCode de ScummVM (op_test.cpp:395): cortocircuito
                         c = code[q]
                         q += 1
                         if c == 0xFF:
@@ -581,10 +672,11 @@ class Interp:
                             neg = True
                             continue
                         if c == 0xFC:
-                            if orm:
-                                res = res and orres
-                                orres = False
-                            orm = not orm
+                            if orm:         # el OR acaba sin ninguna cierta: falso
+                                res = False
+                                q = skip_until(code, q, 0xFF)
+                                break
+                            orm = True
                             continue
                         name, types = CONDS[c]
                         if types is None:
@@ -601,9 +693,13 @@ class Interp:
                             r = not r
                             neg = False
                         if orm:
-                            orres = orres or r
-                        else:
-                            res = res and r
+                            if r:           # la primera cierta de un OR: se salta hasta su cierre
+                                q = skip_until(code, q, 0xFC)
+                                orm = False
+                        elif not r:         # la primera falsa de un Y: se salta hasta el final
+                            res = False
+                            q = skip_until(code, q, 0xFF)
+                            break
                     ln = code[q] | (code[q + 1] << 8)
                     q += 2
                     p = q if res else q + ln
@@ -1153,7 +1249,7 @@ class Interp:
     def c_show_obj_v(self, v): self.c_show_obj(self.vars[v])
 
     RESTART_FIELDS = ('scan', 'vars', 'flags', 'objs', 'inv', 'keys', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'statics', 'horizon', 'blocks', 'pcontrol',
-                      'lastpic', 'ovl_n', 'lfsr', 'status_on', 'st_last', 'tfg', 'tbg', 'accept', 'sound_flags', 'input', 'said_done', 'keyq', 'textq', 'ctl', 'wtext', 'ext_bm', 'ext_at', 'box', 'win_act')
+                      'lastpic', 'ovl_n', 'lfsr', 'status_on', 'st_last', 'tfg', 'tbg', 'accept', 'sound_flags', 'input', 'egow', 'said_done', 'keyq', 'textq', 'ctl', 'wtext', 'ext_bm', 'ext_at', 'box', 'win_act')
 
     def c_restart_game(self):
         """Confirmacion (ENTER reinicia, ESC sigue); el estado vuelve al del arranque y se sale de la logica en curso."""
@@ -1309,7 +1405,9 @@ class Interp:
         self.text_line(0, 0, ' Score:%d of %d' % (key[0], key[1]), 0, 15)
         self.text_line(0, 30, 'Sound:on' if key[2] else 'Sound:off', 0, 15)
 
-    def c_set_string(self, s, m): self.strs[s] = self.msg(m)[:40]
+    def c_set_string(self, s, m):               # cmdSetString: el texto sin formato (strlcpy de 40)
+        ms = self.stack[-1][1]
+        self.strs[s] = (ms[m - 1] if 0 < m <= len(ms) and ms[m - 1] is not None else '')[:39]
 
     gs_on = False               # get.string esperando: las lineas escritas van a la cola de cadenas
 
@@ -1345,20 +1443,28 @@ class Interp:
         return None if esc else self.textq.pop(0)[:30]
 
     def c_get_num(self, m, v):
+        """cmdGetNum: modal como get.string; v = atoi de lo escrito (el editor admite 3 caracteres), modulo 256."""
         self.log('get.num: ' + self.msg(m))
-        t = self.textq.pop(0) if self.textq else '0'
-        self.vars[v] = int(t) & 255 if t.isdigit() else 0
+        n, v19 = len(self.keyq), self.vars[19]
+        self.gs_on = True
+        while not self.textq:
+            self.cycle += 1
+            if self.cycle > self.max_cycles:
+                raise Stop('fin de los ciclos en get.num')
+            self.apply_events(self.ev.get(self.cycle, []))
+            del self.keyq[n:]
+            self.vars[19] = v19
+        self.gs_on = False
+        t = re.match(r'\d*', self.textq.pop(0))
+        self.vars[v] = int(t.group() or 0) & 255
 
     def c_word_to_string(self, n, s):
         self.strs[s] = (self.wtext[n] if n < len(self.wtext) else '')[:40]
 
-    def c_parse(self, s):
-        if not self.strs[s]:                # una cadena vacia no es una orden
-            self.flags[2] = 0
-            return
+    def c_parse(self, s):           # cmdParse: v9, f2 y f4 a 0 y se analiza la cadena (vacia: sin palabras, f2 = 0)
+        self.vars[9] = 0
         self.input = self.parse(self.strs[s])
         self.said_done = False
-        self.flags[2] = 1
 
     def c_prevent_input(self): self.accept = False
     def c_echo_line(self): pass                 # solo cambian la linea de entrada (modo real), que el modelo no tiene
@@ -1908,17 +2014,18 @@ class Interp:
             elif kind == 'text':
                 self.input = self.parse(val)
                 self.said_done = False
-                self.flags[2] = 1
-                v[19] = 0
+                if 13 not in self.keys:         # el ENTER que envia la linea: v19 = 13 (si no tiene controlador, cycle.cpp:253)
+                    v[19] = 13
                 self.log('entrada: ' + val + ' -> palabras %s' % (self.input,))
             elif kind == 'str':
                 self.textq.append(val)
             elif kind == 'key':
                 n = int(val)
                 self.keyq.append(n)
-                v[19] = n
-                if n in self.keys:
+                if n in self.keys:              # handleController: con controlador no se toca v19
                     self.ctl.add(self.keys[n])
+                else:
+                    v[19] = n
             elif kind == 'ctrl':
                 self.ctl.add(int(val))
             elif kind == 'dir':

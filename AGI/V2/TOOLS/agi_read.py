@@ -210,21 +210,31 @@ def help_override(path, n, msgs):
 
 
 def testboot(n, d):
-    """Solo para pruebas (variable de entorno AGI_BOOT="v80=6,room=6"): codigo inyectado al principio de la logica 0 (asignaciones y new.room); igual en agi2log.py."""
+    """Solo para pruebas (variable de entorno AGI_BOOT="v80=6,room=6"): codigo inyectado al principio de la logica 0; igual en agi2log.py.
+    Elementos separados por comas: vN=valor, room=N, cmd=orden:arg:arg (una orden con argumentos literales), ign, pri=N,
+    if=[|]cond:a:b[&!cond:a]>orden:a;orden:a  (| = condiciones en OR; said:id:id:...), cyc=N (lo que sigue corre en la ejecucion N de la logica 0, v199 la cuenta;
+    all (lo que sigue corre siempre); sin cyc ni all, solo cuando v0 == 0, al arrancar)."""
     spec = os.environ.get('AGI_BOOT', '')
     if n != 0 or not spec:
         return d
+    import agi_logic
+    blocks = []                             # (guarda, codigo)
+    guard = (1, 0)
     code = bytearray()
     for it in spec.split(','):
         k, _, val = it.partition('=')
-        if k == 'room':
+        if k == 'cyc':
+            blocks.append((guard, code))
+            guard, code = (199, int(val)), bytearray()
+        elif k == 'all':                    # lo que sigue corre en cada ejecucion de la logica 0
+            blocks.append((guard, code))
+            guard, code = None, bytearray()
+        elif k == 'room':
             code += bytes((18, int(val)))
-        elif k == 'cmd':                    # cmd=nombre:arg:arg... (una orden cualquiera con argumentos literales)
-            import agi_logic
+        elif k == 'cmd':                    # cmd=nombre:arg:arg...
             nm, *ar = val.split(':')
             code += bytes([[c[0] for c in agi_logic.CMDS].index(nm)] + [int(x) for x in ar])
-        elif k == 'if':                     # if=[|]cond:a:b[&!cond:a]>cmd:a;cmd:a  (| = condiciones en OR); el bloque corre en el arranque
-            import agi_logic
+        elif k == 'if':
             cs, _, body = val.partition('>')
             orm = cs.startswith('|')
             cs = cs.lstrip('|')
@@ -233,23 +243,38 @@ def testboot(n, d):
                 neg = c.startswith('!')
                 nm, *ar = c.lstrip('!').split(':')
                 num = [k2 for k2, v2 in agi_logic.CONDS.items() if v2[0] == nm][0]
-                cond += (b'\xfd' if neg else b'') + bytes([num] + [int(x) for x in ar])
+                if nm == 'said':
+                    args = bytes([len(ar)]) + b''.join(bytes((int(x) & 255, int(x) >> 8)) for x in ar)
+                else:
+                    args = bytes(int(x) for x in ar)
+                cond += (bytes((0xFD,)) if neg else b'') + bytes([num]) + args
             if orm:
-                cond = b'\xfc' + cond + b'\xfc'
+                cond = bytes((0xFC,)) + cond + bytes((0xFC,))
             then = bytearray()
             for c in body.split(';'):
                 nm, *ar = c.split(':')
                 then += bytes([[x[0] for x in agi_logic.CMDS].index(nm)] + [int(x) for x in ar])
-            code += b'\xff' + cond + b'\xff' + bytes((len(then) & 255, len(then) >> 8)) + then
+            code += bytes((0xFF,)) + cond + bytes((0xFF,)) + bytes((len(then) & 255, len(then) >> 8)) + then
         elif k == 'ign':                    # ignore.blocks(o0)
             code += bytes((88, 0))
         elif k == 'pri':                    # set.priority(o0, val)
             code += bytes((54, 0, int(val)))
         else:
             code += bytes((3, int(k[1:]), int(val)))
-    code = bytes((0xFF, 0x01, 0, 0, 0xFF, len(code) & 255, len(code) >> 8)) + bytes(code)       # if (equaln(v0, 0)) { ... }: solo al arrancar
-    size = (d[0] | (d[1] << 8)) + len(code)
-    return bytes((size & 255, size >> 8)) + code + bytes(d[2:])
+    blocks.append((guard, code))
+    out = bytearray()
+    if any(g is not None and g[0] == 199 for g, _ in blocks):
+        out += bytes((1, 199))               # increment(v199)
+    for g, c in blocks:
+        if not c:
+            continue
+        if g is None:
+            out += bytes(c)
+            continue
+        gv, gn = g
+        out += bytes((0xFF, 0x01, gv, gn, 0xFF, len(c) & 255, len(c) >> 8)) + bytes(c)     # if (equaln(gv, gn)) { ... }
+    size = (d[0] | (d[1] << 8)) + len(out)
+    return bytes((size & 255, size >> 8)) + out + bytes(d[2:])
 
 
 def logic_messages(d):

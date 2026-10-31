@@ -84,13 +84,13 @@ ev_text:        ld a,(gs_on)            ; get.string: la linea es la cadena pedi
                 ld bc,41
                 ldir
                 ld hl,EVBUF
-                call parse_text
+                ld (pt_src),hl
+                ld hl,OVC_PARSETEXT
+                call call_c
                 xor a
                 ld (said_done),a
-                ld (VARS+19),a
-                inc a
-                ld (FLAGS+2),a
-                ret
+                ld c,13                 ; el ENTER que la envio: v19 = 13 (si no tiene controlador, como en el ciclo de ScummVM)
+                jr kp_m
 ev_str:         ld hl,EVBUF
                 jp tq_push
 ev_key:         ld a,(EVBUF)
@@ -108,7 +108,6 @@ ev_dir:         ld a,(EVBUF)
 ;  Teclas y controladores
 ; ---------------------------------------------------------------------
 key_push:       ld c,a
-                ld (VARS+19),a
                 ld a,(keyn)
                 cp 8
                 jr nc,kp_m
@@ -119,7 +118,7 @@ key_push:       ld c,a
                 ld (hl),c
                 inc a
                 ld (keyn),a
-kp_m:           ld a,c
+kp_m:           ld a,c                  ; cycle.cpp: v19 solo si la tecla no tiene controlador (handleController)
                 and 127
                 ld l,a
                 ld h,0
@@ -129,8 +128,11 @@ kp_m:           ld a,c
                 inc hl
                 ld a,(hl)
                 or a
-                ret z
-                dec hl
+                jr nz,kp_c
+                ld a,c
+                ld (VARS+19),a
+                ret
+kp_c:           dec hl
                 ld a,(hl)
                 ld l,a
                 ld h,CTL>>8
@@ -283,17 +285,29 @@ strptr:         ld l,a
                 add hl,bc
                 ret
 
-h_set_string:   ld a,(ARGS)
+h_set_string:   ld a,(ARGS)             ; cmdSetString: el texto sin formato (strlcpy de 40: 39 caracteres)
                 cp NSTR
                 ret nc
                 call strptr
-                ex de,hl
-                ld a,(curlg)
-                ld (bs_lg),a
+                push hl
                 ld a,(ARGS+1)
                 ld b,a
-                ld c,40
-                jp build_str
+                ld a,(curlg)
+                ld de,MSGBUF
+                call msg_raw
+                pop de
+                ld hl,MSGBUF
+                ld b,39
+hs_l:           ld a,(hl)
+                ld (de),a
+                or a
+                ret z
+                inc hl
+                inc de
+                djnz hs_l
+                xor a
+                ld (de),a
+                ret
 
 ; texto: el codigo esta en el overlay (agitxt.asm, bloque 1)
 h_display:      ld hl,OVB_DISPLAY
@@ -423,7 +437,11 @@ pr_go:          call OVL_SPRINIT        ; con la ventana abierta los sprites se 
 pg_w:           ld a,(win_act)          ; bandera 15 (VM_FLAG_OUTPUT_MODE): la ventana queda abierta y no se espera (t_prt)
                 or a
                 ret nz
+                ld a,1
+                ld (pw_ent),a
                 call pr_wait
+                xor a
+                ld (pw_ent),a
                 ld hl,0
                 ld (pw_lim),hl
                 ld a,(stopf)
@@ -458,7 +476,7 @@ pw_run:         call OVL_KDELIV
                 ld a,(keyn)
                 ld hl,pw_k
                 cp (hl)
-                jr nz,pw_d
+                jr nz,pw_key
                 ld a,(gs_on)            ; get.string: tambien acaba cuando llega una linea (aunque no sea por teclado)
                 or a
                 jr z,pw_nt
@@ -479,6 +497,23 @@ pw_nl:          ld hl,(ncyc)
                 or l
                 call z,wait_frame
                 jr pw_l
+pw_key:         ld a,(pw_ent)           ; ventana de mensaje (messageBox_KeyPress): solo ENTER y ESC la cierran; las demas teclas se descartan
+                or a
+                jr z,pw_d
+                ld a,(keyn)
+                dec a
+                ld e,a
+                ld d,0
+                ld hl,KEYQ
+                add hl,de
+                ld a,(hl)
+                cp 13
+                jr z,pw_d
+                cp 27
+                jr z,pw_d
+                ld a,(pw_k)
+                ld (keyn),a
+                jr pw_nt
 pw_d:           ld a,(pw_k)             ; la tecla que cierra, para quien la quiera (restart.game)
                 ld e,a
                 ld d,0
@@ -499,6 +534,7 @@ pw_k:           defb 0
 pw_last:        defb 0
 pw_v:           defb 0
 pw_lim:         defw 0
+pw_ent:         defb 0
 win_act:        defb 0
 
 ; ---------------------------------------------------------------------
@@ -790,8 +826,48 @@ sf_mode:        defb 0
 st_on:          defb 0
 st_valid:       defb 0
 
-h_get_num:      ld hl,OVC_GETNUM
-                jp call_c
+; get.num(m, v): modal como get.string (el mensaje en la fila de entrada, hasta 3 caracteres); v = atoi de lo escrito (modulo 256), cmdGetNum
+h_get_num:      ld a,(ARGS+1)
+                ld (gn_v),a
+                ld a,(ARGS)
+                ld (ARGS+1),a
+                ld a,22
+                ld (ARGS+2),a
+                xor a
+                ld (ARGS+3),a
+                ld (il_n),a
+                ld (INBUF),a
+                ld (STMP),a
+                ld a,3
+                ld (il_max),a
+                ld de,STMP
+                call gs_go
+                ld a,(stopf)
+                or a
+                ret nz
+                ld hl,STMP
+                ld b,0
+gn_l:           ld a,(hl)
+                sub '0'
+                cp 10
+                jr nc,gn_e
+                ld c,a
+                ld a,b
+                add a,a
+                ld d,a
+                add a,a
+                add a,a
+                add a,d
+                add a,c
+                ld b,a
+                inc hl
+                jr gn_l
+gn_e:           ld a,(gn_v)
+                ld l,a
+                ld h,VARS>>8
+                ld (hl),b
+                ret
+gn_v:           defb 0
 
 h_word_to_string: ld a,(ARGS+1)
                 cp NSTR
@@ -858,196 +934,7 @@ hc_compare_strings: ld hl,OVC_CMPSTR    ; en el overlay C (NZ = iguales)
 ; ---------------------------------------------------------------------
 ;  Parser
 ; ---------------------------------------------------------------------
-; HL = texto (acabado en 0). Deja las palabras reconocidas en INW, su texto en WTEXT y v9 = la primera desconocida (1-based)
-parse_text:     ld (pt_src),hl
-                xor a
-                ld (inwcnt),a
-                ld (wcount),a
-                ld (VARS+9),a
-                ld (ntok),a
-                ld (intok),a
-                inc a
-                ld (inwvalid),a
-                ld hl,WTEXT
-                ld (wtp),hl
-                ld hl,(pt_src)
-                ld de,TOKS
-pt_l:           ld a,(hl)
-                inc hl
-                or a
-                jp z,pt_end
-                cp 'A'
-                jr c,pt_n1
-                cp 'Z'+1
-                jr nc,pt_n1
-                add a,32
-pt_n1:          cp 39                   ; ' ` - \" . se quitan sin separar (dont = don't; el vocabulario va igual, agi_read.norm_word)
-                jr z,pt_l
-                cp 96
-                jr z,pt_l
-                cp 45
-                jr z,pt_l
-                cp 34
-                jr z,pt_l
-                cp 46
-                jr z,pt_l
-                cp '0'
-                jr c,pt_sep
-                cp '9'+1
-                jr c,pt_ch
-                cp 'a'
-                jr c,pt_sep
-                cp 'z'+1
-                jr nc,pt_sep
-pt_ch:          ld c,a
-                ld a,(intok)
-                or a
-                jr nz,pt_cp
-                ld a,(ntok)
-                cp 16
-                jr nc,pt_end
-                push hl
-                ld l,a
-                ld h,0
-                add hl,hl
-                push de
-                ld de,TOKP
-                add hl,de
-                pop de
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                pop hl
-                ld a,(ntok)
-                inc a
-                ld (ntok),a
-                ld a,1
-                ld (intok),a
-pt_cp:          ld a,c
-                ld (de),a
-                inc de
-                ld a,e
-                cp TOKLIM
-                jr nc,pt_end
-                jr pt_l
-pt_sep:         ld a,(intok)
-                or a
-                jr z,pt_l
-                xor a
-                ld (de),a
-                inc de
-                ld (intok),a
-                jr pt_l
-pt_end:         xor a
-                ld (de),a
-                ld (mi),a
-pm_i:           ld a,(ntok)
-                ld b,a
-                ld a,(mi)
-                cp b
-                ret nc                  ; no quedan palabras
-                ld c,a
-                ld a,b
-                sub c                   ; las que quedan
-                cp MAXW+1
-                jr c,pm_k
-                ld a,MAXW
-pm_k:           ld (mk),a
-pm_try:         call build_phr
-                call find_word
-                or a
-                jr nz,pm_hit
-                ld hl,mk
-                dec (hl)
-                jr nz,pm_try
-                ld a,(inwcnt)           ; ninguna: palabra desconocida, el analisis acaba
-                inc a
-                ld (VARS+9),a
-                ld a,(mi)
-                call tok_ptr
-                jp wt_append
-pm_hit:         ld hl,(fw_num)
-                ld a,h
-                or l
-                jr z,pm_adv
-                ld a,(inwcnt)
-                cp 16
-                jr nc,pm_w
-                add a,a
-                ld e,a
-                ld d,0
-                ld hl,INW
-                add hl,de
-                ld de,(fw_num)
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                ld hl,inwcnt
-                inc (hl)
-pm_w:           ld hl,PHR
-                call wt_append
-pm_adv:         ld a,(mi)
-                ld hl,mk
-                add a,(hl)
-                ld (mi),a
-                jr pm_i
-
-; A = indice de palabra -> HL = su texto (DE y B se conservan)
-tok_ptr:        ld l,a
-                ld h,0
-                add hl,hl
-                push de
-                ld de,TOKP
-                add hl,de
-                pop de
-                ld a,(hl)
-                inc hl
-                ld h,(hl)
-                ld l,a
-                ret
-
-; PHR = las palabras mi .. mi+mk-1 separadas por un espacio
-build_phr:      ld a,(mi)
-                ld (bp_j),a
-                ld a,(mk)
-                ld b,a
-                ld de,PHR
-bp_l:           push bc
-                ld a,(bp_j)
-                call tok_ptr
-bp_c:           ld a,(hl)
-                or a
-                jr z,bp_e
-                ld (de),a
-                inc hl
-                inc de
-                jr bp_c
-bp_e:           ld hl,bp_j
-                inc (hl)
-                pop bc
-                dec b
-                jr z,bp_d
-                ld a,' '
-                ld (de),a
-                inc de
-                jr bp_l
-bp_d:           xor a
-                ld (de),a
-                ret
-
-; HL = cadena -> al final de WTEXT
-wt_append:      ld de,(wtp)
-wa_l:           ld a,(hl)
-                ld (de),a
-                inc de
-                inc hl
-                or a
-                jr nz,wa_l
-                ld (wtp),de
-                ld hl,wcount
-                inc (hl)
-                ret
-
+; (el parser, parse_text, esta en el overlay C: agic.asm)
 ; A = indice -> HL = esa palabra; acarreo si no hay
 wt_get:         ld hl,wcount
                 cp (hl)
@@ -1066,93 +953,26 @@ wg_s:           ld a,(hl)
 wg_none:        scf
                 ret
 
-; Busca PHR en WORDS.BIN (la ultima coincidencia manda, como el diccionario del modelo) -> A = 1 si esta; fw_num = su numero
-find_word:      ld a,PG_WORDS
-                call map_page
-                xor a
-                ld (fw_found),a
-                ld (WBUF),a
-                ld hl,(LWIN)            ; longitud del WORDS.TOK
-                ld de,LWIN+2
-                add hl,de
-                dec hl
-                dec hl
-                ld (fw_end),hl          ; mientras p < longitud-2
-                ld hl,LWIN+2+52
-fw_l:           ld de,(fw_end)
-                push hl
-                or a
-                sbc hl,de
-                pop hl
-                jr nc,fw_done
-                ld a,(hl)               ; caracteres compartidos con la anterior
-                inc hl
-                ld c,a
-                ld b,0
-                push hl
-                ld hl,WBUF
-                add hl,bc
-                ex de,hl
-                pop hl
-fw_c:           ld a,(hl)
-                inc hl
-                ld b,a
-                and $7F
-                xor $7F
-                ld (de),a
-                inc de
-                bit 7,b
-                jr z,fw_c
-                xor a
-                ld (de),a
-                ld d,(hl)               ; numero, big endian
-                inc hl
-                ld e,(hl)
-                inc hl
-                push hl
-                push de
-                ld hl,WBUF
-                ld de,PHR
-fw_cm:          ld a,(de)
-                cp (hl)
-                jr nz,fw_ne
-                or a
-                jr z,fw_eq
-                inc hl
-                inc de
-                jr fw_cm
-fw_eq:          pop de
-                ld (fw_num),de
-                ld a,1
-                ld (fw_found),a
-                pop hl
-                jr fw_l
-fw_ne:          pop de
-                pop hl
-                jr fw_l
-fw_done:        call unmap_win
-                ld a,(fw_found)
-                ret
-
 ; ---------------------------------------------------------------------
 ;  said
 ; ---------------------------------------------------------------------
-hc_said:        ld a,(inwvalid)
+hc_said:        ld a,(FLAGS+4)         ; testSaid de ScummVM: f4 (SAID_ACCEPTED_INPUT) o sin f2 (ENTERED_CLI) -> falso; reset(f4) permite otro said
+                or a
+                jp nz,ret_false
+                ld a,(FLAGS+2)
                 or a
                 jp z,ret_false
-                ld a,(FLAGS+4)         ; bandera 4 (SAID_ACCEPTED_INPUT) como en ScummVM: reset(f4) permite otro said
-                or a
-                jp nz,ret_false
-                ld a,(VARS+9)
-                or a
-                jp nz,ret_false
                 ld hl,(saidp)
                 ld a,(saidk)
-                ld b,a
-                ld c,0                  ; C = posicion en la orden
+                ld b,a                  ; B = nwords
+                ld c,0                  ; C = c (palabra de la orden; n = inwcnt - c)
+                ld de,0                 ; DE = z, la ultima palabra del said
 hz_l:           ld a,b
                 or a
-                jr z,hz_end
+                jr z,hz_post
+                ld a,(inwcnt)
+                cp c
+                jr z,hz_post
                 ld e,(hl)
                 inc hl
                 ld d,(hl)
@@ -1162,17 +982,15 @@ hz_l:           ld a,b
                 jr nz,hz_n
                 ld a,e
                 cp $0F
-                jr z,hz_ok              ; 9999: el resto vale
-hz_n:           ld a,(inwcnt)
-                cp c
-                jp c,ret_false
-                jp z,ret_false          ; la orden es mas corta
-                ld a,d
+                jr nz,hz_n
+                ld b,1                  ; 9999: el resto vale
+                jr hz_nx
+hz_n:           ld a,d
                 or a
                 jr nz,hz_cmp
                 ld a,e
                 cp 1
-                jr z,hz_nx              ; 1: cualquier palabra
+                jr z,hz_nx              ; 1: cualquier palabra (tambien la desconocida)
 hz_cmp:         push hl
                 ld a,c
                 add a,a
@@ -1195,13 +1013,29 @@ hz_nx:          inc c
                 jr hz_l
 hz_f1:          pop hl
                 jp ret_false
-hz_end:         ld a,(inwcnt)
+hz_post:        ld a,(inwcnt)           ; if (n && z != 9999) falso
                 cp c
+                jr z,hz_p2
+                call hz_9999
+                jp nz,ret_false
+hz_p2:          ld a,b                  ; if (nwords != 0 && la siguiente != 9999) falso
+                or a
+                jr z,hz_ok
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                call hz_9999
                 jp nz,ret_false
 hz_ok:          ld a,1
                 ld (said_done),a
                 ld (FLAGS+4),a
                 jp ret_true
+hz_9999:        ld a,d                  ; Z si DE = 9999
+                cp $27
+                ret nz
+                ld a,e
+                cp $0F
+                ret
 
 ; ---------------------------------------------------------------------
 ;  Mensajes (LOGnnn.MSG) y su formato
@@ -1302,69 +1136,72 @@ build_str:      ld (bs_dp),de
                 call msg_raw
 bs_fmt:         ld hl,MSGBUF
                 ld (bs_sp),hl
+                xor a
+                ld (bs_fd),a
+                inc a
+                ld (bs_md),a            ; bufer de mensaje ocupado: el de la raiz (MSGBUF); %m usa SUBBUF
 bl_l:           ld hl,(bs_sp)
                 ld a,(hl)
                 inc hl
-                ld (bs_sp),hl
                 or a
-                jp z,bs_end
+                jr z,bl_pop
                 cp '%'
                 jr z,bl_pct
+                cp 92                   ; \ : el siguiente caracter va tal cual
+                jr nz,bl_c
+                ld a,(hl)
+                or a
+                jr z,bl_pop
+                inc hl
+bl_c:           ld (bs_sp),hl
                 call bs_put
                 jr bl_l
+bl_pop:         ld a,(bs_fd)            ; acaba esta fuente: sigue la que la llamo
+                or a
+                jp z,bs_end
+                dec a
+                ld (bs_fd),a
+                add a,a
+                add a,a
+                ld l,a
+                ld h,0
+                ld de,BSFR
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                inc hl
+                ld (bs_sp),de
+                ld a,(hl)
+                ld (bs_lg),a
+                inc hl
+                ld a,(hl)
+                ld (bs_md),a
+                jr bl_l
+; stringPrintf de ScummVM: %vN[|W], %mN, %sN (ambos con formato, recursivos), %gN y %wN (tal cual); otro: se traga la letra y las cifras
 bl_pct:         ld a,(hl)
+                or a
+                jr z,bl_pop
+                inc hl
+                ld (bs_kind),a
+                call bs_dig
+                ld a,99
+                ld (bs_w),a
+                ld a,(bs_kind)
                 cp 'v'
-                jr z,bl_k
-                cp 'm'
-                jr z,bl_k
-                cp 's'
-                jr z,bl_k
-                cp 'g'
-                jr z,bl_k
-                cp 'w'
-                jr z,bl_k
-bl_lit:         ld a,'%'
-                call bs_put
-                jr bl_l
-bl_k:           ld (bs_kind),a
-                inc hl
+                jr nz,bl_d2
                 ld a,(hl)
-                sub '0'
-                cp 10
-                jr nc,bl_lit
-                ld b,0
-bl_d:           ld a,(hl)
-                sub '0'
-                cp 10
-                jr nc,bl_dend
-                ld c,a
-                ld a,b
-                add a,a
-                ld d,a
-                add a,a
-                add a,a
-                add a,d
-                add a,c
-                ld b,a
-                inc hl
-                jr bl_d
-bl_dend:        ld a,(hl)
                 cp '|'
-                jr nz,bl_sub
+                jr nz,bl_d2
                 inc hl
-                ld a,(hl)
-                sub '0'
-                cp 10
-                jr c,bl_bd
-                dec hl
-                jr bl_sub
-bl_bd:          ld a,(hl)
-                sub '0'
-                cp 10
-                jr nc,bl_sub
-                inc hl
-                jr bl_bd
-bl_sub:         ld (bs_sp),hl
+                ld a,b
+                ld (bs_num),a
+                call bs_dig
+                ld a,b
+                ld (bs_w),a
+                ld a,(bs_num)
+                ld b,a
+bl_d2:          ld (bs_sp),hl
                 ld a,b
                 ld (bs_num),a
                 ld a,(bs_kind)
@@ -1376,24 +1213,37 @@ bl_sub:         ld (bs_sp),hl
                 jr z,sv_w
                 cp 'g'
                 jr z,sv_g
+                cp 'm'
+                jr z,sv_m
+                jp bl_l
+sv_g:           ld a,(bs_md)
+                cp 2
+                jp nc,bl_l
+                xor a
+                jr sv_m2
+sv_m:           ld a,(bs_md)
+                cp 2
+                jp nc,bl_l              ; no hay otro bufer de mensaje: se ignora
                 ld a,(bs_lg)
-                jr sv_m
-sv_g:           xor a
-sv_m:           ld de,TMPM
+sv_m2:          ld de,SUBBUF
                 ld hl,bs_num
                 ld b,(hl)
                 call msg_raw
-                ld hl,TMPM
-                jr bs_puts
-sv_v:           ld a,(bs_num)
-                call getv
-                call put_dec
+                ld hl,SUBBUF
+                ld a,(bs_kind)
+                cp 'g'
+                jr z,bs_puts            ; %g: el mensaje de la logica 0 sin formato
+                call bs_push
+                jp c,bl_l
+                ld a,2
+                ld (bs_md),a
                 jp bl_l
 sv_s:           ld a,(bs_num)
                 cp NSTR
                 jp nc,bl_l
                 call strptr
-                jr bs_puts
+                call bs_push
+                jp bl_l
 sv_w:           ld a,(bs_num)
                 or a
                 jp z,bl_l
@@ -1408,6 +1258,106 @@ bs_puts:        ld a,(hl)
                 pop hl
                 inc hl
                 jr bs_puts
+; %vN|W: los W ultimos digitos del valor con 15 cifras (ceros a la izquierda); sin |W, sin ceros
+sv_v:           ld a,(bs_num)
+                call getv
+                ld (pd_v),a
+                ld a,(bs_w)
+                cp 99
+                jr nz,sd_w
+                ld a,(pd_v)
+                call put_dec
+                jp bl_l
+sd_w:           ld hl,bs_dg
+                ld a,(pd_v)
+                ld c,0
+sd_1:           cp 100
+                jr c,sd_2
+                sub 100
+                inc c
+                jr sd_1
+sd_2:           ld (hl),c
+                inc hl
+                ld c,0
+sd_3:           cp 10
+                jr c,sd_4
+                sub 10
+                inc c
+                jr sd_3
+sd_4:           ld (hl),c
+                inc hl
+                ld (hl),a
+                ld a,(bs_w)
+                cp 16
+                jr c,sd_5
+                ld a,15
+sd_5:           ld b,a
+sd_e:           ld a,b
+                or a
+                jp z,bl_l
+                dec b
+                ld a,b
+                cp 3
+                ld a,'0'
+                jr nc,sd_p
+                ld a,b
+                ld e,a
+                ld d,0
+                ld hl,bs_dg+2
+                or a
+                sbc hl,de
+                ld a,(hl)
+                add a,'0'
+sd_p:           push bc
+                call bs_put
+                pop bc
+                jr sd_e
+; HL = cifras -> B = su valor (strtoul, modulo 256) y HL tras ellas
+bs_dig:         ld b,0
+bd_l:           ld a,(hl)
+                sub '0'
+                cp 10
+                ret nc
+                ld c,a
+                ld a,b
+                add a,a
+                ld d,a
+                add a,a
+                add a,a
+                add a,d
+                add a,c
+                ld b,a
+                inc hl
+                jr bd_l
+; HL = nueva fuente de texto (con formato): se apunta la actual (bs_sp, bs_lg, bs_md) en la pila de fuentes; acarreo si no cabe
+bs_push:        ld a,(bs_fd)
+                cp BSFRN
+                jr c,bp_ok
+                scf
+                ret
+bp_ok:          push hl
+                add a,a
+                add a,a
+                ld l,a
+                ld h,0
+                ld de,BSFR
+                add hl,de
+                ld de,(bs_sp)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                ld a,(bs_lg)
+                ld (hl),a
+                inc hl
+                ld a,(bs_md)
+                ld (hl),a
+                ld hl,bs_fd
+                inc (hl)
+                pop hl
+                ld (bs_sp),hl
+                or a
+                ret
 bs_end:         ld hl,(bs_dp)
                 ld (hl),0
                 ret

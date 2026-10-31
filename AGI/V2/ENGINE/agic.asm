@@ -29,6 +29,7 @@
                 jp t_newroom            ; OVC_NEWROOM
                 jp mv_od                ; OVC_MVOD
                 jp t_gameid             ; OVC_GAMEID
+                jp t_parsetext          ; OVC_PARSETEXT
 
 TXT             equ TMPM
 
@@ -606,21 +607,275 @@ tg_ok:          ld a,(ARGS+1)
                 ld (hl),b
                 ret
 
-; parse(s): la cadena como si se hubiera tecleado (bandera 2); una cadena vacia no es una orden (f2 a 0)
+; parse(s): cmdParse de ScummVM: v9, f2 y f4 a 0 y se analiza la cadena (una cadena vacia deja f2 a 0)
 t_parse:        ld a,(ARGS)
                 cp NSTR
                 ret nc
                 call strptr
-                ld a,(hl)
+                xor a
+                ld (VARS+9),a
+                ld (said_done),a
+                jp parse_text
+
+t_parsetext:    ld hl,(pt_src)
+
+; Words::parseUsingDictionary de ScummVM. HL = texto (acabado en 0). 1) cleanUpInput: los separadores ( ,.?!();:[]{}) separan palabras, ' ` - \ " se quitan
+; sin separar, en minusculas; el resultado (palabras con un solo espacio) queda en TOKS. 2) por cada palabra, findWordInDictionary: INW = numero de cada palabra
+; (0 la desconocida, que acaba el analisis y pone v9 = su posicion), WTEXT = su texto. f2 = hay palabras, f4 = 0.
+parse_text:     xor a
+                ld (FLAGS+2),a
+                ld (FLAGS+4),a
+                ld (inwcnt),a
+                ld (wcount),a
+                inc a
+                ld (inwvalid),a
+                ld de,TOKS
+                ld b,0                  ; B = 1 dentro de una palabra
+pc_l:           ld a,(hl)
+                inc hl
                 or a
-                jr nz,tpa_p
+                jr z,pc_e
+                cp 'A'
+                jr c,pc_k
+                cp 'Z'+1
+                jr nc,pc_k
+                add a,32
+pc_k:           cp 39
+                jr z,pc_l
+                cp 96
+                jr z,pc_l
+                cp 45
+                jr z,pc_l
+                cp 92
+                jr z,pc_l
+                cp 34
+                jr z,pc_l
+                push hl
+                ld c,a
+                ld hl,pc_sep
+pc_s:           ld a,(hl)
+                or a
+                jr z,pc_w
+                inc hl
+                cp c
+                jr nz,pc_s
+                pop hl                  ; separador
+                ld a,b
+                or a
+                jr z,pc_l
+                ld a,' '
+                ld (de),a
+                inc de
+                ld b,0
+                jr pc_l
+pc_w:           pop hl
+                ld a,c
+                ld (de),a
+                inc de
+                ld b,1
+                jr pc_l
+pc_e:           ld a,b
+                or a
+                jr nz,pc_z
+                ld hl,TOKS              ; acaba en espacio: se quita
+                or a
+                sbc hl,de
+                jr nc,pc_z
+                dec de
+pc_z:           xor a
+                ld (de),a
+                ld hl,WTEXT
+                ld (wtp),hl
+                ld hl,TOKS
+pm_l:           ld a,(hl)
+                or a
+                jp z,pm_end
+                cp ' '
+                jr nz,pm_w
+                inc hl
+pm_w:           ld (pm_pos),hl
+                call fw_find
+                ld a,(fw_unk)
+                or a
+                jr nz,pm_add
+                ld hl,(fw_num)
+                ld a,h
+                or l
+                jr z,pm_adv             ; numero 0: se ignora
+pm_add:         ld a,(inwcnt)
+                cp 16
+                jr nc,pm_end
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,INW
+                add hl,de
+                ld de,(fw_num)
+                ld a,(fw_unk)
+                or a
+                jr z,pm_st
+                ld de,0
+pm_st:          ld (hl),e
+                inc hl
+                ld (hl),d
+                ld hl,(pm_pos)
+                ld a,(fw_len)
+                ld c,a
+                ld b,0
+                ld de,(wtp)
+                ldir
+                xor a
+                ld (de),a
+                inc de
+                ld (wtp),de
+                ld hl,inwcnt
+                inc (hl)
+                ld hl,wcount
+                inc (hl)
+                ld a,(fw_unk)
+                or a
+                jr z,pm_adv
+                ld a,(inwcnt)           ; palabra desconocida: v9 = su posicion y se acaba
+                ld (VARS+9),a
+                jr pm_end
+pm_adv:         ld hl,(pm_pos)
+                ld a,(fw_len)
+                ld e,a
+                ld d,0
+                add hl,de
+                jr pm_l
+pm_end:         ld a,(inwcnt)
+                or a
+                ret z
+                ld a,1
                 ld (FLAGS+2),a
                 ret
-tpa_p:          call parse_text
-                xor a
-                ld (said_done),a
+pc_sep:         defb " ,.?!();:[]{}",0
+
+; findWordInDictionary: HL = inicio de la palabra en TOKS -> fw_unk (1 = desconocida), fw_num, fw_len (lo que ocupa). Entre las entradas que coinciden hasta un espacio o el
+; final gana la ultima (salvo que una ocupe todo lo que queda); una letra sola, "a" o "i", sin entrada propia se ignora (numero 0)
+fw_find:        xor a
+                ld (fw_len),a
+                ld (fw_num),a
+                ld (fw_num+1),a
                 inc a
-                ld (FLAGS+2),a
+                ld (fw_unk),a
+                ld (fw_p),hl
+                ld a,(hl)
+                cp '0'
+                jp c,fw_dist
+                cp '9'+1
+                jr c,fw_ok
+                cp 'a'
+                jp c,fw_dist
+                cp 'z'+1
+                jp nc,fw_dist
+fw_ok:          cp 'a'
+                jr z,fw_ai
+                cp 'i'
+                jr nz,fw_sc
+fw_ai:          inc hl
+                ld a,(hl)
+                cp ' '
+                jr nz,fw_sc
+                xor a
+                ld (fw_unk),a
+fw_sc:          ld a,PG_WORDS
+                call map_page
+                xor a
+                ld (WBUF),a
+                ld hl,(LWIN)            ; longitud del WORDS.TOK
+                ld de,LWIN+2
+                add hl,de
+                dec hl
+                dec hl
+                ld (fw_end),hl          ; mientras p < longitud-2
+                ld hl,LWIN+2+52
+fw_l:           ld de,(fw_end)
+                push hl
+                or a
+                sbc hl,de
+                pop hl
+                jr nc,fw_done
+                ld a,(hl)               ; caracteres compartidos con la anterior
+                inc hl
+                ld c,a
+                ld b,0
+                push hl
+                ld hl,WBUF
+                add hl,bc
+                ex de,hl
+                pop hl
+fw_c:           ld a,(hl)
+                inc hl
+                ld b,a
+                and $7F
+                xor $7F
+                ld (de),a
+                inc de
+                bit 7,b
+                jr z,fw_c
+                xor a
+                ld (de),a
+                ld d,(hl)               ; numero, big endian
+                inc hl
+                ld e,(hl)
+                inc hl
+                push hl
+                push de
+                ld hl,WBUF
+                ld de,(fw_p)
+fw_cm:          ld a,(hl)
+                or a
+                jr z,fw_ce
+                ld a,(de)
+                cp (hl)
+                jr nz,fw_ne
+                inc hl
+                inc de
+                jr fw_cm
+fw_ce:          ld a,(de)               ; la entrada acaba aqui: coincide si la orden tambien o sigue un espacio
+                or a
+                jr z,fw_eq
+                cp ' '
+                jr nz,fw_ne
+fw_eq:          push af                 ; el terminador: 0 = la entrada ocupa todo lo que queda
+                ld hl,(fw_p)
+                ex de,hl                ; HL = fin de lo que coincide, DE = inicio
+                or a
+                sbc hl,de
+                ld a,l
+                ld (fw_len),a
+                pop af
+                pop de
+                ld (fw_num),de
+                ld b,a
+                xor a
+                ld (fw_unk),a
+                pop hl
+                ld a,b
+                or a
+                jr nz,fw_l              ; queda orden: sigue buscando una entrada mas larga
+                jr fw_done
+fw_ne:          pop de
+                pop hl
+                jr fw_l
+fw_done:        call unmap_win
+                ld a,(fw_len)
+                or a
+                ret nz
+fw_dist:        ld hl,(fw_p)            ; sin entrada: hasta el siguiente espacio
+                ld b,0
+fw_d1:          ld a,(hl)
+                or a
+                jr z,fw_d2
+                cp ' '
+                jr z,fw_d2
+                inc hl
+                inc b
+                jr fw_d1
+fw_d2:          ld a,b
+                ld (fw_len),a
                 ret
 
 ; draw(o): el objeto pasa a dibujado; si su vista esta congelada (bit 15 de su desplazamiento en VIEWS.HDR), su tiempo de ciclo pasa a 127 (el maximo que no cicla enseguida)

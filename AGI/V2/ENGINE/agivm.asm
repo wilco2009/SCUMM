@@ -50,14 +50,16 @@ STMP2           equ $7C20
 PHR             equ $7CD0
 WBUF            equ $7D00
 TOKS            equ $7C50
+SUBBUF          equ TOKS                ; mensaje anidado (%m) en stringPrintf: 256 bytes, $7C50-$7D4F (TOKS, PHR y WBUF son del parser y no coinciden en el tiempo)
+BSFRN           equ 6                   ; fuentes de texto anidadas (%s, %m)
 TOKP            equ $7CB0
-INW             equ $7D40
-KEYQ            equ $7D60
-TQ              equ $7D70
-EVBUF           equ $7E20
-SREC            equ $7E70
-TRREC           equ $7E80
-CLR_END         equ $7E90
+INW             equ $7D50
+KEYQ            equ $7D70
+TQ              equ $7D80
+EVBUF           equ $7E30
+SREC            equ $7E80
+TRREC           equ $7E90
+CLR_END         equ $7EA0
 PG_VIEWS        equ 24
 PG_WORDS        equ 25
 PG_SND          equ 26
@@ -143,6 +145,7 @@ OVC_CMPSTR      equ $2039
 OVC_NEWROOM     equ $203C
 OVC_MVOD        equ $203F
 OVC_GAMEID      equ $2042
+OVC_PARSETEXT   equ $2045
 OVC_TEXTSCR     equ $2015
 OVD_READ        equ $2000               ; overlay D (ficheros de guardar/cargar): con call_d
 OVD_PREP        equ $2003
@@ -761,14 +764,10 @@ di_1:           cp $FC
                 ld a,(c_orm)
                 or a
                 jr z,di_open
-                ld a,(c_orres)          ; cierra el grupo OR: res = res && orres
-                ld hl,c_res
-                and (hl)
-                ld (hl),a
-                xor a
-                ld (c_orres),a
+                xor a                   ; el OR acaba sin ninguna condicion cierta: falso, y se salta hasta el $FF (testIfCode)
+                ld (c_res),a
                 ld (c_orm),a
-                jr di_l
+                jp di_sf
 di_open:        ld a,1
                 ld (c_orm),a
                 jr di_l
@@ -827,13 +826,23 @@ di_res:         ld b,a
 di_nn:          ld a,(c_orm)
                 or a
                 jr z,di_and
-                ld a,(c_orres)
-                or b
-                ld (c_orres),a
-                jr di_nx
-di_and:         ld a,(c_res)
-                and b
+                ld a,b                  ; en un OR, la primera cierta salta hasta el $FC que lo cierra
+                or a
+                jr z,di_nx
+                ld de,(ip)
+                ld a,$FC
+                call skip_until
+                xor a
+                ld (c_orm),a
+                jp di_l
+di_and:         ld a,b                  ; en un Y, la primera falsa salta hasta el $FF
+                or a
+                jr nz,di_nx
                 ld (c_res),a
+                ld de,(ip)
+di_sf:          ld a,$FF
+                call skip_until
+                jp di_end
 di_nx:          ld de,(ip)
                 jp di_l
 di_end:         ex de,hl
@@ -849,6 +858,37 @@ di_t:           ld (ip),hl
                 jp rl_next
 di_bad:         ld a,7
                 jp fatal
+
+; skipInstructionsUntil: DE = ip, A = $FC o $FF; salta instrucciones de condicion hasta ese byte (inclusive)
+skip_until:     ld c,a
+su_l:           ld a,(de)
+                inc de
+                cp c
+                ret z
+                cp $FC
+                jr nc,su_l
+                cp $0E
+                jr z,su_s
+                ld l,a
+                ld h,0
+                push de
+                ld de,cargtab-1
+                add hl,de
+                pop de
+                ld a,(hl)
+                add a,e
+                ld e,a
+                jr nc,su_l
+                inc d
+                jr su_l
+su_s:           ld a,(de)               ; said: n palabras de 16 bits
+                ld l,a
+                ld h,0
+                add hl,hl
+                inc hl
+                add hl,de
+                ex de,hl
+                jr su_l
 
 jp_hl:          jp (hl)
 
@@ -1856,13 +1896,11 @@ saidk:          defb 0
 wcount:         defb 0
 wtp:            defw WTEXT
 pt_src:         defw 0
-ntok:           defb 0
-intok:          defb 0
-mi:             defb 0
-mk:             defb 0
-bp_j:           defb 0
-fw_found:       defb 0
 fw_num:         defw 0
+fw_unk:         defb 0
+fw_len:         defb 0
+fw_p:           defw 0
+pm_pos:         defw 0
 fw_end:         defw 0
 mr_dst:         defw 0
 mr_m:           defb 0
@@ -1876,6 +1914,11 @@ bs_max:         defb 0
 bs_n:           defb 0
 bs_kind:        defb 0
 bs_num:         defb 0
+bs_fd:          defb 0
+bs_md:          defb 0
+bs_w:           defb 0
+bs_dg:          defs 3
+BSFR:           defs 4*BSFRN
 pd_v:           defb 0
 pd_s:           defb 0
 ss_i:           defb 0
