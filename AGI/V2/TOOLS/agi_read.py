@@ -209,22 +209,6 @@ def help_override(path, n, msgs):
     return msgs
 
 
-# Excepciones de hardware: ordenes de la logica que se cambian en una sala por otras del mismo tamano, {juego: {logica: [(bytes que preceden, orden, sustituta)]}}
-# (todas las apariciones). SQ1, sala 31 (hangar): la maquina (o6), el droide (o3), el ego y el robot pasan de los 12 sprites por linea (el ego dejaba de verse) y
-# la sala va muy lenta; no se dibuja el droide (o3, de adorno): draw(o3) -> erase(o3), y cada move.obj(o3, x, y, 0, f34) -> set(f34) tres veces (la bandera de
-# llegada se pone enseguida y la secuencia v39 de la logica sigue igual, sin esperar a que ande).
-_SET3 = bytes((12, 34)) * 3
-ADAPT = {'SQ1': {31: [(bytes((255, 11, 0)), bytes((35, 3)), bytes((36, 3)))] +
-                     [(b'', bytes((81, 3, x, y, 0, 34)), _SET3) for x, y in ((59, 97), (59, 52), (85, 52), (80, 118))]}}
-
-
-def adapt(path, n, d):
-    """La logica n con las excepciones de hardware del juego (ADAPT); igual en el modelo y en agi2log.py."""
-    for pre, old, new in ADAPT.get(os.path.basename(os.path.normpath(path)).upper(), {}).get(n, ()):
-        d = bytes(d).replace(pre + old, pre + new)
-    return d
-
-
 def testboot(n, d):
     """Solo para pruebas (variable de entorno AGI_BOOT="v80=6,room=6"): codigo inyectado al principio de la logica 0; igual en agi2log.py.
     Elementos separados por comas: vN=valor, room=N, cmd=orden:arg:arg (una orden con argumentos literales), ign, pri=N,

@@ -185,7 +185,7 @@ class Interp:
             d = self.g.resource('LOG', n)
             if d is None:
                 raise Stop('logica %d inexistente' % n)
-            d = ag.adapt(self.path, n, ag.testboot(n, d))
+            d = ag.testboot(n, d)
             size = d[0] | (d[1] << 8)
             try:
                 msgs = ag.help_override(self.path, n, ag.logic_messages(d))
