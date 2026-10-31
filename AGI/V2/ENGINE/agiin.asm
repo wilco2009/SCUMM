@@ -541,15 +541,15 @@ win_act:        defb 0
 ;  Menus: set.menu / set.menu.item / enable.item / disable.item guardan en el overlay B (agib.asm); menu.input es modal como print: cada vuelta es un ciclo, las
 ;  flechas (cambios de dirhold a 1, 3, 5, 7) mueven, ENTER elige (enciende el controlador del elemento) y ESC cierra; la tecla no llega a la logica.
 ; ---------------------------------------------------------------------
-h_set_menu:     ld hl,OVB_SETMENU
-                jp call_b
-h_set_menu_item: ld hl,OVB_SETITEM
-                jp call_b
+h_set_menu:     ld hl,OVF_SETMENU
+                jp call_f
+h_set_menu_item: ld hl,OVF_SETITEM
+                jp call_f
 h_submit_menu:  ret
-h_enable_item:  ld hl,OVB_ENABLE
-                jp call_b
-h_disable_item: ld hl,OVB_DISABLE
-                jp call_b
+h_enable_item:  ld hl,OVF_ENABLE
+                jp call_f
+h_disable_item: ld hl,OVF_DISABLE
+                jp call_f
 
 h_menu_input:   ld a,(FLAGS+14)         ; f14: menus disponibles
                 or a
@@ -578,8 +578,8 @@ h_menu_input:   ld a,(FLAGS+14)         ; f14: menus disponibles
                 xor a
                 ld (VARS+19),a
 mi_nk:          call OVL_SPRINIT        ; con el menu abierto los sprites se apagan
-                ld hl,OVB_MENUOPEN
-                call call_b
+                ld hl,OVF_MENUOPEN
+                call call_f
                 ld a,(mn_res)
                 cp 254
                 jp z,OVL_FORCE          ; no hay menus
@@ -614,8 +614,8 @@ mi_run:         call OVL_KDELIV
                 or a
                 jr z,mi_nd
                 ld (mn_dir),a
-                ld hl,OVB_MENUNAV
-                call call_b
+                ld hl,OVF_MENUNAV
+                call call_f
 mi_nd:          ld a,(keyn)
                 ld hl,mi_k
                 cp (hl)
@@ -632,8 +632,8 @@ mi_nd:          ld a,(keyn)
                 jr z,mi_end
                 cp 13
                 jr nz,mi_idle
-                ld hl,OVB_MENUSEL
-                call call_b
+                ld hl,OVF_MENUSEL
+                call call_f
                 ld a,(mn_res)
                 cp 255
                 jr z,mi_idle            ; elemento desactivado
@@ -653,7 +653,9 @@ mi_end:         ld a,(mi_k)
                 ld (keyn),a
                 ld a,(mi_v)
                 ld (VARS+19),a
-                ld hl,OVB_MENUCLOSE
+                ld hl,OVF_MENUCLOSE
+                call call_f
+                ld hl,OVB_STATUS        ; la barra de estado se redibuja ya (puede abrirse una ventana antes de acabar el ciclo)
                 call call_b
                 jp OVL_FORCE
 mn_res:         defb 0
@@ -668,8 +670,8 @@ h_restore_game: ld a,1
 sg_go:          ld (sf_mode),a
                 ld hl,OVD_READ
                 call call_d
-                ld hl,OVB_DLGLIST
-                call call_b
+                ld hl,OVF_DLGLIST
+                call call_f
                 ld a,1
                 ld (mi_dlg),a
                 call mi_nk
@@ -678,8 +680,8 @@ sg_go:          ld (sf_mode),a
                 ld a,(stopf)
                 or a
                 ret nz                  ; pruebas: se acabaron los ciclos, la lista se queda
-                ld hl,OVB_DLGDONE
-                call call_b
+                ld hl,OVF_DLGDONE
+                call call_f
                 ld a,(mn_res)
                 inc a
                 ret z                   ; ESC
@@ -717,8 +719,8 @@ sg_cf:          ld hl,OVD_CONF
                 ld a,(sv_ok)
                 or a
                 ret z
-                ld hl,OVB_MENUON
-                call call_b
+                ld hl,OVF_MENUON
+                call call_f
                 call rd_pic             ; se carga: la imagen, los rangos de los objetos fijos y se sale de la logica
                 ld a,1
                 ld (exitall),a

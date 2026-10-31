@@ -112,21 +112,22 @@ OVB_ATTR        equ $2012
 OVB_PROMPT      equ $2015
 OVB_PRINT       equ $2018
 OVB_BOXCLOSE    equ $201B
-OVB_SETMENU     equ $201E
-OVB_SETITEM     equ $2021
-OVB_ENABLE      equ $2024
-OVB_DISABLE     equ $2027
-OVB_MENUOPEN    equ $202A
-OVB_MENUNAV     equ $202D
-OVB_MENUSEL     equ $2030
-OVB_MENUCLOSE   equ $2033
-OVB_DLGLIST     equ $2036
-OVB_MENUON      equ $2039
-OVB_DLGDONE     equ $203C
-OVB_MENURESET   equ $203F
-OVB_DLGINV      equ $2042
-OVB_GSDRAW      equ $2045
-OVB_CLRRECT     equ $2048
+OVB_GSDRAW      equ $201E
+OVB_CLRRECT     equ $2021
+OVF_SETMENU      equ $2000
+OVF_SETITEM      equ $2003
+OVF_ENABLE       equ $2006
+OVF_DISABLE      equ $2009
+OVF_MENUOPEN     equ $200C
+OVF_MENUNAV      equ $200F
+OVF_MENUSEL      equ $2012
+OVF_MENUCLOSE    equ $2015
+OVF_DLGLIST      equ $2018
+OVF_MENUON       equ $201B
+OVF_DLGDONE      equ $201E
+OVF_MENURESET    equ $2021
+OVF_DLGINV       equ $2024
+PG_OVF          equ 49                  ; overlay F (menus y listas de guardar/cargar/inventario), con call_f
 OVC_ECHO        equ $2009
 OVC_CANCEL      equ $200C
 OVC_CURSOR      equ $200F
@@ -1549,8 +1550,8 @@ h_restart_game: call h_stop_sound       ; cmdRestartGame: stopSound; con la band
                 ld a,(pw_last)
                 cp 13
                 ret nz                  ; ESC: sigue la partida
-hr_go:          ld hl,OVB_MENUON        ; itemEnableAll
-                call call_b
+hr_go:          ld hl,OVF_MENUON        ; itemEnableAll
+                call call_f
                 ld hl,OVC_RESTART
                 call call_c
                 ld a,1
@@ -1577,8 +1578,8 @@ pr_rawgo:       ld (pr_raw),a
 h_status:       ld a,(FLAGS+13)         ; con la bandera 13 se elige un objeto (v25 = el elegido o 255): lista de un menu y el mismo bucle de menu.input
                 or a
                 jr z,hs_txt
-                ld hl,OVB_DLGINV
-                call call_b
+                ld hl,OVF_DLGINV
+                call call_f
                 ld a,(oc_res)
                 or a
                 jr z,hs_none
@@ -1590,8 +1591,8 @@ h_status:       ld a,(FLAGS+13)         ; con la bandera 13 se elige un objeto (
                 ld a,(stopf)
                 or a
                 ret nz
-                ld hl,OVB_DLGDONE
-                call call_b
+                ld hl,OVF_DLGDONE
+                call call_f
                 ld a,(mn_res)
                 ld (VARS+25),a
                 ret

@@ -19,6 +19,7 @@ pasmo agib.asm agib.bin agib.sym
 pasmo agic.asm agic.bin agic.sym
 pasmo agid.asm agid.bin agid.sym
 pasmo agie.asm agie.bin agie.sym
+pasmo agif.asm agif.bin agif.sym
 [ $(wc -c < agie.bin) -le 4096 ] || { echo "agie.bin pasa de SPP (\$3000)"; exit 1; }
 mkdir -p ../dump/$G
 rm -rf ../dump/$G/log
@@ -31,6 +32,7 @@ python ../TOOLS/mkovl.py agib.bin ../dump/$G/log/DATA/OVERB.OVL
 python ../TOOLS/mkovl.py agic.bin ../dump/$G/log/DATA/OVERC.OVL
 python ../TOOLS/mkovl.py agid.bin ../dump/$G/log/DATA/OVERD.OVL
 python ../TOOLS/mkovl.py agie.bin ../dump/$G/log/DATA/OVERE.OVL
+python ../TOOLS/mkovl.py agif.bin ../dump/$G/log/DATA/OVERF.OVL
 # con ZX81_MATRIX (teclas del ZX81 para el arnes) el Z80 no recibe eventos del guion: los genera su teclado; el modelo si
 EVS="$SCRIPT"; [ -z "$ZX81_MATRIX" ] || EVS=""
 python ../TOOLS/mkevents.py ../dump/$G/log/DATA/EVENTS.BIN $N "$EVS"

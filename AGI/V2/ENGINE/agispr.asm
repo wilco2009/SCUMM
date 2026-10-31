@@ -51,7 +51,7 @@ ol_lp:          ld a,(hl)
                 call ov_one
                 pop hl
                 jr ol_lp
-ov_tab:         defb PG_OVL,'A',PG_OVB,'B',PG_OVC,'C',PG_OVD,'D',PG_OVE,'E',0
+ov_tab:         defb PG_OVL,'A',PG_OVB,'B',PG_OVC,'C',PG_OVD,'D',PG_OVE,'E',PG_OVF,'F',0
 ov_tail:        ld b,PG_OVL
                 ld c,MAP_PORT
                 ld a,1
@@ -98,6 +98,8 @@ call_c:         ld b,PG_OVC
 call_d:         ld b,PG_OVD
                 jr call_x
 call_e:         ld b,PG_OVE
+                jr call_x
+call_f:         ld b,PG_OVF
 call_x:         ld c,MAP_PORT
                 ld a,1
                 out (c),a
