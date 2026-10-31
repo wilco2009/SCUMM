@@ -65,6 +65,10 @@ def main(argv):
             agi_vm.ag.write_png(os.environ['MODEL_PNG'], rows, 256, 192)
         SCR = 192 * 32
         zb, za = mem[0xA000:0xA000 + SCR], mem[0xC000:0xC000 + SCR]
+        if os.environ.get('Z80_PNG'):                    # depuracion: la pantalla del Z80 a PNG
+            import agi2hr
+            rows = [[tuple(agi2hr.CHROMA[za[y * 32 + c] & 15 if (zb[y * 32 + c] >> (7 - k)) & 1 else za[y * 32 + c] >> 4]) for c in range(32) for k in range(8)] for y in range(192)]
+            agi_vm.ag.write_png(os.environ['Z80_PNG'], rows, 256, 192)
         db = [i for i, (x, y) in enumerate(zip(zb, bm)) if x != y]
         da = [i for i, (x, y) in enumerate(zip(za, at)) if x != y and i not in (0xFF8, 0xFF9)]   # $CFF8: direccion de retorno del arnes
         if db or da:

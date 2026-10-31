@@ -116,4 +116,19 @@ chk(it.logic(0)[1][9], 'I don' + chr(39) + 't understand ' + chr(34) + 'foo' + c
 print('ok T-12 fmt' if ok else 'FALLO T-12 fmt')
 sys.exit(0 if ok else 1)
 PY
+# A3-16: status (inventory): pantalla de texto con los objetos en dos columnas; con f13 se elige (empieza marcado el de v25; arriba/abajo +-2, izquierda/derecha +-1 sin dar
+# la vuelta; ENTER -> v25 = objeto, ESC -> 255; vacio: "nothing" = objeto 0); sin f13 acaba con cualquier tecla. Objetos del ego: 1 (izq), 2 (der), 3 (izq)
+export AGI_INV255="1,2,3"
+IV="cmd=set:13,cmd=status"
+t T-16a SQ1 30 "cyc=10,v25=2,$IV" "12:key:13" v25 v25=2
+t T-16b SQ1 30 "cyc=10,v25=2,$IV" "12:dir:7 13:dir:0 14:key:13" v25 v25=1
+t T-16c SQ1 30 "cyc=10,v25=2,$IV" "12:key:27" v25 v25=255
+t T-16d SQ1 30 "cyc=10,v25=1,$IV" "12:dir:5 13:dir:0 14:key:13" v25 v25=3
+t T-16e SQ1 30 "cyc=10,v25=9,$IV" "12:key:13" v25 v25=1
+t T-16f SQ1 30 "cyc=10,v25=3,$IV" "12:dir:1 13:dir:0 14:key:13" v25 v25=1
+t T-16g SQ1 30 "cyc=10,v25=1,$IV" "12:dir:7 13:dir:0 14:key:13" v25 v25=1
+t T-16i SQ1 30 "cyc=10,v25=7,cmd=status,cmd=assignn:100:9" "12:key:65" v25,v100 v25=7,v100=9
+unset AGI_INV255
+t T-16j SQ1 30 "cyc=10,v25=5,$IV" "12:key:13" v25 v25=0
+t T-16k SQ1 30 "cyc=10,v25=5,$IV" "12:key:27" v25 v25=255
 [ $FAIL = 0 ] && echo "AUDIT3: todos OK" || echo "AUDIT3: HAY FALLOS"

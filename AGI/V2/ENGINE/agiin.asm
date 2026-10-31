@@ -627,6 +627,9 @@ mi_nd:          ld a,(keyn)
                 ld c,(hl)               ; la primera tecla nueva
                 ld a,(mi_k)
                 ld (keyn),a             ; se tira
+                ld a,(mi_dlg)
+                cp 2
+                jr z,mi_end             ; inventario sin elegir: cualquier tecla
                 ld a,c
                 cp 27
                 jr z,mi_end

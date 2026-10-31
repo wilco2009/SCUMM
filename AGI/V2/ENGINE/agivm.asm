@@ -1575,16 +1575,15 @@ pr_rawgo:       ld (pr_raw),a
                 xor a
                 ld (pr_raw),a
                 ret
-h_status:       ld a,(FLAGS+13)         ; con la bandera 13 se elige un objeto (v25 = el elegido o 255): lista de un menu y el mismo bucle de menu.input
-                or a
-                jr z,hs_txt
-                ld hl,OVF_DLGINV
+h_status:       ld hl,OVF_DLGINV        ; InventoryMgr::show: pantalla de texto, lista de objetos (overlay F) y el mismo bucle de menu.input; al acabar, graphics
                 call call_f
-                ld a,(oc_res)
+                call h_text_screen
+                ld a,(FLAGS+13)         ; con la bandera 13 se elige un objeto (v25 = el elegido o 255); sin ella, cualquier tecla
                 or a
-                jr z,hs_none
                 ld a,1
-                ld (mi_dlg),a
+                jr nz,hs_m
+                inc a
+hs_m:           ld (mi_dlg),a
                 call mi_nk
                 xor a
                 ld (mi_dlg),a
@@ -1593,15 +1592,7 @@ h_status:       ld a,(FLAGS+13)         ; con la bandera 13 se elige un objeto (
                 ret nz
                 ld hl,OVF_DLGDONE
                 call call_f
-                ld a,(mn_res)
-                ld (VARS+25),a
-                ret
-hs_none:        ld a,255
-                ld (VARS+25),a
-hs_txt:         ld hl,OVC_INVTXT
-                call call_c
-                ld a,3
-                jr pr_rawgo
+                jp h_graphics
 h_show_mem:     ld a,5                  ; show.mem: messageBox("Enough memory")
                 jr pr_rawgo
 h_show_obj_v:   ld a,(ARGS)

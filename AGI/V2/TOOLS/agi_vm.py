@@ -1269,34 +1269,83 @@ class Interp:
         self.do_print('Game paused.\n\nPress any key to continue.', None, None, 0)
 
     def c_status(self):
-        """La ventana del inventario: lo que lleva el ego (objetos con la sala 255), uno por linea. Con la bandera 13 se elige uno (v25 = el objeto o 255): lista de un
-        menu de una sola entrada."""
-        names = [n[:36] for n in self.inv_names][:255]
-        if self.flags[13]:
-            items = [[n, i, True] for i, n in enumerate(names) if i < len(self.inv) and self.inv[i] == 255]
-            if not items:
-                items = [['Nothing', 0, True]]      # inventario vacio: un elemento "Nothing" con el objeto 0 (ENTER -> v25 = 0, ESC -> 255)
-            real = self.menus
-            self.menus = [['You are carrying', items]]
-            try:
-                r = self.menu_loop(remember=False)
-            finally:
-                if self.cycle <= self.max_cycles:
-                    self.menus = real
-            self.vars[25] = 255 if r is None else r
-            return
-        s = 'You are carrying:\n\n'
-        any_ = False
-        for i, n in enumerate(names):
-            if self.inv[i] == 255 if i < len(self.inv) else False:
-                if len(s) > 190:
-                    continue
-                s += n + '\n'
-                any_ = True
-        if not any_:
-            s += 'Nothing\n'
-        s += '\nPress any key to return\nto the game.'
-        self.do_print(s, None, None, 0)
+        """cmdStatus + InventoryMgr::show (inv.cpp): pantalla de texto con el fondo blanco (charAttrib 0,15), "You are carrying:" en (0,11) y los objetos del ego en dos
+        columnas desde la fila 2 (el de la izquierda en la columna 1, el de la derecha acaba en la 39); el pie en la fila 24 (va a la 23). Con la bandera 13 se elige
+        uno (empieza marcado el de v25; flechas: arriba/abajo +-2, izquierda/derecha +-1; ENTER lo elige, ESC no elige: v25 = objeto o 255); inventario vacio: "nothing"
+        con el objeto 0. Sin la bandera 13 se espera una tecla. Luego redrawScreen (graphics)."""
+        sel_items = bool(self.flags[13])
+        old = (self.tfg, self.tbg)
+        self.tfg, self.tbg = 0, 15
+        self.c_text_screen()
+        for r in (0, 22, 23):
+            agi_text.fill_row(self.ext_bm, self.ext_at, 0, r, 15)
+        ents = []
+        row, col = 2, 1
+        active = 0
+        for i, n in enumerate(self.inv_names[:255]):
+            if i < len(self.inv) and self.inv[i] == 255:
+                n = n[:36]
+                if i == self.vars[25]:
+                    active = len(ents)
+                ents.append([i, n, row, col if col == 1 else 39 - len(n)])
+                if col == 1:
+                    col = 39
+                else:
+                    col, row = 1, row + 1
+        if not ents:
+            ents.append([0, 'nothing', 2, 19 - 7 // 2])
+        if not sel_items:
+            active = -1
+
+        def item(k):
+            self.tfg, self.tbg = (15, 0) if k == active else (0, 15)
+            self.text_out(ents[k][2], ents[k][3], ents[k][1])
+        self.text_out(0, 11, 'You are carrying:')
+        for k in range(len(ents)):
+            item(k)
+        self.tfg, self.tbg = 0, 15
+        if sel_items:
+            self.text_out(24, 2, 'Press ENTER to select, ESC to cancel')
+        else:
+            self.text_out(24, 4, 'Press a key to return to the game')
+        n0, v19 = len(self.keyq), self.vars[19]
+        prev = self.dirhold
+        done = False
+        while not done:
+            self.cycle += 1
+            if self.cycle > self.max_cycles:
+                raise Stop('fin de los ciclos con el inventario abierto')
+            self.apply_events(self.ev.get(self.cycle, []))
+            d = self.dirhold
+            if d != prev:
+                prev = d
+                step = {1: -2, 5: 2, 7: -1, 3: 1}.get(d)
+                if sel_items and step and 0 <= active + step < len(ents):
+                    o, active = active, active + step
+                    item(o)
+                    item(active)
+            if len(self.keyq) > n0:
+                k = self.keyq[n0]
+                del self.keyq[n0:]
+                if not sel_items:
+                    done = True
+                elif k == 27:
+                    active = -1
+                    done = True
+                elif k == 13:
+                    done = True
+        del self.keyq[n0:]
+        self.vars[19] = v19
+        if sel_items:
+            self.vars[25] = ents[active][0] if active >= 0 else 255
+        self.tfg, self.tbg = old
+        self.c_graphics()
+        for r in (22, 23):
+            agi_text.fill_row(self.ext_bm, self.ext_at, 0, r, 0)
+        if self.status_on:
+            self.st_last = None
+        else:
+            agi_text.fill_row(self.ext_bm, self.ext_at, 0, 0, 0)
 
     def c_show_obj(self, n):
         """La descripcion de la vista n (el dibujo no se muestra): la cadena a la que apuntan los bytes 3-4 del recurso."""

@@ -536,7 +536,10 @@ mi_en:          ld (hl),' '
                 ld (dl_nobg),a
                 ret
 
-t_menuopen:     ld a,(mn_n)
+t_menuopen:     ld a,(iv_on)
+                or a
+                jp nz,iv_open
+                ld a,(mn_n)
                 or a
                 jr nz,mo_ok
                 ld a,254
@@ -563,7 +566,10 @@ mn_restore:     ld a,(pr_ln)
                 jp t_boxclose
 
 ; mn_dir = 1 arriba, 3 derecha, 5 abajo, 7 izquierda
-t_menunav:      ld a,(mn_dir)
+t_menunav:      ld a,(iv_on)
+                or a
+                jp nz,iv_nav
+                ld a,(mn_dir)
                 cp 7
                 jr z,nv_l
                 cp 3
@@ -652,7 +658,10 @@ t_menusel:      ld a,(m_cnt)
                 ld (mn_res),a
                 ret
 
-t_menuclose:    ld a,(m_only)
+t_menuclose:    ld a,(iv_on)
+                or a
+                call nz,iv_clr
+                ld a,(m_only)
                 inc a
                 jr nz,mcl_x
                 ld a,(m_sel)
@@ -874,9 +883,23 @@ dg_add:         ld (dg_en),a
                 inc (hl)
                 ret
 
-; status con la bandera 13 (elegir un objeto): la lista de lo que lleva el ego es un menu de una sola entrada; oc_res = 1 si hay algo que elegir
-t_dlginv:       xor a
-                ld (oc_res),a
+; status (InventoryMgr::show, inv.cpp): los objetos del ego son un menu de una sola entrada que se dibuja con iv_open (pantalla de texto: dos columnas desde la fila 2,
+; "You are carrying:" en (0,11) y el pie en la fila 24). El atributo de texto pasa a 0/15 (cmdStatus: charAttrib_Push / Set(0,15)) hasta t_dlgdone.
+; iv_sel = bandera 13 (elegir); iv_act = el elemento marcado (el de v25; 255 si no se elige)
+t_dlginv:       ld a,(tfg)
+                ld (iv_ofg),a
+                ld a,(tbg)
+                ld (iv_obg),a
+                xor a
+                ld (tfg),a
+                ld (iv_act),a
+                ld (iv_empty),a
+                ld a,15
+                ld (tbg),a
+                ld a,(FLAGS+13)
+                ld (iv_sel),a
+                ld a,1
+                ld (iv_on),a
                 ld a,PG_INV
                 call map_page
                 ld a,(LWIN)
@@ -890,8 +913,9 @@ dv_c:           ld a,(hl)
                 jr z,dv_y
                 inc hl
                 djnz dv_c
-dv_x:           ld a,2                  ; inventario vacio (InventoryMgr::getPlayerInventory): un unico elemento, "Nothing", con el objeto 0
+dv_x:           ld a,2                  ; inventario vacio (InventoryMgr::getPlayerInventory): un unico elemento, "nothing", con el objeto 0
                 ld (sf_mode),a
+                ld (iv_empty),a
                 call dg_head
                 ld hl,s_nothing
                 call dg_cp
@@ -900,10 +924,9 @@ dv_x:           ld a,2                  ; inventario vacio (InventoryMgr::getPla
                 ld (dg_ctl),a
                 inc a
                 call dg_add
-                ld a,1
-                ld (oc_res),a
-                jp unmap_win
-s_nothing:      defb "Nothing",0
+                call unmap_win
+                jr dv_e
+s_nothing:      defb "nothing",0
 dv_y:           ld a,2
                 ld (sf_mode),a
                 call dg_head
@@ -918,7 +941,19 @@ dv_l:           ld a,(di_i)
                 cp 255
                 ld hl,(di_sp)
                 jr nz,dv_skip
-                call dg_cp
+                ld a,(VARS+25)          ; el objeto de v25 empieza marcado
+                ld c,a
+                ld a,(di_i)
+                cp c
+                jr nz,dv_nm
+                ld a,(it_n)
+                ld c,a
+                ld a,(bk_it)
+                ld b,a
+                ld a,c
+                sub b
+                ld (iv_act),a
+dv_nm:          call dg_cp
                 ld (di_sp),hl
                 call mp_cp
                 ld a,(di_i)
@@ -938,12 +973,194 @@ dv_n:           ld hl,di_i
                 cp (hl)
                 jr c,dv_l
                 call unmap_win
-                ld a,1
-                ld (oc_res),a
+dv_e:           ld a,(iv_sel)
+                or a
+                ret nz
+                ld a,255                ; sin la bandera 13 no hay elemento marcado (_activeItemNr = -1)
+                ld (iv_act),a
                 ret
 
+; HL = texto, B = fila, C = columna, D = tinta, E = papel (EGA): una linea de texto como display (la fila 24 va a la 23)
+iv_out:         ld a,b
+                cp 25
+                ret nc
+                cp 24
+                jr c,io_r
+                ld a,23
+io_r:           ld (dl_row),a
+                ld a,c
+                ld (dl_col),a
+                ld (dl_ptr),hl
+                call mp_len
+                ld a,b
+                or a
+                ret z
+                ld (dl_n),a
+                ld a,d
+                push de
+                call t_chroma
+                ld (dl_fg),a
+                pop de
+                ld a,e
+                call t_chroma
+                ld (dl_bg),a
+                jp draw_line
+
+; A = elemento (0...): su texto en dos columnas (los pares a la izquierda, en la columna 1; los impares acaban en la 39), marcado si es iv_act
+iv_item:        ld (iv_k),a
+                ld hl,bk_it
+                add a,(hl)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                ld de,it_tab
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ex de,hl
+                call mp_len
+                ld e,a
+                ld a,(iv_k)
+                srl a
+                add a,2
+                ld b,a                  ; fila
+                ld a,(iv_k)
+                and 1
+                ld c,1
+                jr z,ii_c
+                ld a,39                 ; a la derecha: la columna 39 - largo
+                sub e
+                ld c,a
+ii_c:           ld a,(iv_empty)
+                or a
+                jr z,ii_a
+                ld c,16                 ; 19 - strlen("nothing") / 2
+ii_a:           ld a,(iv_act)
+                ld d,a
+                ld a,(iv_k)
+                cp d
+                ld de,$000F             ; tinta 0, papel 15
+                jr nz,ii_d
+                ld de,$0F00             ; el marcado: tinta 15, papel 0
+ii_d:           jp iv_out
+
+; abre el inventario: filas 0, 22 y 23 en blanco (cmdTextScreen), titulo, elementos y pie
+iv_open:        ld a,255
+                ld (mn_res),a
+                ld a,(bk_it)
+                ld (m_first),a
+                ld a,(it_n)
+                ld hl,bk_it
+                sub (hl)
+                ld (m_cnt),a
+                ld a,(iv_act)
+                ld (m_it),a
+                xor a
+                ld (pr_ln),a
+                ld (dl_row),a
+                ld a,15
+                call fill_row
+                ld a,22
+                ld (dl_row),a
+                ld a,15
+                call fill_row
+                ld a,23
+                ld (dl_row),a
+                ld a,15
+                call fill_row
+                ld hl,s_carry
+                ld bc,$000B
+                ld de,$000F
+                call iv_out
+                xor a
+                ld (iv_i),a
+io_il:          ld a,(iv_i)
+                ld hl,m_cnt
+                cp (hl)
+                jr nc,io_ft
+                call iv_item
+                ld hl,iv_i
+                inc (hl)
+                jr io_il
+io_ft:          ld a,(iv_sel)
+                or a
+                ld hl,s_isel
+                ld bc,$1802
+                jr nz,io_p
+                ld hl,s_iret
+                ld bc,$1804
+io_p:           ld de,$000F
+                jp iv_out
+
+; mn_dir = 1 arriba (-2), 5 abajo (+2), 7 izquierda (-1), 3 derecha (+1): dentro de los limites, sin dar la vuelta (changeActiveItem)
+iv_nav:         ld a,(iv_sel)
+                or a
+                ret z
+                ld a,(mn_dir)
+                ld d,-2
+                cp 1
+                jr z,in_d
+                ld d,2
+                cp 5
+                jr z,in_d
+                ld d,-1
+                cp 7
+                jr z,in_d
+                ld d,1
+                cp 3
+                ret nz
+in_d:           ld a,(iv_act)
+                ld c,a
+                add a,d
+                ld hl,m_cnt
+                cp (hl)
+                ret nc
+                ld (iv_act),a
+                ld (m_it),a
+                ld a,c
+                call iv_item
+                ld a,(iv_act)
+                jp iv_item
+
+iv_clr:         ld a,22
+                ld (dl_row),a
+                xor a
+                call fill_row
+                ld a,23
+                ld (dl_row),a
+                xor a
+                jp fill_row
+
+iv_on:          defb 0
+iv_sel:         defb 0
+iv_act:         defb 0
+iv_empty:       defb 0
+iv_ofg:         defb 0
+iv_obg:         defb 0
+iv_k:           defb 0
+iv_i:           defb 0
+s_carry:        defb "You are carrying:",0
+s_isel:         defb "Press ENTER to select, ESC to cancel",0
+s_iret:         defb "Press a key to return to the game",0
+
 ; despues del bucle de menu: se quita la lista (si se eligio una ranura, el resultado se queda en mn_res)
-t_dlgdone:      xor a
+t_dlgdone:      ld a,(iv_on)
+                or a
+                jr z,dd_n
+                xor a
+                ld (iv_on),a
+                ld a,(iv_ofg)
+                ld (tfg),a
+                ld a,(iv_obg)
+                ld (tbg),a
+                ld a,(iv_sel)
+                or a
+                jr z,dd_n
+                ld a,(mn_res)           ; v25 = el objeto elegido (ENTER) o 255 (ESC)
+                ld (VARS+25),a
+dd_n:           xor a
                 ld (m_start),a
                 ld a,(bk_mn)
                 ld (mn_n),a
