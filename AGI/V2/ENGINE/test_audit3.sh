@@ -81,6 +81,11 @@ t T-25b SQ1 8 "at=67,if=!isset:200>$SET1;$SET2;$GO5,all,cmd=get.posn:5:101:102" 
 t T-25c SQ1 8 "at=67,if=!isset:200>$SET1;$SET2;reposition.to:5:60:104;$GO5,all,cmd=get.posn:5:101:102" "" v101,v102 v101=63,v102=101
 t T-25d SQ1 8 "at=67,if=!isset:200>$SET1;$SET2;wander:5;follow.ego:6:2:70;set:200,all,cmd=get.posn:5:101:102" "" v100 v100=0
 unset AGI_NOSPR
+# A3-28: bandera 1 (ego invisible) = ningun pixel del ego se pinta (prioridad del ego menor que la del plano en todos sus pixeles)
+export AGI_NOSPR=1
+t T-28a SQ1 8 "room=1,all,cmd=position:0:70:120,cmd=set.priority:0:1" "" f1 f1=1
+t T-28b SQ1 8 "room=1,all,cmd=position:0:70:120,cmd=set.priority:0:15" "" f1 f1=0
+unset AGI_NOSPR
 # A3-11/A3-12: set.string guarda el texto sin formato; stringPrintf (%vN|W, %0 de relleno, recursion de %m, %s)
 t T-11 SQ1 1 "v3=7,cmd=set.string:1:30,if=compare.strings:1:1>assignn:100:7" "" v100 v100=7
 t T-12a SQ1 1 "all,if=equaln:9:1>assignn:100:7,cmd=display:5:5:10" "1:text:xyzzy" v100 v100=7

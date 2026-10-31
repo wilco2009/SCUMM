@@ -309,6 +309,56 @@ class Interp:
                     out[slot] = (sx, sy, col, pix, msk)
         return out
 
+    ego_hid = False                     # EGO_INVISIBLE del ultimo calculo
+
+    def ego_invisible(self):
+        """Bandera 1 (VM_FLAG_EGO_INVISIBLE, SpritesMgr::drawCel, sprite.cpp:269): se pone cada vez que se dibuja el ego, cierta si ninguno de sus pixeles se pinta (todos
+        quedan tapados por la prioridad del plano: imagen y objetos fijos). Se calcula con las mascaras de los sprites del ego (como hw_sprites); si el ego va por
+        software (celda ancha), esta fuera o no tiene datos, se queda el ultimo valor. El Z80 la escribe cuando arma los sprites (agihws.asm: ego_hid)."""
+        import agi2spr
+        o = self.objs.get(0)
+        if o is None or not (o.anim and o.drawn) or self.box is not None or self.menu_ui is not None or self.txtm:
+            return
+        if o.x >= 160:
+            return
+        d = self.g.resource('VIEW', o.view)
+        if d is None:
+            return
+        key = (o.view, o.loop)
+        if key not in self.spr_big:
+            try:
+                self.spr_big[key] = o.loop < d[2] and len(agi2spr.build_loop(d, o.loop)) > 8190
+            except (IndexError, ValueError):
+                self.spr_big[key] = True
+        if self.spr_big[key]:
+            return
+        c = agi2spr.cel_of(o.view, d, o.loop, o.cel)
+        if c is not None and not (agi2spr.meta(c[2], o.view, o.loop)[0] or o.static):
+            hrw, h, tiles = c
+            pri2 = self.pri_plane()
+            x0 = agi2spr.lo(o.x) + 32
+            top = 8 + o.y - h + 1 + 32
+            vis = False
+            for (tx, ty, col, pix, msk) in tiles:
+                sx, sy = x0 + tx * 8, top + ty * 8
+                if sx <= 24 or sx >= 288 or sy <= 24 or sy >= 224:
+                    continue
+                if pri2 is None:
+                    vis = True
+                    break
+                for r in range(8):
+                    py = sy - 32 + r - 8
+                    if not 0 <= py < 168:
+                        continue
+                    for kk in range(8):
+                        hx = sx - 32 + kk
+                        if msk[r] & (0x80 >> kk) and (hx < 0 or hx > 255 or pri2[py * 160 + ((5 * hx) >> 3)] <= o.pri):
+                            vis = True
+                if vis:
+                    break
+            self.ego_hid = not vis
+        self.flags[1] = 1 if self.ego_hid else 0
+
     def screen(self):
         """Pantalla completa (bitmap y atributos de 192x32): el pie y la barra de estado persistentes, y en medio la imagen con su texto. Los sprites
         no estan en ella (son del hardware: hw_sprites)."""
@@ -2111,6 +2161,7 @@ class Interp:
         if any(o.anim and o.drawn and o.upd for o in self.objs.values()):
             v[2] = 0                    # updatePosition (solo si hay algun objeto que actualizar) pone a 0 el borde del ego; los codigos de borde se ponen a 0 antes de mover los objetos: el movimiento los pone y la logica del ciclo siguiente los ve
         self.update_objects()
+        self.ego_invisible()
         self.status_tick()
         self.flags[2] = self.flags[4] = self.flags[12] = 0
         if self.rs_keep:                # tras restart.game / restore.game las banderas 5 y 6 las ve la logica 0 del ciclo siguiente

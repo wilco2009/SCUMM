@@ -121,6 +121,9 @@ hw_res:         defb 0                  ; sprites que reserva el ego (0 si no va
 hw_res0:        defb 0                  ; la reserva con la que estan armados los objetos
 hw_aft:         defb 0                  ; 1 = ya se paso por el ego
 hw_cap:         defb 64
+hw_ego:         defb 1                  ; 0 = el objeto que se arma es el ego
+hw_hid:         defb 0
+ego_hid:        defb 0
 hw_probe:       defb 0
 
 ; hw_res = mosaicos que reserva el ego (el maximo de su bucle) si esta en ORD y va por hardware
@@ -460,6 +463,16 @@ so_np:          ld a,(cv_fl)
                 ld (hw_gty),a
                 ld a,(ix+O_PRI)
                 ld (hw_pri),a
+                push ix                 ; ¿es el ego? (hw_ego = 0)
+                pop hl
+                ld de,OBJ
+                or a
+                sbc hl,de
+                ld a,h
+                or l
+                ld (hw_ego),a
+                ld a,1
+                ld (hw_hid),a           ; oculto hasta que un mosaico deje algun pixel visible
                 ld hl,(hw_x0)
                 ld de,32
                 or a
@@ -584,7 +597,12 @@ hw_xok:         ld hl,(hw_p)
                 ld a,(hw_i)
                 or $80                  ; etiqueta: mosaico con la mascara recortada
                 ld (hw_tag+3),a
-hw_put:         call spr_put
+hw_put:         ld a,(hw_ego)
+                or a
+                jr nz,hp_ne
+                xor a
+                ld (hw_hid),a
+hp_ne:          call spr_put
                 jr hw_nx
 hw_skip:        call hw_off1
 hw_nx:          ld hl,(hw_p)
@@ -597,7 +615,13 @@ hw_nx:          ld hl,(hw_p)
 hw_end:         jp unmap_win
 
 ; Fin de los mosaicos de la celda: los sprites reservados que no usa se apagan y sk salta lo reservado
-hw_fin:         ld a,(hw_n)
+hw_fin:         ld a,(hw_ego)
+                or a
+                jr nz,hf_ne
+                ld a,(hw_hid)           ; drawCel: EGO_INVISIBLE = ningun pixel del ego se pinta
+                ld (ego_hid),a
+                ld (FLAGS+1),a
+hf_ne:          ld a,(hw_n)
                 ld (hw_i),a
 hf_l:           ld a,(hw_i)
                 ld hl,cv_mt
@@ -891,7 +915,17 @@ hn_r:           push af
                 ret
 
 ; Objeto sin cambios desde el ciclo anterior (mismos datos y mismo primer sprite): se salta sus sprites; si no, se arma y se anota
-spr_obj:        ld a,(sk)
+spr_obj:        push ix                 ; bandera 1 (EGO_INVISIBLE): el resultado del ultimo calculo (drawCel lo pone en cada ciclo, tambien si el ego no cambia)
+                pop hl
+                ld de,OBJ
+                or a
+                sbc hl,de
+                ld a,h
+                or l
+                jr nz,so_ne
+                ld a,(ego_hid)
+                ld (FLAGS+1),a
+so_ne:          ld a,(sk)
                 ld (hw_sk0),a
                 bit 1,(ix+O_SDR)
                 jr z,sob_go

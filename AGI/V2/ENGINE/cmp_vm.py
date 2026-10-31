@@ -90,6 +90,8 @@ def main(argv):
             what = 'esperado apagado'
         if not ok:
             nbad += 1
+            if nbad <= 3 and os.environ.get('AGI_VERBOSE') and exp[k] is not None:
+                print('   Z80 col/pix/msk', list(e[4:12]), list(e[12:20]), list(e[20:28]), 'modelo', exp[k][2], exp[k][3], exp[k][4])
             if nbad <= 3:
                 print('sprite %d: Z80 on=%d x=%d y=%d, %s' % (k, on, x, y, what))
     if nbad:
