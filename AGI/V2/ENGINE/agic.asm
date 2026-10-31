@@ -102,9 +102,9 @@ rs_w:           ld hl,ARGS
                 ld bc,STRS-ARGS-1
                 ld (hl),0
                 ldir
-                ld hl,STRS+492
-                ld de,STRS+493
-                ld bc,CLR_END-STRS-493
+                ld hl,STRS+NSTR*41
+                ld de,STRS+NSTR*41+1
+                ld bc,CLR_END-STRS-NSTR*41-1
                 ld (hl),0
                 ldir
 rs_wd:          ld a,1
@@ -608,7 +608,7 @@ tg_ok:          ld a,(ARGS+1)
 
 ; parse(s): la cadena como si se hubiera tecleado (bandera 2); una cadena vacia no es una orden (f2 a 0)
 t_parse:        ld a,(ARGS)
-                cp 12
+                cp NSTR
                 ret nc
                 call strptr
                 ld a,(hl)
@@ -1136,13 +1136,13 @@ ov_cv_h:           bit 7,(ix+O_F1)
 
 ; compare.strings (cmdCompareStrings): sin espacios, tabuladores ni puntuacion (- . , : ; ! '), en minusculas; NZ = iguales
 t_cmpstr:       ld a,(ARGS)
-                cp 12
+                cp NSTR
                 jr nc,tcs_f
                 call strptr
                 ld de,STMP
                 call ov_norm
                 ld a,(ARGS+1)
-                cp 12
+                cp NSTR
                 jr nc,tcs_f
                 call strptr
                 ld de,STMP2

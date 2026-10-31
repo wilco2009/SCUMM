@@ -28,6 +28,7 @@ DY = [0, -1, -1, 0, 1, 1, 1, 0, -1]
 LOOP4 = [4, 3, 0, 0, 0, 2, 1, 1, 1]
 LOOP2 = [4, 4, 0, 0, 0, 4, 1, 1, 1]
 EGO = 0
+NSTR = 13                  # cadenas s0-s12 (A3-10)
 
 
 def b2(x):
@@ -77,7 +78,7 @@ class Interp:
         self.quiet = quiet
         self.vars = [0] * 256
         self.flags = [0] * 256
-        self.strs = [''] * 12
+        self.strs = [''] * NSTR
         self.objs = {}
         self.logics = {}
         self.views = {}
@@ -427,7 +428,7 @@ class Interp:
                 ms = self.logic(lognum)[1]
                 return ms[n - 1] if 0 < n <= len(ms) and ms[n - 1] else ''
             if k == 's':
-                return self.strs[n] if n < 12 else ''
+                return self.strs[n] if n < NSTR else ''
             if k == 'g':
                 ms = self.logic(0)[1]
                 return ms[n - 1] if 0 < n <= len(ms) and ms[n - 1] else ''
@@ -2032,6 +2033,9 @@ def main(argv):
                 f.write('C %d %d %d %d %d %d %d %d\n' % c)
     ego = it.obj(EGO)
     print('fin: sala %d, ciclo %d, ego en %d,%d, v0..v9 = %s' % (it.vars[0], it.cycle, ego.x, ego.y, it.vars[:10]))
+    for i, a in enumerate(argv):
+        if a == '--show':                   # --show v100,f4: imprime esos valores (las pruebas de la auditoria los comprueban)
+            print('show: ' + ' '.join('%s=%d' % (k, it.vars[int(k[1:])] if k[0] == 'v' else int(it.flags[int(k[1:])])) for k in argv[i + 1].split(',')))
     if it.noop:
         print('comandos sin modelar:', ', '.join('%s x%d' % kv for kv in sorted(it.noop.items(), key=lambda kv: -kv[1])))
     return 0

@@ -265,7 +265,7 @@ tq_addr:        ld l,a
 ; ---------------------------------------------------------------------
 ;  Cadenas
 ; ---------------------------------------------------------------------
-; A = indice (0-11) -> HL = STRS + 41*A
+; A = indice (0-NSTR-1) -> HL = STRS + 41*A
 strptr:         ld l,a
                 ld h,0
                 ld d,h
@@ -284,7 +284,7 @@ strptr:         ld l,a
                 ret
 
 h_set_string:   ld a,(ARGS)
-                cp 12
+                cp NSTR
                 ret nc
                 call strptr
                 ex de,hl
@@ -730,7 +730,7 @@ h_prevent_input: jp OVL_PREVENT
 ; get.string(s, m, fila, columna, largo): modal. El mensaje y lo que se escribe salen en (fila, columna) (overlay B, solo en modo real); la linea que acaba con ENTER
 ; va a la cola de cadenas (ev_text lo redirige mientras gs_on) y de ahi a la cadena s. Cada vuelta es un ciclo (como las ventanas: pr_wait).
 h_get_string:   ld a,(ARGS)
-                cp 12
+                cp NSTR
                 ret nc
                 call strptr
                 ex de,hl
@@ -794,7 +794,7 @@ h_get_num:      ld hl,OVC_GETNUM
                 jp call_c
 
 h_word_to_string: ld a,(ARGS+1)
-                cp 12
+                cp NSTR
                 ret nc
                 call strptr
                 ex de,hl
@@ -1390,7 +1390,7 @@ sv_v:           ld a,(bs_num)
                 call put_dec
                 jp bl_l
 sv_s:           ld a,(bs_num)
-                cp 12
+                cp NSTR
                 jp nc,bl_l
                 call strptr
                 jr bs_puts
@@ -1484,7 +1484,7 @@ ss_c:           ld a,(hl)
 ss_e:           ld a,(ss_i)
                 inc a
                 ld (ss_i),a
-                cp 12
+                cp NSTR
                 jr c,ss_n
                 ex de,hl
                 ret

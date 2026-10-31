@@ -36,27 +36,28 @@ NOBJ            equ 32
 VIEWPAGE        equ PG_VIEWS
 STACK           equ $8000
 LWIN            equ $8000
-TOKLIM          equ $EA                 ; parte baja del limite de TOKS (TOKS+90)
+TOKLIM          equ $AA                 ; parte baja del limite de TOKS (TOKS+90)
 KEYMAP          equ $7100               ; por tecla ASCII (0-127): controlador y si esta puesto (2 bytes)
 CTL             equ $7200               ; controladores activos en este ciclo
-STRS            equ $7710               ; 12 cadenas de 41 bytes
-MSGBUF          equ $7900
+NSTR            equ 13                  ; s0-s12 (PQ1 y Larry1 usan la 12); ScummVM tiene 24 + 1
+STRS            equ $7710               ; NSTR cadenas de 41 bytes ($7710-$7924)
+MSGBUF          equ $7930
 ROWBUF          equ MSGBUF              ; una fila de prioridad bajo el objeto (pic_check)
-TMPM            equ $7A00
-WTEXT           equ $7B00
-STMP            equ $7BC0
-STMP2           equ $7BF0
-PHR             equ $7C20
-WBUF            equ $7C50
-TOKS            equ $7C90
-TOKP            equ $7CF0
-INW             equ $7D10
-KEYQ            equ $7D30
-TQ              equ $7D40
-EVBUF           equ $7DF0
-SREC            equ $7E40
-TRREC           equ $7E50
-CLR_END         equ $7E60
+TMPM            equ $7A30
+WTEXT           equ $7B30
+STMP            equ $7BF0
+STMP2           equ $7C20
+PHR             equ $7CD0
+WBUF            equ $7D00
+TOKS            equ $7C50
+TOKP            equ $7CB0
+INW             equ $7D40
+KEYQ            equ $7D60
+TQ              equ $7D70
+EVBUF           equ $7E20
+SREC            equ $7E70
+TRREC           equ $7E80
+CLR_END         equ $7E90
 PG_VIEWS        equ 24
 PG_WORDS        equ 25
 PG_SND          equ 26

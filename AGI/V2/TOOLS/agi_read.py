@@ -223,6 +223,24 @@ def testboot(n, d):
             import agi_logic
             nm, *ar = val.split(':')
             code += bytes([[c[0] for c in agi_logic.CMDS].index(nm)] + [int(x) for x in ar])
+        elif k == 'if':                     # if=[|]cond:a:b[&!cond:a]>cmd:a;cmd:a  (| = condiciones en OR); el bloque corre en el arranque
+            import agi_logic
+            cs, _, body = val.partition('>')
+            orm = cs.startswith('|')
+            cs = cs.lstrip('|')
+            cond = bytearray()
+            for c in cs.split('&'):
+                neg = c.startswith('!')
+                nm, *ar = c.lstrip('!').split(':')
+                num = [k2 for k2, v2 in agi_logic.CONDS.items() if v2[0] == nm][0]
+                cond += (b'\xfd' if neg else b'') + bytes([num] + [int(x) for x in ar])
+            if orm:
+                cond = b'\xfc' + cond + b'\xfc'
+            then = bytearray()
+            for c in body.split(';'):
+                nm, *ar = c.split(':')
+                then += bytes([[x[0] for x in agi_logic.CMDS].index(nm)] + [int(x) for x in ar])
+            code += b'\xff' + cond + b'\xff' + bytes((len(then) & 255, len(then) >> 8)) + then
         elif k == 'ign':                    # ignore.blocks(o0)
             code += bytes((88, 0))
         elif k == 'pri':                    # set.priority(o0, val)
