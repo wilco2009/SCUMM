@@ -209,10 +209,13 @@ def help_override(path, n, msgs):
     return msgs
 
 
-# Excepciones de hardware: ordenes de la logica que se cambian en una sala por otras del mismo tamano, {juego: {logica: [(bytes que preceden, orden, sustituta)]}}.
-# SQ1, sala 31 (hangar): demasiados objetos animados (el ego dejaba de verse a ratos y la sala iba muy lenta); no se dibuja la maquina del fondo (o6, vista 78,
-# de adorno: solo se dibuja al entrar y no se vuelve a usar): draw(o6) -> erase(o6).
-ADAPT = {'SQ1': {31: [(bytes((88, 4, 37, 4, 142, 130)), bytes((35, 6)), bytes((36, 6)))]}}
+# Excepciones de hardware: ordenes de la logica que se cambian en una sala por otras del mismo tamano, {juego: {logica: [(bytes que preceden, orden, sustituta)]}}
+# (todas las apariciones). SQ1, sala 31 (hangar): demasiados objetos animados (el ego dejaba de verse a ratos y la sala iba muy lenta); no se dibuja el enemigo
+# del aerodeslizador (o3, vista 74, de adorno): draw(o3) -> erase(o3), y cada move.obj(o3, x, y, 0, f34) -> set(f34) tres veces (la bandera de llegada se pone
+# enseguida y la secuencia v39 de la logica sigue igual, sin esperar a que ande).
+_SET3 = bytes((12, 34)) * 3
+ADAPT = {'SQ1': {31: [(bytes((255, 11, 0)), bytes((35, 3)), bytes((36, 3)))] +
+                     [(b'', bytes((81, 3, x, y, 0, 34)), _SET3) for x, y in ((59, 97), (59, 52), (85, 52), (80, 118))]}}
 
 
 def adapt(path, n, d):
