@@ -45,6 +45,7 @@ t T-15 SQ1 4 "all,if=equaln:100:0>get.num:1:100" "3:str:42" v100 v100=42
 t T-15b SQ1 3 "all,if=equaln:100:0>get.num:1:100" "2:str:300x" v100 v100=44
 # A3-18: restart.game con f16 reinicia sin preguntar (y los elementos del menu vuelven a estar activos)
 tm T-18 SQ1 4 "if=!isset:6>set:16;restart.game,if=isset:6>assignn:100:7" "" v100 v100=7
+# restart.game no borra las teclas de los controladores (controllerKeyMapping; KQ1 las define solo con f6 apagada y tras reiniciar no volvia a abrirse el menu)
 # A3-22 / A3-23: wander, follow.ego y move.obj ponen fUpdate; un end.of.loop con movimiento en curso pisa su dato con la bandera (cyclerActivated)
 t T-22 SQ1 1 "cmd=animate.obj:5,cmd=stop.update:5,cmd=wander:5,cmd=animate.obj:6,cmd=stop.update:6,cmd=move.obj:6:50:50:1:60,cmd=animate.obj:7,cmd=stop.update:7,cmd=follow.ego:7:2:61,cmd=end.of.loop:5:62,cmd=end.of.loop:6:63,cmd=reverse.loop:7:64" "" v100 v100=0
 python -I - <<'PY' || FAIL=1
@@ -134,4 +135,16 @@ t T-16k SQ1 30 "cyc=10,v25=5,$IV" "12:key:27" v25 v25=255
 # A3-17: el menu principal recuerda el menu (_lastSelectedMenuNr) y el elemento de cada menu (selectedItemNr): Sierra (0) elemento 1, Archivo (1) elemento 3 y de vuelta a Sierra
 # -> ENTER da el controlador 2; abrir otra vez, a la derecha: Archivo con su elemento 3 -> controlador 7
 t T-17a SQ1 40 "cyc=10,cmd=set:14,cmd=menu.input,if=controller:2>assignn:100:2,if=controller:21>assignn:100:21,cmd=menu.input,if=controller:7>assignn:101:7" "11:dir:5 12:dir:0 13:dir:3 14:dir:0 15:dir:5 16:dir:0 17:dir:5 18:dir:0 19:dir:5 20:dir:0 21:dir:7 22:dir:0 23:key:13 24:dir:3 25:dir:0 26:key:13" v100,v101 v100=2,v101=7
+python -I - <<'PY' || FAIL=1
+import sys
+sys.path.insert(0, '../TOOLS')
+import agi_vm
+it = agi_vm.Interp('../KQ1', True)
+it.c_set_key(65, 0, 9)
+it.flags[16] = 1
+it.c_restart_game()
+ok = it.keys == {65: 9}
+print('ok T-18b teclas tras restart.game' if ok else 'FALLO T-18b: keys = %r' % it.keys)
+sys.exit(0 if ok else 1)
+PY
 [ $FAIL = 0 ] && echo "AUDIT3: todos OK" || echo "AUDIT3: HAY FALLOS"

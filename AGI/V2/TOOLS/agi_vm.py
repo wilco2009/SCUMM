@@ -1372,7 +1372,7 @@ class Interp:
 
     def c_show_obj_v(self, v): self.c_show_obj(self.vars[v])
 
-    RESTART_FIELDS = ('scan', 'vars', 'flags', 'objs', 'inv', 'keys', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'statics', 'horizon', 'blocks', 'pcontrol',
+    RESTART_FIELDS = ('scan', 'vars', 'flags', 'objs', 'inv', 'pic', 'pic_ops', 'margins', 'spans', 'span_rows', 'statics', 'horizon', 'blocks', 'pcontrol',
                       'lastpic', 'ovl_n', 'lfsr', 'status_on', 'st_last', 'tfg', 'tbg', 'accept', 'sound_flags', 'input', 'egow', 'said_done', 'keyq', 'textq', 'ctl', 'wtext', 'ext_bm', 'ext_at', 'box', 'win_act')
 
     def c_restart_game(self):

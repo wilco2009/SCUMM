@@ -209,12 +209,15 @@ rs_s:           ld (hl),$FF
                 inc hl
                 inc hl
                 djnz rs_s
+                ld a,(rs_warm)          ; agiInit con _restartGame no toca las teclas de los controladores (controllerKeyMapping): sobreviven al reinicio
+                or a
+                jr nz,rs_nk
                 ld hl,KEYMAP
                 ld de,KEYMAP+1
                 ld bc,511
                 ld (hl),0
                 ldir
-                ld a,(rs_warm)          ; agiInit con _restartGame no borra las cadenas
+rs_nk:          ld a,(rs_warm)          ; agiInit con _restartGame no borra las cadenas
                 or a
                 jr nz,rs_w
                 ld hl,ARGS
