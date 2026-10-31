@@ -64,6 +64,7 @@ class Obj:
         self.wander = 0
         self.static = False             # add.to.pic: objeto fijo
         self.dm = False                 # fDidntMove: el ultimo paso no lo movio
+        self.xp = self.yp = 0           # xPos_prev, yPos_prev (la posicion al ultimo showSprites, draw o position)
         self.dontupd = False            # fDontUpdate: el siguiente paso de ciclo se salta
         self.upos = False               # fUpdatePos: el proximo paso no avanza (reposition, recorte de la celda, zona de block)
         self.nolf = False               # ignoreLoopFlag: el end.of.loop / reverse.loop en curso no pone su bandera
@@ -951,6 +952,7 @@ class Interp:
             if agi2spr.frozen(o.view):              # vista congelada (agi2spr.FREEZE_VIEWS): casi no cicla
                 o.ctime = o.ccount = 127
             self.fix_position(o)
+            o.xp, o.yp = o.x, o.y           # cmdDraw: xPos_prev = xPos tras fixPosition
             o.dontupd = False
             self.log('draw o%d view %d at %d,%d' % (n, o.view, o.x, o.y))
 
@@ -963,10 +965,12 @@ class Interp:
     def c_position(self, n, x, y):
         o = self.obj(n)
         o.x, o.y = x, y                     # cmdPosition no toca la prioridad (la pone checkPriority en el siguiente paso)
+        o.xp, o.yp = x, y                   # xPos_prev = xPos
 
     def c_position_v(self, n, vx, vy): self.c_position(n, self.vars[vx], self.vars[vy])
     def c_reposition_to(self, n, x, y):
-        self.c_position(n, x, y)
+        o = self.obj(n)
+        o.x, o.y = x, y                     # cmdRepositionTo: no toca la posicion previa
         self.obj(n).upos = True
         self.fix_position(self.obj(n))
 
@@ -1751,7 +1755,7 @@ class Interp:
                     continue
                 qw, qh = self.cell(q)
                 # checkCollision de ScummVM: solape en x inclusivo; misma y o cruce de la linea base
-                if x <= q.x + qw and q.x <= x + w and (y == q.y or (o.y < q.y <= y) or (y < q.y <= o.y)):
+                if x <= q.x + qw and q.x <= x + w and (y == q.y or (y > q.y and o.yp < q.yp) or (y < q.y and o.yp > q.yp)):
                     return False
         if self.pic and self.use_pic:
             return self.check_priority(o, x, y, w)
@@ -1941,7 +1945,6 @@ class Interp:
             if o.motion == 3:
                 self.move_obj_stop(k, o)            # motionMoveObjStop: tocar el borde acaba el move.obj
         o.upos = False
-        o.dm = (o.x, o.y) == (ox, oy)               # fDidntMove (showSprites)
 
     def cycle_cel(self, o):
         """updateView de ScummVM: end.of.loop / reverse.loop ponen la bandera en el mismo paso en que llegan al extremo (salvo ignoreLoopFlag) y dejan el objeto sin ciclar,
@@ -1992,6 +1995,13 @@ class Interp:
                 continue
             o.scount = o.stime
             self.update_position(k, o)
+        for k, o in objs:                   # showSprites: los que acaban de dar su paso comparan su posicion con la previa (fDidntMove)
+            if o.scount == o.stime:
+                if (o.x, o.y) == (o.xp, o.yp):
+                    o.dm = True
+                else:
+                    o.xp, o.yp = o.x, o.y
+                    o.dm = False
         if objs:
             self.obj(EGO).water = 0         # el ego deja de observar agua / tierra al acabar el ciclo
 
@@ -2009,7 +2019,7 @@ class Interp:
         t = self.horizon + b2(self.pcontrol) + b2(self.blocks)
         for k in range(self.NOBJ):
             if k in self.objs:
-                t += sum(self.objbytes(self.objs[k]))
+                t += sum(self.objbytes(self.objs[k])) + (self.objs[k].xp & 255) + (self.objs[k].yp & 255)
         return t & 0xFFFF
 
     def strsum(self):

@@ -71,6 +71,16 @@ tm T-30b SQ1 2 "v3=100,v4=100,cmd=animate.obj:5,cmd=set.view:5:1,cmd=position:5:
 # A3-16: status con f13 y el inventario vacio ofrece "Nothing" (ENTER -> v25 = 0, ESC -> 255)
 t T-16a SQ1 6 "v25=7,cmd=set:13,cmd=status,cmd=assignv:100:25" "5:key:13" v100 v100=0
 t T-16b SQ1 6 "v25=7,cmd=set:13,cmd=status,cmd=assignv:100:25" "5:key:27" v100 v100=255
+export AGI_NOSPR=1
+# A3-25: posicion previa (xPos_prev, yPos_prev) en el cruce de la linea base y en fDidntMove (la suma de objetos del resumen incluye las previas)
+SET1="assignn:3:4;assignn:4:5;animate.obj:5;set.view:5:1;position:5:60:100;draw:5"
+SET2="animate.obj:6;set.view:6:1;position:6:58:102;draw:6"
+GO5="step.size:5:3;set.dir:5:4;set:200"
+t T-25a SQ1 8 "at=67,if=!isset:200>$SET1;$GO5,all,cmd=get.posn:5:101:102" "" v101,v102 v101=60,v102=124
+t T-25b SQ1 8 "at=67,if=!isset:200>$SET1;$SET2;$GO5,all,cmd=get.posn:5:101:102" "" v101,v102 v101=60,v102=100
+t T-25c SQ1 8 "at=67,if=!isset:200>$SET1;$SET2;reposition.to:5:60:104;$GO5,all,cmd=get.posn:5:101:102" "" v101,v102 v101=63,v102=101
+t T-25d SQ1 8 "at=67,if=!isset:200>$SET1;$SET2;wander:5;follow.ego:6:2:70;set:200,all,cmd=get.posn:5:101:102" "" v100 v100=0
+unset AGI_NOSPR
 # A3-11/A3-12: set.string guarda el texto sin formato; stringPrintf (%vN|W, %0 de relleno, recursion de %m, %s)
 t T-11 SQ1 1 "v3=7,cmd=set.string:1:30,if=compare.strings:1:1>assignn:100:7" "" v100 v100=7
 t T-12a SQ1 1 "all,if=equaln:9:1>assignn:100:7,cmd=display:5:5:10" "1:text:xyzzy" v100 v100=7

@@ -74,8 +74,10 @@ def main(argv):
         else:
             print('pantalla: coincide (192 lineas, con texto)')
     spr = dump[2 * 65536:2 * 65536 + 64 * 32]
-    exp = it.hw_sprites()
+    exp = it.hw_sprites() if not os.environ.get('AGI_NOSPR') else [None] * 64        # AGI_NOSPR=1: no se comparan los sprites (pruebas con objetos dibujados en el ultimo ciclo)
     nbad = 0
+    if os.environ.get('AGI_NOSPR'):
+        spr = bytes(64 * 32)
     for k in range(64):
         e = spr[k * 32:(k + 1) * 32]
         on, x, y = e[0], e[1] | (e[2] << 8), e[3]

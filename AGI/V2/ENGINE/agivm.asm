@@ -59,7 +59,8 @@ TQ              equ $7D80
 EVBUF           equ $7E30
 SREC            equ $7E80
 TRREC           equ $7E90
-CLR_END         equ $7EA0
+OBJP            equ $7EA0               ; x, y previos de cada objeto (xPos_prev, yPos_prev de ScummVM), 2 bytes por objeto
+CLR_END         equ $7EE0
 PG_VIEWS        equ 24
 PG_WORDS        equ 25
 PG_SND          equ 26
@@ -147,6 +148,7 @@ OVC_MVOD        equ $203F
 OVC_GAMEID      equ $2042
 OVC_PARSETEXT   equ $2045
 OVC_SAID        equ $2048
+OVC_SHOW        equ $204B
 OVC_TEXTSCR     equ $2015
 OVD_READ        equ $2000               ; overlay D (ficheros de guardar/cargar): con call_d
 OVD_PREP        equ $2003
@@ -1143,6 +1145,15 @@ os_n:           inc de
                 jr nc,os_p
                 inc d
 os_p:           djnz os_o
+                ld de,OBJP              ; y las posiciones previas
+                ld b,64
+os_pv:          ld a,(de)
+                add a,l
+                ld l,a
+                jr nc,os_pq
+                inc h
+os_pq:          inc de
+                djnz os_pv
                 ret
 adda:           add a,l
                 ld l,a

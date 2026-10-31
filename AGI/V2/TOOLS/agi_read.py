@@ -213,7 +213,7 @@ def testboot(n, d):
     """Solo para pruebas (variable de entorno AGI_BOOT="v80=6,room=6"): codigo inyectado al principio de la logica 0; igual en agi2log.py.
     Elementos separados por comas: vN=valor, room=N, cmd=orden:arg:arg (una orden con argumentos literales), ign, pri=N,
     if=[|]cond:a:b[&!cond:a]>orden:a;orden:a  (| = condiciones en OR; said:id:id:...), cyc=N (lo que sigue corre en la ejecucion N de la logica 0, v199 la cuenta;
-    all (lo que sigue corre siempre); sin cyc ni all, solo cuando v0 == 0, al arrancar)."""
+    at=N (cuando v0 == N), all (lo que sigue corre siempre); sin cyc ni all, solo cuando v0 == 0, al arrancar)."""
     spec = os.environ.get('AGI_BOOT', '')
     if n != 0 or not spec:
         return d
@@ -226,6 +226,9 @@ def testboot(n, d):
         if k == 'cyc':
             blocks.append((guard, code))
             guard, code = (199, int(val)), bytearray()
+        elif k == 'at':                     # lo que sigue corre en cada ejecucion de la logica 0 con v0 == N (la sala)
+            blocks.append((guard, code))
+            guard, code = (0, int(val)), bytearray()
         elif k == 'all':                    # lo que sigue corre en cada ejecucion de la logica 0
             blocks.append((guard, code))
             guard, code = None, bytearray()

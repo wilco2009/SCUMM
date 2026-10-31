@@ -195,13 +195,17 @@ h_erase:        call argobj
                 res 1,(ix+O_F1)
                 ret
 
-h_position:     call argobj
+h_position:     call hp_set
+                jr set_prev             ; cmdPosition: xPos = xPos_prev
+hp_set:         call argobj
                 ld a,(ARGS+1)
                 ld (ix+O_X),a
                 ld a,(ARGS+2)
                 ld (ix+O_Y),a           ; cmdPosition no toca la prioridad (la pone checkPriority)
                 ret
-h_position_v:   call argobj
+h_position_v:   call hp_set_v
+                jr set_prev
+hp_set_v:       call argobj
                 ld a,(ARGS+1)
                 call getv
                 ld (ix+O_X),a
@@ -209,10 +213,34 @@ h_position_v:   call argobj
                 call getv
                 ld (ix+O_Y),a
                 ret
-h_reposition_to: call h_position
+; HL = objeto -> HL = su entrada en OBJP (2 bytes por objeto: el registro de 32 bytes / 16)
+op_adr:         ld de,-OBJ
+                add hl,de
+                srl h
+                rr l
+                srl h
+                rr l
+                srl h
+                rr l
+                srl h
+                rr l
+                ld de,OBJP
+                add hl,de
+                ret
+; la posicion previa del objeto IX = su posicion
+set_prev:       push ix
+                pop hl
+                call op_adr
+                ld a,(ix+O_X)
+                ld (hl),a
+                inc hl
+                ld a,(ix+O_Y)
+                ld (hl),a
+                ret
+h_reposition_to: call hp_set
                 set 5,(ix+O_F2)
                 jr h_fixpos
-h_reposition_to_v: call h_position_v
+h_reposition_to_v: call hp_set_v
                 set 5,(ix+O_F2)
 h_fixpos:       ld a,(ARGS)
                 ld (curk),a             ; can_be_here distingue al ego por curk
@@ -813,20 +841,8 @@ uo_l:           ld a,(ix+O_F1)
                 jr uo_next
 uo_mv:          ld a,(ix+O_STIME)
                 ld (ix+O_SCOUNT),a
-                ld e,(ix+O_X)
-                ld d,(ix+O_Y)
-                push de
                 call mv_pos
-                pop de
                 res 5,(ix+O_F2)         ; fUpdatePos gastado
-                res 3,(ix+O_F2)         ; fDidntMove: el paso no lo movio
-                ld a,(ix+O_X)
-                cp e
-                jr nz,uo_next
-                ld a,(ix+O_Y)
-                cp d
-                jr nz,uo_next
-                set 3,(ix+O_F2)
 uo_next:        ld de,32
                 add ix,de
                 ld a,(curk)
@@ -834,6 +850,8 @@ uo_next:        ld de,32
                 ld (curk),a
                 cp NOBJ
                 jp c,uo_l
+                ld hl,OVC_SHOW          ; showSprites: fDidntMove y la posicion previa de los que han dado su paso
+                call call_c
                 ld a,(uo_chg)           ; updateScreenObjTable: el ego deja de observar agua / tierra al acabar el ciclo
                 or a
                 ret z
@@ -1167,27 +1185,32 @@ cb_l:           push bc
                 or a
                 sbc hl,de               ; (nx + w) - qx >= 0  <=>  qx <= nx + w
                 jp m,cb_skip
-                ; y == qy  o  oy < qy <= ny  o  ny < qy <= oy
+                ; checkCollision: misma y, o cruce de la linea base con las y previas de los dos objetos
                 ld hl,(ny)
                 ld e,(iy+O_Y)
                 ld d,0
                 or a
                 sbc hl,de
                 jr z,cb_hit             ; ny == qy
-                ld a,(ix+O_Y)           ; oy < qy ?
-                cp (iy+O_Y)
-                jr nc,cb_b
-                ld hl,(ny)              ; qy <= ny ?  (ny - qy >= 0)
-                or a
-                sbc hl,de
-                jp p,cb_hit
-cb_b:           ld hl,(ny)              ; ny < qy <= oy
-                or a
-                sbc hl,de               ; ny - qy < 0
-                jp p,cb_skip
-                ld a,(iy+O_Y)
-                cp (ix+O_Y)
-                jr z,cb_hit
+                push af
+                push ix
+                pop hl
+                call op_adr
+                inc hl
+                ld c,(hl)               ; C = y previa del que se mueve
+                push iy
+                pop hl
+                call op_adr
+                inc hl
+                ld b,(hl)               ; B = y previa del otro
+                pop af
+                jp m,cb_lt
+                ld a,c                  ; ny > qy: golpe si yprev < qyprev
+                cp b
+                jr c,cb_hit
+                jr cb_skip
+cb_lt:          ld a,b                  ; ny < qy: golpe si yprev > qyprev
+                cp c
                 jr c,cb_hit
 cb_skip:        pop bc
                 ld de,32

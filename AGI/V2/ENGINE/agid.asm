@@ -322,7 +322,7 @@ s_ld1:          defb "About to restore the game",10,"described as:",10,0
 s_sv2:          defb 10,"in file:",10,0
 s_ld2:          defb 10,"from file:",10,0
 s_end:          defb 10,10,"Press ENTER to continue.",10,"Press ESC to cancel.",0
-sf_tab:         defw VARS,256, FLAGS,256, INV,256, KEYMAP,256, OBJ,1024, STRS,NSTR*41
+sf_tab:         defw VARS,256, FLAGS,256, INV,256, KEYMAP,256, OBJ,1024, OBJP,64, STRS,NSTR*41
                 defw horizon,1, blk,5, pctl,1, lastpic,2, mg_n,1+4*MG_MAX, st_on,1, tfg,2, accin,1, ticks,1
                 defw 0
 d_i:           defb 0

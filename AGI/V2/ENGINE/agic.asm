@@ -31,8 +31,44 @@
                 jp t_gameid             ; OVC_GAMEID
                 jp t_parsetext          ; OVC_PARSETEXT
                 jp t_said               ; OVC_SAID
+                jp t_show               ; OVC_SHOW
 
 TXT             equ TMPM
+
+; showSprites (sprite.cpp:352): de los objetos animados, dibujados y con update, los que acaban de dar su paso (stepTimeCount == stepTime) comparan su posicion con la
+; previa: igual -> fDidntMove; si no, la previa pasa a ser la actual y se quita fDidntMove. Va despues de mover a todos (updatePosition).
+t_show:         ld ix,OBJ
+                ld b,NOBJ
+ts_l:           ld a,(ix+O_F1)
+                and 7
+                cp 7
+                jr nz,ts_n
+                ld a,(ix+O_SCOUNT)
+                cp (ix+O_STIME)
+                jr nz,ts_n
+                push ix
+                pop hl
+                call op_adr
+                ld a,(ix+O_X)
+                cp (hl)
+                jr nz,ts_mv
+                inc hl
+                ld a,(ix+O_Y)
+                cp (hl)
+                jr nz,ts_mv1
+                set 3,(ix+O_F2)
+                jr ts_n
+ts_mv1:         dec hl
+ts_mv:          ld a,(ix+O_X)
+                ld (hl),a
+                inc hl
+                ld a,(ix+O_Y)
+                ld (hl),a
+                res 3,(ix+O_F2)
+ts_n:           ld de,32
+                add ix,de
+                djnz ts_l
+                ret
 
 t_said:        ld a,(FLAGS+4)         ; testSaid de ScummVM: f4 (SAID_ACCEPTED_INPUT) o sin f2 (ENTERED_CLI) -> falso; reset(f4) permite otro said
                 or a
@@ -992,7 +1028,10 @@ t_draw:         call argobj
 td_nf:          res 4,(ix+O_F2)         ; draw quita el fDontUpdate
                 ld a,(ARGS)
                 ld (curk),a
-                jp t_fixpos
+                call t_fixpos
+                ld a,(ARGS)             ; cmdDraw: xPos_prev = xPos tras fixPosition
+                call getobj
+                jp set_prev
 
 ; fixPosition de ScummVM para el objeto IX: si su sitio no vale (fuera de la pantalla, horizonte, objetos, lineas de control) busca el mas cercano en espiral O, S, E, N
 ; (sin la zona de block); si la espiral cubre toda la pantalla lo deja como estaba. Acaba con set_pri. La posicion de entrada hace de posicion previa en la colision.
