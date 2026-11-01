@@ -22,8 +22,42 @@
                 jp t_boxclose           ; OVB_BOXCLOSE
                 jp t_gsdraw             ; OVB_GSDRAW
                 jp t_clear_rect         ; OVB_CLRRECT
+                IF GFX4
+                jp t_fontinit           ; OVB_FONT
+                ENDIF
 
 TXT             equ TMPM
+
+                IF GFX4
+; el plano de una ventana de print: pr_top, pr_nr filas, pr_cxl, pr_bw columnas, todo blanco (inverso)
+tp_fillbox:     ld a,(pr_top)
+                ld (tb_r),a
+                ld a,(pr_nr)
+                ld (tb_n),a
+tfb_l:          ld a,(pr_cxl)
+                ld b,a
+                ld a,(pr_bw)
+                ld e,a
+                ld c,160
+                ld a,(tb_r)
+                call tp_fill
+                ld hl,tb_r
+                inc (hl)
+                ld hl,tb_n
+                dec (hl)
+                jr nz,tfb_l
+                ret
+; Los glifos de 6 pixeles (ASCII 32-127) a la tabla de la FPGA (TFONT, I = $D8): en los codigos 32-127 y, para el texto inverso (bit 7), en los 160-255
+t_fontinit:     ld hl,FONT
+                ld de,TFONT+256
+                ld bc,768
+                ldir
+                ld hl,FONT
+                ld de,TFONT+1280
+                ld bc,768
+                ldir
+                ret
+                ENDIF
 
 t_set_attr:     ld a,(ARGS)
                 and 15
@@ -81,7 +115,7 @@ tl_c:           ld a,(hl)
 tl_e:           ld (tterm),a
                 ld a,(tcol0)
                 ld c,a
-                ld a,42
+                ld a,TCOLS
                 sub c
                 jr nc,tl_m
                 xor a
@@ -283,7 +317,7 @@ t_gsdraw:       ld a,(gs_cust)          ; descripcion de una partida: ventana de
                 ld (bs_n),a
                 ld a,(ARGS+3)
                 ld c,a
-                ld a,42
+                ld a,TCOLS
                 sub c
                 ld (bs_max),a
                 ld hl,TXT+300
@@ -330,6 +364,16 @@ t_gsdesc:       ld a,(gs_cust)          ; la ventana se dibuja una vez (gs_cust 
                 ld (pr_w),a
 gb_go:          ld a,1
                 ld (dl_nobg),a
+                IF GFX4
+                ld a,(pr_top)           ; el cuadro negro de 24 celdas de la linea
+                add a,3
+                ld hl,pr_cxl
+                ld b,(hl)
+                inc b
+                ld e,24
+                ld c,32
+                call tp_fill
+                ENDIF
                 ld a,(pr_top)
                 add a,3
                 add a,a
@@ -508,6 +552,12 @@ tp_m:           ld a,(hl)
 tp_mn:          ld de,40
                 add hl,de
                 djnz tp_m
+                IF GFX4
+                ld a,c                  ; 160w: una columna por caracter y una de relleno a cada lado
+                add a,2
+                ld (pr_bw),a
+                ld hl,pr_bw
+                ELSE
                 ld a,c                  ; celdas de ancho = (6 * largo + 7) / 8 + 2
                 add a,a
                 ld b,a
@@ -533,6 +583,7 @@ tp_mn:          ld de,40
                 cp (hl)
                 jr c,tp_np
                 ld (hl),a
+                ENDIF
 tp_np:          ld a,(wr_n)
                 add a,2
                 ld (pr_nr),a
@@ -547,7 +598,7 @@ tp_np:          ld a,(wr_n)
                 ld (pr_top),a
                 ld a,(pr_bw)
                 ld b,a
-                ld a,32
+                ld a,TCELL
                 sub b
                 srl a
                 ld (pr_cxl),a
@@ -566,6 +617,7 @@ tp_r1:          ld c,a
 tp_r2:          ld (pr_top),a
                 ld a,(pr_col)
                 ld c,a
+                IF GFX4=0
                 add a,a
                 add a,c
                 add a,a
@@ -574,9 +626,10 @@ tp_r2:          ld (pr_top),a
                 rrca
                 and 31
                 ld c,a
+                ENDIF
                 ld a,(pr_bw)
                 ld b,a
-                ld a,32
+                ld a,TCELL
                 sub b
                 ld d,a
                 ld a,c
@@ -586,6 +639,11 @@ tp_r2:          ld (pr_top),a
 tp_c2:          ld (pr_cxl),a
 tp_dr:          ld a,1                  ; lo que se escribe aqui no pasa a la copia de fondo
                 ld (dl_nobg),a
+                IF GFX4
+                xor a
+                call tp_save
+                call tp_fillbox
+                ENDIF
                 ld a,(pr_top)
                 add a,a
                 add a,a
@@ -883,9 +941,9 @@ t_clear_rect:   ld a,(ARGS+4)
                 ld a,(ARGS+1)
                 ld c,a                  ; C = columna 1
                 ld a,(ARGS+3)
-                cp 42
+                cp TCOLS
                 jr c,cr_a
-                ld a,41
+                ld a,TCOLS-1
 cr_a:           sub c
                 ret c                   ; columna 2 < columna 1: nada
                 inc a

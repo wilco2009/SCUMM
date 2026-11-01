@@ -60,6 +60,14 @@ ov_tail:        ld b,PG_OVL
                 ld c,MAP_PORT
                 ld a,1
                 out (c),a
+                IF GFX4
+                ld hl,OVB_FONT          ; los glifos de 6 pixeles a la tabla de la FPGA; despues se activa el plano de texto
+                call call_b
+                ld a,TFONT>>8
+                ld i,a
+                ld a,1
+                ld (2069),a
+                ENDIF
                 ld hl,(ncyc)            ; modo real: doble buffer por hardware (el bitmap se muestra de golpe en cada VSYNC; los atributos van en vivo)
                 ld a,h
                 or l
@@ -207,6 +215,7 @@ map7:           ld b,a
 map7_back:      ld a,7
                 jr map7
 
+                IF GFX4=0               ; el plot de 8x1 (y sus tablas de distancia) no se usa en 160w
 ; A = pixel HiRes (0-255), sch = color, srow = direccion del bitmap de la fila
 plot:           ld b,a
                 and 7
@@ -328,6 +337,7 @@ pl_clr:         ld a,(pmk)
                 ret
 
 masks:          defb 128,64,32,16,8,4,2,1
+                ENDIF
 sch:            defb 0
 srow:           defw 0
 sarow:          defw 0

@@ -14,7 +14,25 @@ import agi2hr
 
 FONT = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'V2', 'ENGINE', 'font6.bin'), 'rb').read()
 FONT = FONT[:512] + bytes([0, 0b00100000, 0b00010000, 0, 0, 0, 0, 0]) + FONT[520:]      # ASCII 96: acento grave en vez de la libra (comillas ``asi'' de AGI)
-COLS, ROWS = 42, 24
+GFX4 = os.environ.get('AGI_GFX4') == '1'        # modo 160w (AGI/PLAN160W.md): el texto va al plano de 40x25 codigos de la FPGA
+COLS, ROWS = (40 if GFX4 else 42), 24
+
+
+class TextPlane(bytearray):
+    """GFX4: los 40 x 25 codigos del plano de texto (fila * 40 + columna). 0 = celda transparente; 32-127 = el caracter en blanco sobre negro; +128 = negro sobre blanco
+    (la FPGA solo tiene un par de colores: fondo 0 = normal, cualquier otro = inverso)."""
+
+
+def plane_put(tp, row, col, text, bg):
+    inv = 128 if bg & 15 else 0
+    for i, ch in enumerate(text[:max(0, 40 - col)]):
+        o = ord(ch)
+        tp[row * 40 + col + i] = (o if 32 <= o <= 127 else 32) | inv
+
+
+def plane_fill(tp, row, col, n, bg):
+    for i in range(col, min(col + n, 40)):
+        tp[row * 40 + i] = 160 if bg & 15 else 32
 
 
 def plot_hr(bm, at, y, x, c):
@@ -42,6 +60,9 @@ def plot_hr(bm, at, y, x, c):
 
 def put_line(bm, at, base, row, col, text, fg, bg, x0=None):
     """Escribe `text` (sin saltos de linea) en la fila de texto `row`, columna `col`. base = linea de pantalla que es la linea 0 del plano."""
+    if isinstance(bm, TextPlane):
+        plane_put(bm, row, col if x0 is None else x0 >> 3, text, bg)
+        return
     if x0 is None:
         text = text[:max(0, COLS - col)]        # el texto no pasa de la ultima columna (como draw_line del Z80)
     n = len(text)
@@ -84,6 +105,9 @@ def put_line(bm, at, base, row, col, text, fg, bg, x0=None):
 
 
 def fill_row(bm, at, base, row, colour):
+    if isinstance(bm, TextPlane):
+        plane_fill(bm, row, 0, 40, colour)
+        return
     c = agi2hr.to_chroma(colour & 15)
     for k in range(8):
         line = row * 8 + k - base
@@ -131,20 +155,28 @@ def box_geom(lines, row=None, col=None, minw=0):
     """(fila de texto de arriba, celda de la izquierda, celdas de ancho, filas de alto) de la ventana de unas lineas. Una celda de relleno a cada lado y una fila
     arriba y otra abajo; centrada en la imagen (filas 1-21) o, con print.at, en (row, col * 6 pixeles) sin salirse de la imagen."""
     maxlen = max(len(l) for l in lines)
-    boxw = max(((maxlen * 6 + 7) >> 3) + 2, minw)
+    boxw = (maxlen + 2) if GFX4 else max(((maxlen * 6 + 7) >> 3) + 2, minw)       # 160w: una columna por caracter, sin dibujo (show.obj) en la ventana
     nrows = len(lines) + 2
+    cells = 40 if GFX4 else 32
     if row is None:
         top = 1 + ((21 - nrows) >> 1)
-        cxl = (32 - boxw) >> 1
+        cxl = (cells - boxw) >> 1
     else:
         top = min(max(row, 1), 22 - nrows)
-        cxl = min((col * 6) >> 3, 32 - boxw)
+        cxl = min(col if GFX4 else (col * 6) >> 3, cells - boxw)
     return top, cxl, boxw, nrows
 
 
 def draw_box(bm, at, lines, geom, pic=None):
     """Pinta la ventana en los planos de pantalla completa (192 lineas): blanco con letras negras y un marco rojo de un pixel."""
     top, cxl, boxw, nrows = geom
+    if isinstance(bm, TextPlane):               # 160w: la ventana son celdas blancas (inversas) con las lineas dentro; sin marco rojo ni dibujo
+        for r in range(top, top + nrows):
+            plane_fill(bm, r, cxl, boxw, 15)
+        for i, l in enumerate(lines):
+            if l:
+                plane_put(bm, top + 1 + i, cxl + 1, l, 15)
+        return
     white, red = agi2hr.to_chroma(15), agi2hr.to_chroma(4)
     for k in range(nrows * 8):
         line = top * 8 + k

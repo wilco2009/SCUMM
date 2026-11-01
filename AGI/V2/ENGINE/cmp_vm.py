@@ -72,6 +72,18 @@ def main(argv):
                 bad = 1
             else:
                 print('pantalla 4 bpp: coincide (160x168, %d bytes)' % len(exp))
+        tpl = bytearray(it.plane())
+        zt = bytearray(mem[0xA000 + 168 * 80:0xA000 + 168 * 80 + 1000])
+        for pl in (tpl, zt):                            # fuera de la ventana de la imagen, un espacio normal (negro) y una celda transparente se ven igual (el borde es negro)
+            for i in list(range(0, 40)) + list(range(22 * 40, 1000)):
+                if pl[i] == 32:
+                    pl[i] = 0
+        dt = [i for i, (x, y) in enumerate(zip(zt, tpl)) if x != y]
+        if dt:
+            print('texto 40x25: %d codigos distintos; primeros (fila, col, Z80, modelo): %s' % (len(dt), [(i // 40, i % 40, zt[i], tpl[i]) for i in dt[:8]]))
+            bad = 1
+        else:
+            print('texto 40x25: coincide (1000 codigos; %d celdas con texto)' % sum(1 for x in tpl if x))
     else:
         bm, at = it.screen()
         if os.environ.get('MODEL_PNG'):                  # depuracion: la pantalla del modelo a PNG

@@ -620,6 +620,16 @@ cc_s:           ld (curchar),a
 ; text.screen: las filas de texto 1-21 (lineas 8-175) con el color de fondo del texto (set.text.attribute): bitmap a 0 y papel = tinta = ese color
 t_textscr:
                 IF GFX4
+                ld a,(tbg)              ; 160w: las 24 filas de texto con espacios del color de fondo (negros o blancos)
+                and 15
+                ld a,32
+                jr z,tsg_c
+                ld a,160
+tsg_c:          ld hl,TPLANE
+                ld de,TPLANE+1
+                ld bc,24*40-1
+                ld (hl),a
+                ldir
                 ret
                 ENDIF
                 ld hl,HR_BM             ; cmdTextScreen: clearLines(0, 24, fondo): las 24 filas, con la barra de estado y el pie
@@ -649,7 +659,19 @@ t_textscr:
 
 ; graphics (redrawScreen): clearDisplay(0) borra la barra de estado (fila 0) y el pie (filas 22 y 23); la barra y el prompt se redibujan en el ciclo siguiente
 t_gfxfix:
-                IF GFX4=0
+                IF GFX4
+                ld a,32                 ; 160w: barra de estado y pie en negro
+                ld hl,TPLANE
+                ld de,TPLANE+1
+                ld bc,39
+                ld (hl),a
+                ldir
+                ld hl,TPLANE+22*40
+                ld de,TPLANE+22*40+1
+                ld bc,79
+                ld (hl),a
+                ldir
+                ELSE
        ld hl,HR_BM
                 ld de,HR_BM+1
                 ld bc,255

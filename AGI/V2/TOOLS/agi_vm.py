@@ -135,7 +135,7 @@ class Interp:
         self.box = None
         self.ev = {}
         self.max_cycles = 0
-        self.ext_bm = bytearray(192 * 32)
+        self.ext_bm = agi_text.TextPlane(1000) if agi_text.GFX4 else bytearray(192 * 32)
         self.ext_at = bytearray(192 * 32)
         self.newroom = None
         self.exit_all = False
@@ -467,6 +467,40 @@ class Interp:
         if self.menu_ui is not None:
             self.draw_menu(sb, sa)
         return sb, sa
+
+    def plane(self):
+        """GFX4: el plano de texto (1000 codigos) tal como lo deja el Z80 en TPLANE: el pie y la barra persistentes, el texto sobre la imagen, la ventana y los menus."""
+        tp = agi_text.TextPlane(self.ext_bm)
+        for op in self.pic_ops:
+            if op[0] == 't':
+                agi_text.put_line(tp, None, 8, *op[1:])
+            elif op[0] == 'f':
+                agi_text.fill_row(tp, None, 8, op[1], op[2])
+        if self.box is not None:
+            agi_text.draw_box(tp, None, self.box[0], self.box[1], self.box[2])
+        if self.menu_ui is not None:
+            sel, it = self.menu_ui
+            agi_text.fill_row(tp, None, 0, 0, 15)
+            col = 0
+            cols = []
+            for i, (t, items) in enumerate(self.menus):
+                txt = ' ' + t + ' '
+                fg, bg = (15, 0) if i == sel else (0, 15)
+                agi_text.put_line(tp, None, 0, 0, col, txt, fg, bg)
+                cols.append(col)
+                col += len(txt)
+            items = self.menus[sel][1]
+            if items:
+                mx = max(len(x[0]) for x in items)
+                bw = mx + 2
+                cxl = min(cols[sel], 40 - bw)
+                for i, (t, c, en) in enumerate(items):
+                    on = i == it
+                    fg = (15 if on else 0) if en else 8
+                    bg = 0 if on else 15
+                    agi_text.plane_fill(tp, 1 + i, cxl, bw, bg)
+                    agi_text.put_line(tp, None, 0, 1 + i, 0, ' ' + t.ljust(mx) + ' ', fg, bg, x0=8 * cxl)
+        return tp
 
     def sw_blit(self, sb, sa):
         """Los objetos con celdas anchas (mas de SW_TILES mosaicos en una fila) no van en sprites: se dibujan en el bitmap, de menor a mayor prioridad, sobre la

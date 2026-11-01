@@ -70,3 +70,8 @@ Un par de colores global en el plano de texto; ausencia de doble buffer (parpade
 - Fase 3 (sprites **hardware 8x8**, decision del usuario): `agi2spr.py` y `agi_vm.py` con `AGI_GFX4=1` (1 pixel AGI = 1 pixel del sprite, imagen desde la linea 0 de la ventana, sin `(5*x)>>3`);
   Z80: `lo16`, `hg_okb`, `hx2ax`, limites y `hw_top` bajo `GFX4`. Z80 == modelo en SQ1 (14 sprites), KQ2 (28), PQ1 y KQ1, con prioridad por pixel. GFX4=0: binarios identicos.
   **Pendiente (3b):** rotulos anchos (> `SW_TILES` mosaicos por fila) y `add.to.pic` se saltan (no se dibujan) en GFX4; hay que pintarlos por software en 4 bpp (agisw) sobre pantalla y fondo limpio.
+- Fase 4 (texto por el plano de la FPGA, `POKE 2069`): hecha. `TPLANE` = `$D480` (1000 codigos tras la imagen); tabla de glifos en `$D800` (I = `$D8`; los codigos 0-31 y 128-159 no se usan,
+  asi que su sitio lo comparte el final del plano); la instala el overlay B (`OVB_FONT`) al arrancar. Texto en 40 columnas; **un solo par tinta/papel**: fondo 0 = blanco sobre negro, cualquier otro = inverso
+  (negro sobre blanco, +128). Ventanas `print`, menus y `get.string` = celdas blancas, **sin marco rojo** ni dibujo (`show.obj` solo texto). Se guarda una copia del plano al abrir una ventana/menu
+  (en `PG_BGA` tras los 5248 B del fondo) y al cerrar se restaura el rectangulo. `plot`/overlay A2 (rotulos software) quedan fuera con GFX4=1 (nucleo -160 B).
+  Pruebas: `sh ENGINE/test_gfx4.sh` (display, print abierto/cerrado, restauracion, menus, text.screen/graphics, clear.lines): Z80 == modelo (1000 codigos). GFX4=0: binarios identicos.

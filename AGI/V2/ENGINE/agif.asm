@@ -289,6 +289,11 @@ mg_mn:          pop hl
 mg_n0:          ld a,(m_max)
                 add a,2
                 ld (m_w),a
+                IF GFX4
+                ld (pr_bw),a            ; 160w: una columna por caracter
+                ld a,(m_col)
+                ld c,a
+                ELSE
                 ld b,a
                 add a,a
                 add a,b
@@ -309,7 +314,8 @@ mg_n0:          ld a,(m_max)
                 rrca
                 and 31
                 ld c,a                  ; celda del titulo
-                ld a,32
+                ENDIF
+                ld a,TCELL
                 ld hl,pr_bw
                 sub (hl)
                 ld d,a
@@ -468,6 +474,20 @@ mi_ns:          ld a,b
                 ld (m_l),a
                 ld a,8
                 ld (m_k),a
+                IF GFX4
+                ld a,(m_attr)           ; relleno de la fila del elemento: espacios blancos (fondo distinto de 0) o negros
+                and $F0
+                ld c,32
+                jr z,mfg_c
+                ld c,160
+mfg_c:          ld hl,pr_cxl
+                ld b,(hl)
+                ld a,(pr_bw)
+                ld e,a
+                ld a,(m_i)
+                inc a
+                call tp_fill
+                ENDIF
                 IF GFX4=0
 mf_l:           ld a,(m_l)
                 call pr_addr
@@ -538,7 +558,12 @@ mi_en:          ld (hl),' '
                 ld (dl_nobg),a
                 ret
 
-t_menuopen:     ld a,(iv_on)
+t_menuopen:
+                IF GFX4
+                ld a,1
+                call tp_save            ; lo que habia bajo la barra y la lista
+                ENDIF
+                ld a,(iv_on)
                 or a
                 jp nz,iv_open
                 ld a,(mn_n)

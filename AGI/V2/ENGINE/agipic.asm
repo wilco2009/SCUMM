@@ -30,7 +30,15 @@ h_draw_pic:     call clr_static
                 xor a
                 ld (FLAGS+103),a
 dp_g:           ld a,c
-dp_num:         call mk_nm3             ; (dp_num: A = imagen; lo usa cargar partida)
+dp_num:
+                IF GFX4
+                ld hl,TPLANE+40         ; el texto escrito sobre la imagen (filas 1-21) se va con ella
+                ld de,TPLANE+41
+                ld bc,21*40-1
+                ld (hl),0
+                ldir
+                ENDIF
+                call mk_nm3             ; (dp_num: A = imagen; lo usa cargar partida)
                 ld a,(ovl_on)           ; con overlay.pic: PICAnn.GFX (la cifra de las centenas pasa a letra: 0 -> A, 1 -> B, 2 -> C)
                 or a
                 jr z,dp_o

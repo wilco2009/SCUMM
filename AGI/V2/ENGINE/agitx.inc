@@ -27,6 +27,167 @@ t_chroma:       and 15
 ; ---------------------------------------------------------------------
 ;  Una linea de texto: dl_ptr, dl_n (1-42), dl_row, dl_col, dl_fg, dl_bg (codigos de Chroma)
 ; ---------------------------------------------------------------------
+; ---------------------------------------------------------------------
+;  160w (GFX4): el texto va al plano de 40x25 codigos de la FPGA (TPLANE, fila * 40 + columna); 6 pixeles de glifo por columna. Un solo par tinta / papel
+;  (blanco sobre negro) y, con el bit 7 del codigo, negro sobre blanco: fondo 0 = normal, cualquier otro = inverso. Codigo 0 = celda transparente (se ve la imagen).
+;  Misma salida que agi_text.put_line / fill_row de TOOLS/agi_text.py con AGI_GFX4=1.
+; ---------------------------------------------------------------------
+                IF GFX4
+; A = fila, B = columna -> HL = TPLANE + 40 * fila + columna (conserva B y C)
+tp_addr:        ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,hl
+                add hl,de
+                ld e,b
+                ld d,0
+                add hl,de
+                ld de,TPLANE
+                add hl,de
+                ret
+
+; A = fila, B = columna, E = cuantas, C = codigo: las celdas a ese codigo
+tp_fill:        push de
+                call tp_addr
+                pop de
+                ld a,e
+                or a
+                ret z
+                ld b,a
+tpf_l:          ld (hl),c
+                inc hl
+                djnz tpf_l
+                ret
+
+; (dl_x0 en pixeles: las ventanas lo ponen siempre en un multiplo de 8) -> dl_col
+draw_line_px:   ld a,(dl_x0)
+                rrca
+                rrca
+                rrca
+                and 31
+                ld (dl_col),a
+draw_line:      ld a,(dl_col)
+                ld c,a
+                ld a,TCOLS
+                sub c
+                ret c
+                ret z
+                ld hl,dl_n
+                cp (hl)
+                jr nc,dl_fit
+                ld (hl),a
+dl_fit:         ld a,(dl_n)
+                or a
+                ret z
+                ld b,a
+                ld a,(dl_bg)
+                or a
+                ld c,0
+                jr z,dlw_n
+                ld c,128
+dlw_n:          push bc
+                ld a,(dl_row)
+                ld hl,dl_col
+                ld b,(hl)
+                call tp_addr
+                ex de,hl
+                pop bc
+                ld hl,(dl_ptr)
+dlw_l:          ld a,(hl)
+                inc hl
+                cp 32
+                jr c,dlw_s
+                cp 128
+                jr c,dlw_o
+dlw_s:          ld a,32
+dlw_o:          or c
+                ld (de),a
+                inc de
+                djnz dlw_l
+                ret
+
+; dl_row = fila, A = color EGA: la rellena de espacios (negros si el color es 0, blancos si no)
+fill_row:       and 15
+                ld c,32
+                jr z,fr_c
+                ld c,160
+fr_c:           ld a,(dl_row)
+                ld b,0
+                call tp_addr
+                ld d,h
+                ld e,l
+                inc de
+                ld (hl),c
+                ld bc,TCOLS-1
+                ldir
+                ret
+
+text_bg:        ret
+
+; Copia del plano de texto antes de abrir una ventana (A = 0 print, 1 menu): en PG_BGA, tras los 5248 bytes de la imagen limpia (bloque 7: $F480 y $F868)
+tp_save:        ld (tp_slot),a
+                ld a,PG_BGA
+                call map7
+                ld hl,TPLANE
+                ld de,$F480
+                ld a,(tp_slot)
+                or a
+                jr z,tps_c
+                ld de,$F480+1000
+tps_c:          ld bc,1000
+                ldir
+                jp map7_back
+
+; El rectangulo de la ventana (filas pr_l0 / 8 ..., pr_ln / 8 filas, columnas pr_cxl ..., pr_bw) vuelve a lo que habia: la copia de tp_save
+t_boxclose:     ld a,(pr_ln)
+                rrca
+                rrca
+                rrca
+                and 31
+                ret z
+                ld (tb_n),a
+                ld a,(pr_l0)
+                rrca
+                rrca
+                rrca
+                and 31
+                ld (tb_r),a
+                ld hl,$2000
+                ld a,(tp_slot)
+                or a
+                jr z,tbc_s
+                ld hl,$2000+1000
+tbc_s:          ld (tb_off),hl
+                ld a,PG_BGA
+                call map7
+bcw_l:          ld a,(tb_r)
+                ld hl,pr_cxl
+                ld b,(hl)
+                call tp_addr
+                ld d,h
+                ld e,l
+                ld bc,(tb_off)
+                add hl,bc
+                ld a,(pr_bw)
+                ld c,a
+                ld b,0
+                ldir
+                ld hl,tb_r
+                inc (hl)
+                ld hl,tb_n
+                dec (hl)
+                jr nz,bcw_l
+                jp map7_back
+
+tp_slot:        defb 0
+tb_r:           defb 0
+tb_off:         defw 0
+                ELSE
 draw_line:      ld a,(dl_col)           ; el texto no pasa de la columna 42 (con la suma de 8 bits de abajo, una barra de menu de 43 columnas dibujaba basura)
                 ld c,a
                 ld a,42
@@ -44,9 +205,6 @@ dl_fit:         ld a,(dl_col)
                 add a,a
                 ld (dl_x0),a            ; x0 = col * 6
 draw_line_px:
-                IF GFX4
-                ret
-                ENDIF
                 ld a,(dl_x0)            ; (entrada con x0 en pixeles: las ventanas)
                 rrca
                 rrca
@@ -240,9 +398,6 @@ dl_next:        ld hl,dl_j
 
 ; dl_row = fila, A = color EGA: la rellena (bitmap 0, papel = tinta = color)
 fill_row:
-                IF GFX4
-                ret
-                ENDIF
                 call t_chroma
                 ld c,a
                 rlca
@@ -289,9 +444,6 @@ fr_a:           ld (hl),a
 
 ; Texto escrito sobre la imagen (filas 1-21): dl_row, dl_ca, dl_nb pasan de la pantalla a la copia de fondo y los rotulos se recomponen
 text_bg:
-                IF GFX4
-                ret
-                ENDIF
                 ld a,(dl_nobg)
                 or a
                 ret nz
@@ -370,9 +522,6 @@ pr_addr:        ld l,a
 
 ; La imagen limpia (copia de fondo) en el rectangulo de la ventana
 t_boxclose:
-                IF GFX4
-                ret
-                ENDIF
                 ld a,(picvalid)
                 or a
                 ret z
@@ -409,6 +558,7 @@ bc_row:         ld a,(pr_l)
                 dec (hl)
                 jr nz,bc_row
                 ret
+                ENDIF
 
 ; ---------------------------------------------------------------------
 ;  Reparto del mensaje (TXT) en lineas de wr_w caracteres, en LN (40 bytes por linea: largo y caracteres) y su numero en wr_n

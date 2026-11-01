@@ -15,7 +15,11 @@ SPH_FIX         equ SPN_FIX+1
                 jp t_bake               ; OVE_BAKE
 
 ; Tras t_sort (A1): el orden de los objetos (hq_cnt, ORD) se copia de la pagina del A1, que se asoma por el bloque 7; despues se arma el dibujo por software
-sw_run:         ld a,PG_OVL
+sw_run:
+                IF GFX4
+                ret
+                ELSE
+                ld a,PG_OVL
                 call map7
                 ld hl,$E000+HQ_FIX-$2000
                 ld de,hq_cnt
@@ -25,7 +29,9 @@ sw_run:         ld a,PG_OVL
                 call sw_scan
                 call sw_close
                 jp sw_comp
+                ENDIF
 
+                IF GFX4=0
 hw_end:         jp unmap_win
 
 ; IX = objeto -> NC con la pagina de su bucle mapeada y cv_* puestos (cel_rd), o C si no hay celda: la pagina la dejo buscada el A1 (VPG)
@@ -62,6 +68,23 @@ co_vp:          push ix
 
                 include "agicel.asm"
                 include "agisw.asm"
+                ELSE
+t_bake:         ret                     ; 160w: los rotulos por software y add.to.pic se pintaran en 4 bpp (fase 3b)
+; La imagen que acaba de dibujarse (4 bpp, 13.440 bytes) pasa a las paginas de fondo
+t_bgsave:       ld a,PG_BGB
+                call map_page
+                ld hl,HR_BM
+                ld de,LWIN
+                ld bc,8192
+                ldir
+                ld a,PG_BGA
+                call map_page
+                ld hl,HR_BM+8192
+                ld de,LWIN
+                ld bc,PLANE4-8192
+                ldir
+                jp unmap_win
+                ENDIF
 
 hq_cnt:         defb 0
 ORD:            defs NOBJ

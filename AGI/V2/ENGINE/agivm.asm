@@ -36,6 +36,11 @@ OBJ             equ $7300
 NOBJ            equ 32
 VIEWPAGE        equ PG_VIEWS
 STACK           equ $8000
+TCOLS           equ 42-2*GFX4           ; columnas de texto: 42 de 6 pixeles en el HiRes, 40 del plano de texto de la FPGA (160w)
+TCELL           equ 32+8*GFX4           ; celdas de una linea de pantalla (8 pixeles del bitmap; columnas de texto en 160w)
+TPLANE          equ HR_BM+168*80        ; 160w: los 1000 codigos del plano de texto, justo tras la imagen
+TFONT           equ $D800               ; 160w: tabla de glifos de 2 KB alineada (registro I); los codigos 0-31 y 128-159 no se usan, asi que su sitio lo comparte el plano de texto
+OVB_FONT        equ $2024
 LWIN            equ $8000
 TOKLIM          equ $AA                 ; parte baja del limite de TOKS (TOKS+90)
 KEYMAP          equ $7100               ; por tecla ASCII (0-127): controlador y si esta puesto (2 bytes)
@@ -294,6 +299,10 @@ finish:         ld a,(errc)
                 or l
                 jr nz,fn_ns
                 call OVL_SPRINIT        ; apaga los sprites al volver a BASIC
+                IF GFX4
+                xor a
+                ld (2069),a             ; y el plano de texto
+                ENDIF
                 ld a,85                 ; y el doble buffer
                 ld (2057),a
 fn_ns:
@@ -332,9 +341,11 @@ video_init:     ld a,85
                 ld (2069),a             ; sin plano de texto (lo activa el texto, fase 4)
                 ld a,176
                 ld (2045),a             ; 160x200 a 4 bpp
+                ld a,$0F
+                ld (2068),a             ; texto: papel 0, tinta 15 (el inverso, con el bit 7 del codigo, es negro sobre blanco)
                 ld hl,HR_BM
                 ld de,HR_BM+1
-                ld bc,PLANE4-1
+                ld bc,PLANE4+1000-1     ; la imagen y el plano de texto
                 ld (hl),0
                 ldir
                 ELSE
