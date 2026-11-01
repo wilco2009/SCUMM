@@ -11,7 +11,7 @@ set BASE=C:\ClaudeCode\Eightyone2\EightyOne\SD81\SD81
 set G=%1
 if "%G%"=="" set G=SQ1
 cd /d "%~dp0"
-echo GFX4            equ 1> gfx4.inc
+>gfx4.inc echo GFX4            equ 1
 set AGI_GFX4=1
 if not exist ..\%G% (echo *** no hay datos de %G% en AGI\V2\%G% & goto error)
 python -I ..\TOOLS\gen_agitab.py agivm.asm agiobj.asm agiin.asm agipic.asm agitab.inc || goto error
@@ -48,10 +48,10 @@ rem los datos van por carpetas (LOG, PIC, SPR, SND, VIEW, DATA); en la del juego
 for %%e in (AGL MSG GFX SPR VGM BIN HDR OVL) do del /q "%D%\*.%%e" 2>nul
 xcopy /e /i /y /q "%T%\*" "%D%\" >nul || goto error
 echo OK: %S%\AGIVM.BIN y el juego en %D%  (LOAD "AGIVM.B81" desde esa carpeta)
-echo GFX4            equ 0> gfx4.inc
+>gfx4.inc echo GFX4            equ 0
 exit /b 0
 
 :error
 echo *** ERROR ***
-echo GFX4            equ 0> gfx4.inc
+>gfx4.inc echo GFX4            equ 0
 exit /b 1
