@@ -360,6 +360,88 @@ class Interp:
             self.ego_hid = not vis
         self.flags[1] = 1 if self.ego_hid else 0
 
+    # ------------------------------------------------------------ modo GFX4 (160w, 4 bpp nativo; ver AGI/PLAN160W.md)
+    GFX4 = os.environ.get('AGI_GFX4') == '1'
+
+    def cel4(self, o):
+        """(ancho, alto, transparente, filas de colores EGA con el espejo hecho) de la celda de o, o None. Mismas reglas que cel_of (FINAL_CEL, BLANK_VIEWS)."""
+        import agi2spr
+        if o.x >= 160:
+            return None
+        d = self.g.resource('VIEW', o.view)
+        if d is None or o.view in agi2spr._blank:
+            return None
+        loop, cel = o.loop, o.cel
+        if loop >= d[2]:
+            loop = 0
+        if o.view in agi2spr._final:
+            cel = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)] - 1
+        try:
+            return agi2spr.cel_pixels(d, loop, cel if cel < d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)] else 0)
+        except IndexError:
+            return None
+
+    @staticmethod
+    def draw_cel4(img, pri2, c, x, y, pri, write_pri):
+        """SpritesMgr::drawCel en 160x168: un pixel opaco se pinta si la prioridad del plano en ese pixel es <= pri (pri2 ya sustituye las lineas de control
+        por la prioridad de debajo, agi2hr.sprite_priority). Con write_pri (add.to.pic) el pixel pintado sube la prioridad del plano a pri. Devuelve si pinto alguno."""
+        import agi2hr
+        w, h, trans, rows = c
+        top = y - h + 1
+        shown = False
+        for j, row in enumerate(rows):
+            py = top + j
+            if not 0 <= py < 168:
+                continue
+            for i, col in enumerate(row):
+                px = x + i
+                if col == trans or not 0 <= px < 160:
+                    continue
+                if pri2[py * 160 + px] <= pri:
+                    img[py * 160 + px] = agi2hr.to_chroma(col)
+                    if write_pri:
+                        pri2[py * 160 + px] = pri
+                    shown = True
+        return shown
+
+    def render4(self):
+        """Imagen de 160x168 (codigos de Chroma) con los objetos fijos (add.to.pic) ya pintados, y el plano de prioridad de sprites resultante (objetos fijos incluidos)."""
+        import agi2hr
+        if self.pic is None:
+            return [0] * (160 * 168), None
+        img = [agi2hr.to_chroma(v) for v in self.pic.vis]
+        pri2 = agi2hr.sprite_priority(self.pic.pri)
+        for op in self.pic_ops:
+            if op[0] == 's':
+                o = Obj()
+                o.view, o.loop, o.cel, o.x, o.y, o.pri = op[1]
+                c = self.cel4(o)
+                if c is not None:
+                    self.draw_cel4(img, pri2, c, o.x, o.y, o.pri, True)
+        return img, pri2
+
+    def screen4(self):
+        """Pantalla de imagen de 160x168 a 4 bpp: la imagen con los objetos fijos y, encima, los objetos animados dibujados por software de menor a mayor prioridad
+        (draw_order) con la mascara de prioridad. El texto (plano de la FPGA) no esta en ella. Devuelve una lista de 160*168 codigos de Chroma."""
+        img, pri2 = self.render4()
+        if pri2 is None:
+            return img
+        for n in self.draw_order():
+            o = self.objs[n]
+            if o.static:
+                continue
+            c = self.cel4(o)
+            if c is not None:
+                shown = self.draw_cel4(img, pri2, c, o.x, o.y, o.pri, False)
+                if n == 0:
+                    self.ego_hid = not shown
+        return img
+
+    def png4(self, path):
+        import agi2hr
+        img = self.screen4()
+        ag.write_png(path, [[agi2hr.CHROMA[img[y * 160 + x]] for x in range(160)] for y in range(168)], 160, 168)
+
     def screen(self):
         """Pantalla completa (bitmap y atributos de 192x32): el pie y la barra de estado persistentes, y en medio la imagen con su texto. Los sprites
         no estan en ella (son del hardware: hw_sprites)."""
@@ -2295,6 +2377,9 @@ def main(argv):
                 f.write('T %d %d\n' % (n, p))
             for c in it.summ:
                 f.write('C %d %d %d %d %d %d %d %d\n' % c)
+    for i, a in enumerate(argv):
+        if a == '--png4':                   # pantalla de imagen de 160x168 del modo GFX4 (AGI/PLAN160W.md)
+            it.png4(argv[i + 1])
     ego = it.obj(EGO)
     print('fin: sala %d, ciclo %d, ego en %d,%d, v0..v9 = %s' % (it.vars[0], it.cycle, ego.x, ego.y, it.vars[:10]))
     for i, a in enumerate(argv):

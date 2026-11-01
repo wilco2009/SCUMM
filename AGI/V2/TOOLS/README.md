@@ -37,3 +37,7 @@ WORDS.TOK y sonido (solo su duracion). Los comandos de pantalla y menus no hacen
 
 El guion son eventos `ciclo:tipo:valor` (text, str, key, ctrl, dir). SQ1 arranca solo: intro (sala 67), nombre (69) y sala 2.
 `test_vm.sh` lo comprueba. El modelo fija la semantica antes de escribirla en Z80: el mismo guion debe dar el mismo registro.
+
+## Modo GFX4 (160w, 4 bpp; AGI/PLAN160W.md)
+
+`agi2hr.py ... --gfx4` escribe `PICnnn.GFX` version 2 (imagen nativa 160x168 a 4 bpp, 13.440 bytes, sin cuantificar; verificado releyendo el fichero: 0 pixeles distintos de `agi_read.Picture`). `AGI_GFX4=1 agi_vm.py JUEGO --png4 f.png` saca la pantalla de imagen del modelo (`screen4()`: imagen + objetos fijos + sprites por software con la mascara de prioridad de ScummVM). `sh TOOLS/test_gfx4.sh [JUEGO ...]` lo prueba.

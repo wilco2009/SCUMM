@@ -21,7 +21,11 @@ Formato (little endian):
   +11008+n+m  maximos por bloques de 8 pixeles de AGI de la prioridad de los sprites (para saltarse la mascara)
   +11008+n  prioridad de los sprites: el mismo formato, pero con las lineas de control (0-3) sustituidas por la primera prioridad >= 4 hacia abajo (4 si no hay)
 
-Uso:  agi2hr.py JUEGO SALIDA [--png] [n ...]
+Con --gfx4 (modo 160w de la FPGA, 160x200 a 4 bpp; ver AGI/PLAN160W.md) el fichero es la version 2: misma cabecera ('AGIP', +4 = 2, +6 = 160), y a partir de +256
+la imagen nativa 160x168 sin cuantificar (13.440 bytes: 80 por linea, nibble alto = pixel de la izquierda, indice = codigo de Chroma, el de la paleta por omision pal16),
+seguida de la prioridad, la prioridad de los sprites y los maximos, igual que en la version 1. Va a HFILE ($A000) tal cual (la linea 0 de la imagen es la linea 8 de la pantalla).
+
+Uso:  agi2hr.py JUEGO SALIDA [--png] [--gfx4] [n ...]
 """
 import os
 import struct
@@ -189,6 +193,50 @@ def build(pic):
     return bytes(hdr) + bytes(bm) + bytes(at) + pr + p2 + pm, rec, bad
 
 
+PLANE4 = H * (W // 2)
+
+
+def pack4(pic):
+    """Imagen -> 13.440 bytes de 4 bpp (codigos de Chroma)."""
+    out = bytearray()
+    for y in range(H):
+        row = [to_chroma(pic.vis[y * W + x]) for x in range(W)]
+        for x in range(0, W, 2):
+            out.append((row[x] << 4) | row[x + 1])
+    return bytes(out)
+
+
+def build4(pic):
+    """PICnnn.GFX version 2 (4 bpp nativo)."""
+    pr = rle_priority(pic.pri)
+    p2 = rle_priority(sprite_priority(pic.pri))
+    pm = pmax_plane(sprite_priority(pic.pri))
+    hdr = bytearray(HDR)
+    hdr[0:4] = MAGIC
+    hdr[4] = 2
+    struct.pack_into('<H', hdr, 6, W)
+    hdr[8] = H
+    struct.pack_into('<H', hdr, 10, len(pr))
+    struct.pack_into('<H', hdr, 12, len(p2))
+    struct.pack_into('<H', hdr, 14, len(pm))
+    return bytes(hdr) + pack4(pic) + pr + p2 + pm
+
+
+def read_back4(data):
+    """Verificador de la version 2: (codigos de Chroma por lineas, prioridad, prioridad de sprites) solo desde el fichero."""
+    assert data[:4] == MAGIC and data[4] == 2
+    rows = []
+    for y in range(H):
+        line = []
+        for b in data[HDR + y * (W // 2):HDR + (y + 1) * (W // 2)]:
+            line.extend((b >> 4, b & 15))
+        rows.append(line)
+    o = HDR + PLANE4
+    pl = struct.unpack_from('<H', data, 10)[0]
+    p2l = struct.unpack_from('<H', data, 12)[0]
+    return rows, unrle_priority(data[o:o + pl]), unrle_priority(data[o + pl:o + pl + p2l])
+
+
 def read_back(data):
     """Verificador: reconstruye (codigos de Chroma por lineas, prioridad) solo desde el fichero."""
     assert data[:4] == MAGIC
@@ -207,6 +255,13 @@ def read_back(data):
     p2l = struct.unpack_from('<H', data, 12)[0]
     p2 = data[HDR + 2 * PLANE + pl:HDR + 2 * PLANE + pl + p2l]
     return rows, unrle_priority(pr), unrle_priority(p2)
+
+
+def build_any(pic, gfx4):
+    """(fichero, reconstruccion esperada, pixeles cambiados); en 4 bpp la imagen no se cuantifica: 0 cambiados."""
+    if not gfx4:
+        return build(pic)
+    return build4(pic), [[to_chroma(pic.vis[y * W + x]) for x in range(W)] for y in range(H)], 0
 
 
 def ovl_name(base):
@@ -240,6 +295,7 @@ def overlay_pairs(g):
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith('--')]
     png = '--png' in argv
+    gfx4 = '--gfx4' in argv
     if len(args) < 2:
         print(__doc__)
         return 1
@@ -259,15 +315,15 @@ def main(argv):
         except (IndexError, ValueError) as e:
             print('PIC %d: error %s' % (k, e))
             continue
-        data, rec, b = build(pic)
-        rows, pri, pri2 = read_back(data)
+        data, rec, b = build_any(pic, gfx4)
+        rows, pri, pri2 = (read_back4 if gfx4 else read_back)(data)
         assert rows == rec and pri == pic.pri and pri2 == sprite_priority(pic.pri), 'PIC %d: el fichero no reproduce la conversion' % k
         with open(os.path.join(out, 'PIC', 'PIC%03d.GFX' % k), 'wb') as f:
             f.write(data)
         if png:
             img = [[CHROMA[v] for v in r] for r in rec]
-            ag.write_png(os.path.join(out, 'pic%03d.png' % k), img, HW, H)
-        tot += HW * H
+            ag.write_png(os.path.join(out, 'pic%03d.png' % k), img, W if gfx4 else HW, H)
+        tot += (W if gfx4 else HW) * H
         bad += b
         n += 1
         sizes.append(len(data))
@@ -276,13 +332,13 @@ def main(argv):
         if d1 is None or d2 is None:
             continue
         pic = ag.Picture(d2, ag.Picture(d1))
-        data, rec, b = build(pic)
-        rows, pri, pri2 = read_back(data)
+        data, rec, b = build_any(pic, gfx4)
+        rows, pri, pri2 = (read_back4 if gfx4 else read_back)(data)
         assert rows == rec and pri == pic.pri and pri2 == sprite_priority(pic.pri), 'PIC %d+%d: el fichero no reproduce la conversion' % (base, ov)
         with open(os.path.join(out, 'PIC', ovl_name(base)), 'wb') as f:
             f.write(data)
         if png:
-            ag.write_png(os.path.join(out, 'ovl%03d.png' % base), [[CHROMA[v] for v in r] for r in rec], HW, H)
+            ag.write_png(os.path.join(out, 'ovl%03d.png' % base), [[CHROMA[v] for v in r] for r in rec], W if gfx4 else HW, H)
         print('overlay.pic %d + %d -> %s (%d bytes)' % (base, ov, ovl_name(base), len(data)))
     print('%s: %d imagenes, %d bytes en total (media %d, maximo %d); pixeles cambiados %.2f%%; verificadas contra el fichero' % (
         os.path.basename(args[0].rstrip('/\\')), n, sum(sizes), sum(sizes) // max(n, 1), max(sizes), 100.0 * bad / max(tot, 1)))
