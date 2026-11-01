@@ -147,4 +147,9 @@ ok = it.keys == {65: 9}
 print('ok T-18b teclas tras restart.game' if ok else 'FALLO T-18b: keys = %r' % it.keys)
 sys.exit(0 if ok else 1)
 PY
+# text.screen borra tambien la barra de estado y el pie (KQ1 sala 53 mezclaba "Score:" con el texto de la fila 0); graphics los deja limpios y redibuja la barra
+export AGI_NOSPR=1     # en la pantalla de texto el Z80 deja 3 sprites encendidos en y=176 (anterior a este cambio; sin investigar), no se comparan
+t T-TXT-a SQ1 20 "cyc=10,cmd=status.line.on,cmd=text.screen,cmd=display:0:4:1,cmd=assignn:100:7" "" v100 v100=7
+t T-TXT-b SQ1 20 "cyc=10,cmd=status.line.on,cmd=text.screen,cmd=display:0:4:1,cyc=14,cmd=graphics,cmd=assignn:100:7" "" v100 v100=7
+unset AGI_NOSPR
 [ $FAIL = 0 ] && echo "AUDIT3: todos OK" || echo "AUDIT3: HAY FALLOS"

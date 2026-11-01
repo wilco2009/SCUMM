@@ -7,7 +7,7 @@
                 include "agires.inc"
 
                 jp t_restart            ; OVC_RESTART
-                jp t_invtxt             ; OVC_INVTXT
+                jp t_gfxfix             ; OVC_GFXFIX (antes OVC_INVTXT)
                 jp t_objdesc            ; OVC_OBJDESC
                 jp t_echo               ; OVC_ECHO
                 jp t_cancel             ; OVC_CANCEL
@@ -614,9 +614,9 @@ cc_s:           ld (curchar),a
                 ret
 
 ; text.screen: las filas de texto 1-21 (lineas 8-175) con el color de fondo del texto (set.text.attribute): bitmap a 0 y papel = tinta = ese color
-t_textscr:      ld hl,HR_BM+256
-                ld de,HR_BM+257
-                ld bc,5375
+t_textscr:      ld hl,HR_BM             ; cmdTextScreen: clearLines(0, 24, fondo): las 24 filas, con la barra de estado y el pie
+                ld de,HR_BM+1
+                ld bc,6143
                 ld (hl),0
                 ldir
                 ld a,(tbg)
@@ -632,11 +632,45 @@ t_textscr:      ld hl,HR_BM+256
                 rlca
                 rlca
                 or c
-                ld hl,HR_ATT+256
-                ld de,HR_ATT+257
-                ld bc,5375
+                ld hl,HR_ATT
+                ld de,HR_ATT+1
+                ld bc,6143
                 ld (hl),a
                 ldir
+                ret
+
+; graphics (redrawScreen): clearDisplay(0) borra la barra de estado (fila 0) y el pie (filas 22 y 23); la barra y el prompt se redibujan en el ciclo siguiente
+t_gfxfix:       ld hl,HR_BM
+                ld de,HR_BM+1
+                ld bc,255
+                ld (hl),0
+                ldir
+                ld hl,HR_BM+22*256
+                ld de,HR_BM+22*256+1
+                ld bc,511
+                ld (hl),0
+                ldir
+                ld a,(ega2ch)
+                ld c,a
+                rlca
+                rlca
+                rlca
+                rlca
+                or c
+                ld hl,HR_ATT
+                ld de,HR_ATT+1
+                ld bc,255
+                ld (hl),a
+                ldir
+                ld hl,HR_ATT+22*256
+                ld de,HR_ATT+22*256+1
+                ld bc,511
+                ld (hl),a
+                ldir
+                xor a
+                ld (st_valid),a
+                inc a
+                ld (kb_dirty),a
                 ret
 
 ; distance(o1, o2, v): distancia entre dos objetos (suma de |dx| y |dy|; 255 si alguno no esta dibujado o pasa de 254)

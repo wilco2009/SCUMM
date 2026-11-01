@@ -972,7 +972,7 @@ class Interp:
         """La imagen de la sala con la superpuesta ya hecha (PICpnn.GFX en el Z80): se redibuja como graphics (los textos y los objetos fijos se rehacen)."""
         self.ovl_n = self.vars[v]
         self.ovl_pairs.add((self.lastpic, self.ovl_n))
-        self.c_graphics()
+        self.redraw_pic()
 
     # ------------------------------------------------------------ objetos animados
     def c_animate_obj(self, n):
@@ -1463,8 +1463,17 @@ class Interp:
         self.txtm = True
         for r in range(1, 22):
             self.pic_ops.append(('f', r, self.tbg))          # con el color de fondo del texto (set.text.attribute)
+        for r in (0, 22, 23):                                # cmdTextScreen: clearLines(0, 24, fondo): tambien la barra de estado y el pie
+            agi_text.fill_row(self.ext_bm, self.ext_at, 0, r, self.tbg)
 
     def c_graphics(self):
+        """cmdGraphics = redrawScreen: clearDisplay(0), la imagen, la barra de estado (statusDraw) y el prompt (promptRedraw)."""
+        for r in (0, 22, 23):
+            agi_text.fill_row(self.ext_bm, self.ext_at, 0, r, 0)
+        self.st_last = None
+        self.redraw_pic()
+
+    def redraw_pic(self):
         self.txtm = False
         if self.pic is None:                # sin imagen dibujada no hay nada que rehacer
             return

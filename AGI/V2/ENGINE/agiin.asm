@@ -320,7 +320,9 @@ h_text_screen:  ld a,1
                 call OVL_SPRINIT
                 ld hl,OVC_TEXTSCR
                 jp call_c
-h_graphics:     xor a
+h_graphics:     ld hl,OVC_GFXFIX
+                call call_c
+hg_go:          xor a
                 ld (txtm),a
                 ld a,(picvalid)         ; sin imagen dibujada no hay nada que rehacer
                 or a
@@ -330,7 +332,7 @@ h_graphics:     xor a
 ; overlay.pic: la imagen de la sala con la que se le superpone ya hecha (PIC/PICAnn.GFX, TOOLS/agi2hr.py), redibujada como graphics
 h_overlay_pic:  ld a,1
                 ld (ovl_on),a
-                jp h_graphics
+                jp hg_go
 txtm:           defb 0
 hk_seen:        defb 0
 ; shake.screen(n): n sacudidas de 8 fotogramas con el fino X (POKE 2090) y el fino Y (registro 8 del puerto $3FEF) del hardware; al acabar, a 0. Esta en el

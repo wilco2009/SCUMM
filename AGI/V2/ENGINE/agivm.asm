@@ -156,7 +156,7 @@ OVD_PREP        equ $2003
 OVD_CONF        equ $2006
 OVD_DO          equ $2009
 OVC_RESTART     equ $2000               ; overlay C (restart.game, status, show.obj): tambien con call_c
-OVC_INVTXT      equ $2003
+OVC_GFXFIX      equ $2003
 OVC_OBJDESC     equ $2006
 MAXW            equ 6
 LPAGE0          equ 16
