@@ -13,6 +13,7 @@
 ;           $7300 objetos  $7700 argumentos y cadenas  $7E60 fin de los datos   $8000 pila y ventana de la logica
 ; =====================================================================
 
+                include "gfx4.inc"
                 org 16896
                 jp start
                 defs 16914-$
@@ -322,6 +323,21 @@ video_init:     ld a,85
                 ld (2043),a
                 ld a,HR_BM>>8
                 ld (2044),a             ; HFILE = bitmap
+                IF GFX4
+                ld a,1
+                ld (2070),a             ; ventana de imagen: filas de texto 1-21 (lineas 8-175)
+                ld a,22
+                ld (2071),a
+                xor a
+                ld (2069),a             ; sin plano de texto (lo activa el texto, fase 4)
+                ld a,176
+                ld (2045),a             ; 160x200 a 4 bpp
+                ld hl,HR_BM
+                ld de,HR_BM+1
+                ld bc,PLANE4-1
+                ld (hl),0
+                ldir
+                ELSE
                 ld a,171
                 ld (2045),a             ; Superfast HiRes nativo
                 ld hl,HR_BM
@@ -334,6 +350,7 @@ video_init:     ld a,85
                 ld bc,$1FFF
                 ld (hl),0
                 ldir
+                ENDIF
                 ld bc,$7FEF
                 ld a,$20                ; Chroma, modo 0
                 out (c),a

@@ -338,6 +338,7 @@ gb_go:          ld a,1
                 ld (pr_l),a
                 ld a,8
                 ld (pr_k),a
+                IF GFX4=0
 gb_l:           ld a,(pr_l)
                 call pr_addr
                 inc hl
@@ -362,6 +363,7 @@ gb_a:           ld (hl),a
                 ld hl,pr_k
                 dec (hl)
                 jr nz,gb_l
+                ENDIF
                 ld hl,TXT
                 ld (bs_dp),hl
                 xor a
@@ -597,6 +599,7 @@ tp_dr:          ld a,1                  ; lo que se escribe aqui no pasa a la co
                 ld (pr_k),a
                 ld a,(pr_l0)
                 ld (pr_l),a
+                IF GFX4=0
 tp_f:           ld a,(pr_l)             ; relleno: bitmap 0, atributos papel blanco y tinta roja
                 call pr_addr
                 ld de,HR_BM
@@ -622,6 +625,7 @@ tp_fa:          ld (hl),a
                 ld hl,pr_k
                 dec (hl)
                 jr nz,tp_f
+                ENDIF
                 xor a                   ; el texto
                 ld (pr_i),a
 tp_t:           ld a,(pr_i)
@@ -667,7 +671,9 @@ tp_t:           ld a,(pr_i)
 tp_tn:          ld hl,pr_i
                 inc (hl)
                 jr tp_t
-tp_bd:          ld a,(pr_l0)            ; marco: linea de arriba y de abajo enteras
+tp_bd:
+                IF GFX4=0
+ld a,(pr_l0)            ; marco: linea de arriba y de abajo enteras
                 call pr_addr
                 ld de,HR_BM
                 add hl,de
@@ -700,6 +706,7 @@ tp_s:           ld a,(pr_l)
                 ld hl,pr_k
                 dec (hl)
                 jr nz,tp_s
+                ENDIF
                 xor a
                 ld (dl_nobg),a
                 ret

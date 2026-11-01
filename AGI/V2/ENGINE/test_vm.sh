@@ -3,6 +3,13 @@
 #   sh test_vm.sh [JUEGO] [CICLOS] ["guion de eventos"]       (por defecto SQ1 y 100; necesita V2/ENGINE/test/build/test_scumm.exe en SCUMM)
 set -e
 cd "$(dirname "$0")"
+# GFX4=1: modo 160w (AGI/PLAN160W.md); gfx4.inc queda a 0 al acabar (es el binario de master)
+printf 'GFX4            equ %s
+' "${GFX4:-0}" > gfx4.inc
+trap 'printf "GFX4            equ 0
+" > gfx4.inc' EXIT
+GFX=""; [ "${GFX4:-0}" = 1 ] && GFX="--gfx4"
+export GFX4=${GFX4:-0}
 G=${1:-SQ1}
 N=${2:-100}
 SCRIPT=${3:-}
@@ -25,7 +32,7 @@ mkdir -p ../dump/$G
 rm -rf ../dump/$G/log
 python ../TOOLS/agi2log.py ../$G ../dump/$G/log > /dev/null
 python ../TOOLS/agi_vm.py ../$G --quiet --cycles $N --script "$SCRIPT" --listpics ../dump/$G/pics.txt > /dev/null
-python ../TOOLS/agi2hr.py ../$G ../dump/$G/log $(cat ../dump/$G/pics.txt) > /dev/null
+python ../TOOLS/agi2hr.py ../$G ../dump/$G/log $(cat ../dump/$G/pics.txt) $GFX > /dev/null
 python ../TOOLS/agi2spr.py ../$G ../dump/$G/log > /dev/null
 python ../TOOLS/mkovl.py agia.bin ../dump/$G/log/DATA/OVERA.OVL
 python ../TOOLS/mkovl.py agib.bin ../dump/$G/log/DATA/OVERB.OVL

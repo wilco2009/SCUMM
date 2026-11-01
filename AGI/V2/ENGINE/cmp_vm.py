@@ -57,6 +57,21 @@ def main(argv):
     if it.pic is not None and not b('picvalid'):
         print('pantalla: el Z80 no dibujo la imagen')
         bad = 1
+    elif os.environ.get('GFX4') == '1':
+        # modo GFX4 (fase 2): la imagen de 160x168 a 4 bpp en $A000 es la del modelo (sin sprites ni texto, que aun no estan en 160w; con objetos fijos no se compara)
+        import agi2hr
+        if any(op[0] == 's' for op in it.pic_ops):
+            print('pantalla 4 bpp: omitida (hay objetos fijos: add.to.pic, fase 3)')
+        else:
+            img, _ = it.render4()
+            exp = bytes(((img[i] << 4) | img[i + 1]) for i in range(0, 160 * 168, 2))
+            zz = mem[0xA000:0xA000 + len(exp)]
+            dd = [i for i, (x, y) in enumerate(zip(zz, exp)) if x != y and i not in (0x2FF8, 0x2FF9)]      # $CFF8: direccion de retorno del arnes
+            if dd:
+                print('pantalla 4 bpp: %d bytes distintos; primeros (linea, byte): %s' % (len(dd), [(i // 80, i % 80) for i in dd[:8]]))
+                bad = 1
+            else:
+                print('pantalla 4 bpp: coincide (160x168, %d bytes)' % len(exp))
     else:
         bm, at = it.screen()
         if os.environ.get('MODEL_PNG'):                  # depuracion: la pantalla del modelo a PNG

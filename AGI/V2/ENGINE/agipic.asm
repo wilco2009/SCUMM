@@ -12,6 +12,7 @@ HR_ATT          equ $C000
 PLANEB          equ 168*32
 PRI_RLE         equ LWIN+336            ; el RLE empieza tras el indice de 168 filas (u16)
 PRI_MAX         equ 7800
+PLANE4          equ 168*80              ; GFX4: imagen de 160x168 a 4 bpp, en HR_BM (la linea 0 de la imagen es la linea 8 de la pantalla)
 
 h_draw_pic:     call clr_static
                 xor a
@@ -66,6 +67,15 @@ lp_o:           ld (fh),a
                 or a
                 sbc hl,bc
                 jp nc,lp_bad
+                IF GFX4
+                ld a,(MSGBUF+4)
+                cp 2                    ; PICnnn.GFX version 2 (agi2hr.py --gfx4)
+                jp nz,lp_bad
+                ld a,(fh)
+                ld hl,HR_BM
+                ld bc,PLANE4
+                call f_read_n
+                ELSE
                 ld a,(fh)
                 ld hl,HR_BM+256
                 ld bc,PLANEB
@@ -74,6 +84,7 @@ lp_o:           ld (fh),a
                 ld hl,HR_ATT+256
                 ld bc,PLANEB
                 call f_read_n
+                ENDIF
                 ld a,PG_PRI
                 call map_page
                 ld a,(fh)

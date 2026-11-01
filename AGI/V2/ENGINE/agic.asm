@@ -452,7 +452,11 @@ pic_open:       ld a,(oc_vw)
                 ret
 
 ; el dibujo del objeto en la ventana ya pintada: los mosaicos de la celda sobre el bitmap (fila completa: sus colores; fila con huecos: solo la tinta sobre papel blanco)
-t_objpic:       call pic_open
+t_objpic:
+                IF GFX4
+                ret
+                ENDIF
+                call pic_open
                 ret z
                 ld a,(MSGBUF+1)
                 add a,7
@@ -614,7 +618,11 @@ cc_s:           ld (curchar),a
                 ret
 
 ; text.screen: las filas de texto 1-21 (lineas 8-175) con el color de fondo del texto (set.text.attribute): bitmap a 0 y papel = tinta = ese color
-t_textscr:      ld hl,HR_BM             ; cmdTextScreen: clearLines(0, 24, fondo): las 24 filas, con la barra de estado y el pie
+t_textscr:
+                IF GFX4
+                ret
+                ENDIF
+                ld hl,HR_BM             ; cmdTextScreen: clearLines(0, 24, fondo): las 24 filas, con la barra de estado y el pie
                 ld de,HR_BM+1
                 ld bc,6143
                 ld (hl),0
@@ -640,7 +648,9 @@ t_textscr:      ld hl,HR_BM             ; cmdTextScreen: clearLines(0, 24, fondo
                 ret
 
 ; graphics (redrawScreen): clearDisplay(0) borra la barra de estado (fila 0) y el pie (filas 22 y 23); la barra y el prompt se redibujan en el ciclo siguiente
-t_gfxfix:       ld hl,HR_BM
+t_gfxfix:
+                IF GFX4=0
+       ld hl,HR_BM
                 ld de,HR_BM+1
                 ld bc,255
                 ld (hl),0
@@ -667,6 +677,7 @@ t_gfxfix:       ld hl,HR_BM
                 ld bc,511
                 ld (hl),a
                 ldir
+                ENDIF
                 xor a
                 ld (st_valid),a
                 inc a

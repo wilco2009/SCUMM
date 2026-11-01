@@ -16,9 +16,13 @@ PG_VC0          equ 33
 NVSLOT          equ 8
 
 render:         call OVL_SORT           ; A1: orden de los objetos; A2 (call_e): rotulos por software; A1: sprites
+                IF GFX4
+                ret                     ; fase 2 de AGI/PLAN160W.md: aun sin sprites en 160w
+                ELSE
                 ld hl,OVE_RUN
                 call call_e
                 jp OVL_DRAW
+                ENDIF
 
 ; El A2 esta mapeado en lugar del A1: el teclado lo lee el A1 un momento
 kp_a2:          push af
@@ -60,8 +64,10 @@ ov_tail:        ld b,PG_OVL
                 ld a,h
                 or l
                 jr nz,ol_nb
+                IF GFX4=0
                 ld a,168+4              ; POKE 2057, 168 + bloque delantero (el 4; el HFILE esta en el 5)
                 ld (2057),a
+                ENDIF
 ol_nb:          jp OVL_SPRINIT
 ov_one:         ld a,b
                 ld (ov_pg),a

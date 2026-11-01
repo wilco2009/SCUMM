@@ -468,6 +468,7 @@ mi_ns:          ld a,b
                 ld (m_l),a
                 ld a,8
                 ld (m_k),a
+                IF GFX4=0
 mf_l:           ld a,(m_l)
                 call pr_addr
                 ld de,HR_BM
@@ -493,6 +494,7 @@ mf_a:           ld (hl),a
                 ld hl,m_k
                 dec (hl)
                 jr nz,mf_l
+                ENDIF
                 ld hl,(m_ep)            ; el texto: " " + texto + relleno + " "
                 ld e,(hl)
                 inc hl

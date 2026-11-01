@@ -43,7 +43,11 @@ dl_fit:         ld a,(dl_col)
                 add a,b
                 add a,a
                 ld (dl_x0),a            ; x0 = col * 6
-draw_line_px:   ld a,(dl_x0)            ; (entrada con x0 en pixeles: las ventanas)
+draw_line_px:
+                IF GFX4
+                ret
+                ENDIF
+                ld a,(dl_x0)            ; (entrada con x0 en pixeles: las ventanas)
                 rrca
                 rrca
                 rrca
@@ -235,7 +239,11 @@ dl_next:        ld hl,dl_j
                 jp text_bg
 
 ; dl_row = fila, A = color EGA: la rellena (bitmap 0, papel = tinta = color)
-fill_row:       call t_chroma
+fill_row:
+                IF GFX4
+                ret
+                ENDIF
+                call t_chroma
                 ld c,a
                 rlca
                 rlca
@@ -280,7 +288,11 @@ fr_a:           ld (hl),a
                 jp text_bg
 
 ; Texto escrito sobre la imagen (filas 1-21): dl_row, dl_ca, dl_nb pasan de la pantalla a la copia de fondo y los rotulos se recomponen
-text_bg:        ld a,(dl_nobg)
+text_bg:
+                IF GFX4
+                ret
+                ENDIF
+                ld a,(dl_nobg)
                 or a
                 ret nz
                 ld a,(picvalid)
@@ -357,7 +369,11 @@ pr_addr:        ld l,a
 
 
 ; La imagen limpia (copia de fondo) en el rectangulo de la ventana
-t_boxclose:     ld a,(picvalid)
+t_boxclose:
+                IF GFX4
+                ret
+                ENDIF
+                ld a,(picvalid)
                 or a
                 ret z
                 ld a,PG_BGB

@@ -16,7 +16,22 @@
 
 
 ; La imagen que acaba de dibujarse (en la pantalla) pasa a las paginas de fondo; ningun rotulo esta puesto
-t_bgsave:       ld a,PG_BGB
+t_bgsave:
+                IF GFX4
+                ld a,PG_BGB             ; los primeros 8192 bytes de la imagen de 4 bpp a una pagina y el resto (5248) a la otra
+                call map_page
+                ld hl,HR_BM
+                ld de,LWIN
+                ld bc,8192
+                ldir
+                ld a,PG_BGA
+                call map_page
+                ld hl,HR_BM+8192
+                ld de,LWIN
+                ld bc,PLANE4-8192
+                ldir
+                ELSE
+                ld a,PG_BGB
                 call map_page
                 ld hl,HR_BM+256
                 ld de,LWIN
@@ -28,6 +43,7 @@ t_bgsave:       ld a,PG_BGB
                 ld de,LWIN
                 ld bc,PLANEB
                 ldir
+                ENDIF
                 call unmap_win
                 ld ix,OBJ
                 ld de,32
