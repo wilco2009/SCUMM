@@ -87,9 +87,9 @@ dl_fit:         ld a,(dl_n)
                 ld b,a
                 ld a,(dl_bg)
                 or a
-                ld c,0
+                ld c,128                ; fondo 0: blanco sobre negro (inverso); cualquier otro: negro sobre blanco
                 jr z,dlw_n
-                ld c,128
+                ld c,0
 dlw_n:          push bc
                 ld a,(dl_row)
                 ld hl,dl_col
@@ -113,9 +113,9 @@ dlw_o:          or c
 
 ; dl_row = fila, A = color EGA: la rellena de espacios (negros si el color es 0, blancos si no)
 fill_row:       and 15
-                ld c,32
+                ld c,160                ; color 0: espacios inversos (negros); si no, blancos
                 jr z,fr_c
-                ld c,160
+                ld c,32
 fr_c:           ld a,(dl_row)
                 ld b,0
                 call tp_addr

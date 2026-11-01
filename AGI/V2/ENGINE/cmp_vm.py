@@ -74,9 +74,9 @@ def main(argv):
                 print('pantalla 4 bpp: coincide (160x168, %d bytes)' % len(exp))
         tpl = bytearray(it.plane())
         zt = bytearray(mem[0xA000 + 168 * 80:0xA000 + 168 * 80 + 1000])
-        for pl in (tpl, zt):                            # fuera de la ventana de la imagen, un espacio normal (negro) y una celda transparente se ven igual (el borde es negro)
+        for pl in (tpl, zt):                            # fuera de la ventana de la imagen, un espacio inverso (negro) y una celda transparente se ven igual (el borde es negro)
             for i in list(range(0, 40)) + list(range(22 * 40, 1000)):
-                if pl[i] == 32:
+                if pl[i] == 160:
                     pl[i] = 0
         dt = [i for i, (x, y) in enumerate(zip(zt, tpl)) if x != y]
         if dt:

@@ -341,8 +341,8 @@ video_init:     ld a,85
                 ld (2069),a             ; sin plano de texto (lo activa el texto, fase 4)
                 ld a,176
                 ld (2045),a             ; 160x200 a 4 bpp
-                ld a,$0F
-                ld (2068),a             ; texto: papel 0, tinta 15 (el inverso, con el bit 7 del codigo, es negro sobre blanco)
+                ld a,$F0
+                ld (2068),a             ; texto: papel 15, tinta 0: negro sobre blanco (el inverso, con el bit 7 del codigo, es blanco sobre negro)
                 ld hl,HR_BM
                 ld de,HR_BM+1
                 ld bc,PLANE4+1000-1     ; la imagen y el plano de texto
