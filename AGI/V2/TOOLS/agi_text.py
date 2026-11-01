@@ -19,12 +19,12 @@ COLS, ROWS = (40 if GFX4 else 42), 24
 
 
 class TextPlane(bytearray):
-    """GFX4: los 40 x 25 codigos del plano de texto (fila * 40 + columna). 0 = celda transparente; 32-127 = el caracter en negro sobre blanco; +128 = blanco sobre negro
-    (la FPGA solo tiene un par de colores: fondo 0 = inverso, cualquier otro = negro sobre blanco)."""
+    """GFX4: los 40 x 25 codigos del plano de texto (fila * 40 + columna). 0 = celda transparente; 32-127 = el caracter en blanco sobre negro; +128 = negro sobre blanco
+    (la FPGA solo tiene un par de colores: fondo 0 = normal, cualquier otro = inverso)."""
 
 
 def plane_put(tp, row, col, text, bg):
-    inv = 0 if bg & 15 else 128
+    inv = 128 if bg & 15 else 0
     for i, ch in enumerate(text[:max(0, 40 - col)]):
         o = ord(ch)
         tp[row * 40 + col + i] = (o if 32 <= o <= 127 else 32) | inv
@@ -32,7 +32,7 @@ def plane_put(tp, row, col, text, bg):
 
 def plane_fill(tp, row, col, n, bg):
     for i in range(col, min(col + n, 40)):
-        tp[row * 40 + i] = 32 if bg & 15 else 160
+        tp[row * 40 + i] = 160 if bg & 15 else 32
 
 
 def plot_hr(bm, at, y, x, c):

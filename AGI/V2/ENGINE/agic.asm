@@ -764,9 +764,9 @@ t_textscr:
                 IF GFX4
                 ld a,(tbg)              ; 160w: las 24 filas de texto con espacios del color de fondo (negros o blancos)
                 and 15
-                ld a,160
-                jr z,tsg_c
                 ld a,32
+                jr z,tsg_c
+                ld a,160
 tsg_c:          ld hl,TPLANE
                 ld de,TPLANE+1
                 ld bc,24*40-1
@@ -802,7 +802,7 @@ tsg_c:          ld hl,TPLANE
 ; graphics (redrawScreen): clearDisplay(0) borra la barra de estado (fila 0) y el pie (filas 22 y 23); la barra y el prompt se redibujan en el ciclo siguiente
 t_gfxfix:
                 IF GFX4
-                ld a,160                ; 160w: barra de estado y pie en negro (espacios inversos)
+                ld a,32                 ; 160w: barra de estado y pie en negro
                 ld hl,TPLANE
                 ld de,TPLANE+1
                 ld bc,39

@@ -333,10 +333,6 @@ t_prompt:       ld a,22                 ; la linea de entrada en la fila 22, com
                 ld a,(accin)
                 or a
                 ret z
-                IF GFX4
-                ld a,15                 ; 160w: la linea de entrada en negro sobre blanco, como el resto del texto
-                call fill_row
-                ENDIF
                 ld hl,TXT
                 ld (bs_dp),hl
                 xor a
@@ -349,21 +345,12 @@ t_prompt:       ld a,22                 ; la linea de entrada en la fila 22, com
                 call put_str
                 ld a,(curchar)
                 call bs_put
-                IF GFX4
-                xor a
-                call t_chroma
-                ld (dl_fg),a
-                ld a,15
-                call t_chroma
-                ld (dl_bg),a
-                ELSE
                 ld a,15
                 call t_chroma
                 ld (dl_fg),a
                 xor a
                 call t_chroma
                 ld (dl_bg),a
-                ENDIF
                 ld hl,TXT
                 ld (dl_ptr),hl
                 ld a,(bs_n)
@@ -447,7 +434,7 @@ gb_go:          ld a,1
                 ld b,(hl)
                 inc b
                 ld e,24
-                ld c,160                ; el cuadro negro (espacios inversos)
+                ld c,32
                 call tp_fill
                 ENDIF
                 ld a,(pr_top)

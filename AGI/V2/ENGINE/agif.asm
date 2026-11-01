@@ -475,11 +475,11 @@ mi_ns:          ld a,b
                 ld a,8
                 ld (m_k),a
                 IF GFX4
-                ld a,(m_attr)           ; relleno de la fila del elemento: espacios blancos (fondo distinto de 0) o negros (inversos)
+                ld a,(m_attr)           ; relleno de la fila del elemento: espacios blancos (fondo distinto de 0) o negros
                 and $F0
-                ld c,160
-                jr z,mfg_c
                 ld c,32
+                jr z,mfg_c
+                ld c,160
 mfg_c:          ld hl,pr_cxl
                 ld b,(hl)
                 ld a,(pr_bw)
