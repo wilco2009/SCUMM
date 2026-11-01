@@ -30,9 +30,9 @@ t_bgsave:       ld a,PG_BGB
 s4_force:       defb 0                  ; 1 = recomponer los rotulos aunque no cambien (tras un add.to.pic)
 
 ; ---------------------------------------------------------------------
-;  Un objeto IX (con cel_open ya hecho: cv_* puestos y la pagina del bucle mapeada): sus mosaicos a la imagen. Deja el rectangulo en s4_bx0, s4_nb, s4_y0, s4_y1.
+;  Un objeto IX (con cel_open ya hecho: cv_* puestos y la pagina del bucle mapeada): su rectangulo en s4_bx0, s4_nb (bytes), s4_y0, s4_y1 (lineas, recortadas a la imagen)
 ; ---------------------------------------------------------------------
-s4_draw:        ld a,(ix+O_Y)
+s4_geom:        ld a,(ix+O_Y)
                 cp 168
                 jr c,sd_a
                 ld a,167
@@ -49,7 +49,6 @@ sd_a:           ld (s4_y1),a            ; linea de abajo (la y del objeto)
                 jr sd_s
 sd_z:           xor a
 sd_s:           ld (s4_y0),a            ; linea de arriba (recortada)
-                ld (s4_yc),a
                 ld a,(ix+O_X)           ; byte de la izquierda y bytes que ocupa
                 srl a
                 ld (s4_bx0),a
@@ -66,7 +65,32 @@ sd_xd:          srl a
                 sub (hl)
                 inc a
                 ld (s4_nb),a
-sd_row:         ld a,(s4_yc)            ; rel = linea - y + alto - 1
+                ret
+
+; el objeto IX (cel_open hecho) directamente en la pantalla (add.to.pic)
+s4_draw:        call s4_geom
+                ld a,(s4_y0)
+                ld (s4_yc),a
+sd_row:         ld a,(s4_yc)            ; direccion de la linea: HR_BM + 80 * linea
+                call s4_off
+                ld de,HR_BM
+                add hl,de
+                ld (s4_rowp),hl
+                ld a,(s4_yc)
+                add a,8
+                ld (sw_y),a
+                call sw_prow            ; PROW = prioridad de la imagen (y de los add.to.pic anteriores) en esa linea
+                call s4_orow
+                ld a,(s4_yc)
+                ld hl,s4_y1
+                cp (hl)
+                ret nc
+                inc a
+                ld (s4_yc),a
+                jr sd_row
+
+; la linea s4_yc del objeto IX (cel_open hecho; PROW de esa linea hecho) en la linea que empieza en s4_rowp
+s4_orow:        ld a,(s4_yc)            ; rel = linea - y + alto - 1
                 sub (ix+O_Y)
                 ld b,a
                 ld a,(cv_h)
@@ -81,21 +105,12 @@ sd_row:         ld a,(s4_yc)            ; rel = linea - y + alto - 1
                 rrca
                 and 31
                 ld (s4_ty),a
-                ld a,(s4_yc)            ; direccion de la linea: HR_BM + 80 * linea
-                call s4_off
-                ld de,HR_BM
-                add hl,de
-                ld (s4_rowp),hl
-                ld a,(s4_yc)
-                add a,8
-                ld (sw_y),a
-                call sw_prow            ; PROW = prioridad de la imagen (y de los add.to.pic anteriores) en esa linea
                 ld iy,(cv_p)
                 ld a,(cv_n)
                 ld (s4_n),a
 sd_t:           ld a,(s4_n)
                 or a
-                jp z,sd_rn
+                ret z
                 dec a
                 ld (s4_n),a
                 ld a,(s4_ty)
@@ -134,13 +149,6 @@ sd_t:           ld a,(s4_n)
 sd_nt:          ld de,26
                 add iy,de
                 jr sd_t
-sd_rn:          ld a,(s4_yc)
-                ld hl,s4_y1
-                cp (hl)
-                ret nc
-                inc a
-                ld (s4_yc),a
-                jp sd_row
 
 ; los 8 pixeles de una fila de mosaico: s4_x (x del primero), s4_m (mascara), s4_p (dato: 1 = tinta), s4_c (tinta * 16 + papel), prioridad del objeto IX contra PROW
 s4_px:          ld b,$80
@@ -423,14 +431,45 @@ p1_nx:          ld hl,s4_i
                 ret z
                 xor a
                 ld (s4_force),a
-                call s4_restore_all
+; la zona que cambia = la union de los rectangulos de antes y de ahora; los rotulos de ahora, en orden, a la lista s4_lst (con su rectangulo nuevo en S4N)
+                ld a,255
+                ld (s4_ymin),a
+                ld (s4_xmin),a
+                xor a
+                ld (s4_ymax),a
+                ld (s4_xmax),a
+                ld (s4_nl),a
+                ld (s4_i),a
+u1_l:           ld a,(s4_i)
+                call s4_ix
+                bit 0,(ix+O_SDR)
+                jr z,u1_n
+                ld a,(s4_i)
+                call s4_sr
+                ld a,(hl)
+                ld (s4_bx0),a
+                inc hl
+                ld a,(hl)
+                ld (s4_nb),a
+                inc hl
+                ld a,(hl)
+                ld (s4_y0),a
+                inc hl
+                ld a,(hl)
+                ld (s4_y1),a
+                call s4_union
+u1_n:           ld hl,s4_i
+                inc (hl)
+                ld a,(hl)
+                cp NOBJ
+                jr c,u1_l
                 xor a
                 ld (s4_k3),a
-d1_l:           ld a,(hq_cnt)
+u2_l:           ld a,(hq_cnt)
                 ld hl,s4_k3
                 cp (hl)
-                ret z
-                ret c
+                jr z,u2_e
+                jr c,u2_e
                 ld e,(hl)
                 ld d,0
                 ld hl,ORD
@@ -440,11 +479,135 @@ d1_l:           ld a,(hq_cnt)
                 call s4_ix
                 call s4_isw
                 or a
-                jr z,d1_n
+                jr z,u2_n
                 call cel_open
-                jr c,d1_n
-                call s4_draw
+                jr c,u2_n
+                call s4_geom
                 call unmap_win
+                ld a,(s4_i)
+                call s4_sn
+                ld a,(s4_bx0)
+                ld (hl),a
+                inc hl
+                ld a,(s4_nb)
+                ld (hl),a
+                inc hl
+                ld a,(s4_y0)
+                ld (hl),a
+                inc hl
+                ld a,(s4_y1)
+                ld (hl),a
+                ld a,(s4_nl)
+                ld e,a
+                ld d,0
+                ld hl,s4_lst
+                add hl,de
+                ld a,(s4_i)
+                ld (hl),a
+                ld hl,s4_nl
+                inc (hl)
+                call s4_union
+u2_n:           ld hl,s4_k3
+                inc (hl)
+                jr u2_l
+u2_e:           ld a,(s4_ymax)
+                ld hl,s4_ymin
+                cp (hl)
+                jp c,cm_end             ; nada que recomponer (no hubo rectangulos)
+; cada linea de la zona se arma en LB4 (imagen limpia + los rotulos que la tocan) y pasa a la pantalla de una vez: no se ve la zona borrada
+                ld a,(s4_ymin)
+                ld (s4_yc),a
+cm_l:           ld a,(s4_yc)
+                call s4_bgrow           ; LB4 = la linea de la imagen limpia (bytes s4_xmin..s4_xmax)
+                ld a,(s4_yc)
+                add a,8
+                ld (sw_y),a
+                call sw_prow
+                ld hl,LB4
+                ld (s4_rowp),hl
+                xor a
+                ld (s4_k3),a
+cm_o:           ld a,(s4_nl)
+                ld hl,s4_k3
+                cp (hl)
+                jr z,cm_w
+                ld e,(hl)
+                ld d,0
+                ld hl,s4_lst
+                add hl,de
+                ld a,(hl)
+                ld (s4_i),a
+                call s4_sn              ; su rectangulo nuevo: la linea tiene que estar dentro
+                inc hl
+                inc hl
+                ld a,(s4_yc)
+                cp (hl)
+                jr c,cm_on
+                inc hl
+                ld a,(hl)
+                ld hl,s4_yc
+                cp (hl)
+                jr c,cm_on
+                ld a,(s4_i)
+                call s4_ix
+                call cel_open
+                jr c,cm_on
+                call s4_orow
+                call unmap_win
+cm_on:          ld hl,s4_k3
+                inc (hl)
+                jr cm_o
+cm_w:           ld a,(s4_yc)            ; LB4 a la pantalla
+                call s4_off
+                ld de,HR_BM
+                add hl,de
+                ld a,(s4_xmin)
+                ld e,a
+                ld d,0
+                add hl,de
+                ex de,hl
+                ld hl,LB4
+                ld a,(s4_xmin)
+                ld c,a
+                ld b,0
+                add hl,bc
+                ld a,(s4_xmax)
+                sub c
+                inc a
+                ld c,a
+                ld b,0
+                ldir
+                ld a,(s4_yc)
+                ld hl,s4_ymax
+                cp (hl)
+                jr nc,cm_end
+                inc a
+                ld (s4_yc),a
+                jp cm_l
+; el estado: los rotulos de la lista quedan puestos, los demas no
+cm_end:         xor a
+                ld (s4_i),a
+st_c:           ld a,(s4_i)
+                call s4_ix
+                res 0,(ix+O_SDR)
+                ld hl,s4_i
+                inc (hl)
+                ld a,(hl)
+                cp NOBJ
+                jr c,st_c
+                xor a
+                ld (s4_k3),a
+st_l:           ld a,(s4_nl)
+                ld hl,s4_k3
+                cp (hl)
+                ret z
+                ld e,(hl)
+                ld d,0
+                ld hl,s4_lst
+                add hl,de
+                ld a,(hl)
+                ld (s4_i),a
+                call s4_ix
                 set 0,(ix+O_SDR)
                 ld a,(s4_i)
                 call s4_ss
@@ -466,21 +629,90 @@ d1_l:           ld a,(hq_cnt)
                 ld a,(ix+O_PRI)
                 ld (hl),a
                 ld a,(s4_i)
+                call s4_sn
+                push hl
+                ld a,(s4_i)
                 call s4_sr
-                ld a,(s4_bx0)
-                ld (hl),a
-                inc hl
-                ld a,(s4_nb)
-                ld (hl),a
-                inc hl
-                ld a,(s4_y0)
-                ld (hl),a
-                inc hl
-                ld a,(s4_y1)
-                ld (hl),a
-d1_n:           ld hl,s4_k3
+                ex de,hl
+                pop hl
+                ld bc,4
+                ldir
+                ld hl,s4_k3
                 inc (hl)
-                jr d1_l
+                jr st_l
+
+; A = objeto -> HL = S4N + 4 * A (el rectangulo nuevo)
+s4_sn:          ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                ld de,S4N
+                add hl,de
+                ret
+
+; el rectangulo s4_bx0, s4_nb, s4_y0, s4_y1 a la union (s4_xmin, s4_xmax = ultimo byte, s4_ymin, s4_ymax)
+s4_union:       ld a,(s4_y0)
+                ld hl,s4_ymin
+                cp (hl)
+                jr nc,un_a
+                ld (hl),a
+un_a:           ld a,(s4_y1)
+                ld hl,s4_ymax
+                cp (hl)
+                jr c,un_b
+                ld (hl),a
+un_b:           ld a,(s4_bx0)
+                ld hl,s4_xmin
+                cp (hl)
+                jr nc,un_c
+                ld (hl),a
+un_c:           ld a,(s4_bx0)
+                ld hl,s4_nb
+                add a,(hl)
+                dec a
+                ld hl,s4_xmax
+                cp (hl)
+                ret c
+                ld (hl),a
+                ret
+
+; A = linea -> LB4 (bytes s4_xmin..s4_xmax) = esa linea de la imagen limpia
+s4_bgrow:       ld b,PG_BGB
+                cp 102
+                jr c,bg_p
+                sub 102
+                ld b,PG_BGA
+bg_p:           call s4_off
+                ld a,(s4_xmin)
+                ld e,a
+                ld d,0
+                add hl,de
+                ld de,$E000
+                add hl,de
+                push hl
+                ld a,b
+                call map7
+                pop hl
+                ld a,(s4_xmin)
+                ld e,a
+                ld d,0
+                ld de,LB4
+                ld a,(s4_xmin)
+                add a,e
+                ld e,a
+                jr nc,bg_n
+                inc d
+bg_n:           ld a,(s4_xmax)
+                ld c,a
+                ld a,(s4_xmin)
+                ld b,a
+                ld a,c
+                sub b
+                inc a
+                ld c,a
+                ld b,0
+                ldir
+                jp map7_back
 
 ; add.to.pic: SCR (una copia en BKO, con la pagina de su bucle en bk_pg) a la pantalla y al fondo limpio; los rotulos se recomponen despues (s4_force)
 t_bake:         ld a,PG_OVL
@@ -619,6 +851,14 @@ sw_pv:          defb 0
 sw_py:          defb 0
 S4R:            defs 4*NOBJ
 S4S:            defs 6*NOBJ
+S4N:            defs 4*NOBJ
+LB4:            defs 80
+s4_lst:         defs NOBJ
+s4_nl:          defb 0
+s4_ymin:        defb 0
+s4_ymax:        defb 0
+s4_xmin:        defb 0
+s4_xmax:        defb 0
 BKO:            defs 32                 ; copia de SCR (A1) y la pagina de su bucle: el add.to.pic que se pinta
 bk_pg:          defb 0
 bk_on:          defb 0
