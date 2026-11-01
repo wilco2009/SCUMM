@@ -13,7 +13,13 @@ O_SHL           equ 30
 O_SHH           equ 31
 
 ; A = pixel de AGI (0-160) -> HL = primer pixel HiRes de ese pixel: 8*(a/5) + (0,2,4,5,7)[a%5]
-lo16:           ld b,5
+lo16:
+                IF GFX4
+                ld l,a                  ; 160w: un pixel de AGI = un pixel
+                ld h,0
+                ret
+                ELSE
+                ld b,5
                 call div8
                 ld e,a
                 ld d,0
@@ -27,6 +33,7 @@ lo16:           ld b,5
                 add hl,hl
                 add hl,de
                 ret
+                ENDIF
 lo_t1:          defb 0,2,4,5,7
 
 ; A = pagina del bucle del objeto IX (ya buscada) -> NC con ella mapeada y cv_* puestos (celdas, ancho, alto, banderas, huella, mosaicos), o C si no hay celda (sin mapear)
@@ -97,6 +104,13 @@ hk_l:           sla c
                 ld a,h
                 or a
                 jr nz,hk_v              ; x >= 256: fuera de la pantalla
+                IF GFX4
+                ld a,l
+                cp 160
+                jr nc,hk_v              ; fuera de la imagen
+                push hl
+                ld h,0                  ; 160w: 1 pixel de AGI = 1 pixel
+                ELSE
                 push hl
                 ld d,0
                 ld e,l
@@ -109,6 +123,7 @@ hk_l:           sla c
                 rr l
                 srl h
                 rr l
+                ENDIF
                 ld de,PROW
                 add hl,de
                 ld a,(hl)

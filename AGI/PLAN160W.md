@@ -63,3 +63,10 @@ Tamano del nucleo (tope 11.008 B, hoy ~10.989): con GFX4=1 baja (sale `plot`+tab
 ## 7. Riesgos
 
 Un par de colores global en el plano de texto; ausencia de doble buffer (parpadeo en el barrido con el dibujo software); sitio de la tabla de glifos; +25 % de lectura de SD por imagen.
+
+## Estado (2026-11-01)
+
+- Fase 1 y 2: hechas (`755fa14`, `2471fb5`).
+- Fase 3 (sprites **hardware 8x8**, decision del usuario): `agi2spr.py` y `agi_vm.py` con `AGI_GFX4=1` (1 pixel AGI = 1 pixel del sprite, imagen desde la linea 0 de la ventana, sin `(5*x)>>3`);
+  Z80: `lo16`, `hg_okb`, `hx2ax`, limites y `hw_top` bajo `GFX4`. Z80 == modelo en SQ1 (14 sprites), KQ2 (28), PQ1 y KQ1, con prioridad por pixel. GFX4=0: binarios identicos.
+  **Pendiente (3b):** rotulos anchos (> `SW_TILES` mosaicos por fila) y `add.to.pic` se saltan (no se dibujan) en GFX4; hay que pintarlos por software en 4 bpp (agisw) sobre pantalla y fondo limpio.

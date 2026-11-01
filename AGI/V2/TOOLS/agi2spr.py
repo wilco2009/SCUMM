@@ -24,8 +24,11 @@ import agi2hr
 import agi_read as ag
 
 
+GFX4 = os.environ.get('AGI_GFX4') == '1'      # modo 160w (AGI/PLAN160W.md): 1 pixel de AGI = 1 pixel del sprite, sin estirar
+
+
 def lo(a):
-    return (8 * a + 4) // 5
+    return a if GFX4 else (8 * a + 4) // 5
 
 
 def cel_pixels(d, loop, cel):

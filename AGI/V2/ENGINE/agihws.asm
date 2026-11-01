@@ -453,7 +453,11 @@ so_np:          ld a,(cv_fl)
                 ld d,0
                 or a
                 sbc hl,de
+                IF GFX4
+                ld de,33                ; 160w: la imagen empieza en la linea 0 de la ventana: 1 + 32
+                ELSE
                 ld de,41                ; 8 (barra de estado) - 1 + 32
+                ENDIF
                 add hl,de
                 ld (hw_top),hl          ; y del hardware de la primera linea de la celda (con signo)
                 ld a,(picvalid)
@@ -489,7 +493,28 @@ so_np:          ld a,(cv_fl)
                 or a
                 jr z,hw_pl
                 ld l,255
-hw_pl:          ld h,0
+hw_pl:
+                IF GFX4
+                ld a,l                  ; 160w: l = x del ultimo pixel (255 si pasa); la prioridad solo existe hasta el pixel 159
+                cp 160
+                jr c,hw_pc
+                ld a,159
+hw_pc:          inc a
+                ld (hw_plim),a
+                dec a
+                rrca
+                rrca
+                rrca
+                and 31
+                ld (hw_bx1),a
+                ld a,(hw_X0)
+                rrca
+                rrca
+                rrca
+                and 31
+                ld (hw_bx0),a
+                ELSE
+                ld h,0
                 ld d,h
                 ld e,l
                 add hl,hl
@@ -530,6 +555,7 @@ hw_pl:          ld h,0
                 rrca
                 and 31
                 ld (hw_bx0),a
+                ENDIF
                 xor a
                 ld (hw_i),a
 hw_tl:          ld a,(hw_i)
@@ -552,6 +578,14 @@ hw_tl:          ld a,(hw_i)
                 ld hl,(hw_x0)
                 add hl,de
                 ld (hw_sx),hl
+                IF GFX4
+                ld a,h
+                or a
+                jr nz,hw_skip
+                ld a,l
+                cp 192
+                jr nc,hw_skip           ; x >= 192: fuera por la derecha (160w)
+                ELSE
                 ld a,h
                 cp 2
                 jr nc,hw_skip
@@ -560,6 +594,7 @@ hw_tl:          ld a,(hw_i)
                 ld a,l
                 cp 32
                 jr nc,hw_skip           ; x >= 288: fuera por la derecha
+                ENDIF
 hw_xok:         ld hl,(hw_p)
                 inc hl
                 ld a,(hl)               ; ty
@@ -578,8 +613,12 @@ hw_xok:         ld hl,(hw_p)
                 ld a,l
                 cp 25
                 jr c,hw_skip            ; y <= 24: fuera por arriba
+                IF GFX4
+                cp 200
+                ELSE
                 cp 224
-                jr nc,hw_skip           ; y >= 224: fuera por abajo
+                ENDIF
+                jr nc,hw_skip           ; y >= 224 (200 en 160w): fuera por abajo
                 ld (hw_sy),a
                 ld a,(hw_i)
                 ld (hw_tag+3),a
@@ -751,7 +790,11 @@ hg_cd:          ld a,c
                 ld d,0
                 ld hl,(hw_top)
                 add hl,de
+                IF GFX4
+                ld de,32
+                ELSE
                 ld de,40
+                ENDIF
                 or a
                 sbc hl,de
                 ld (hw_gb),hl
@@ -1149,7 +1192,9 @@ t_spclr:        xor a
                 ret
 
 ; HL = pixel HiRes -> A = pixel de AGI (5 * x / 8, a 255 como mucho)
-hx2ax:          ld d,h
+hx2ax:
+                IF GFX4=0
+                ld d,h
                 ld e,l
                 add hl,hl
                 add hl,hl
@@ -1160,6 +1205,7 @@ hx2ax:          ld d,h
                 rr l
                 srl h
                 rr l
+                ENDIF
                 ld a,h
                 or a
                 ld a,l

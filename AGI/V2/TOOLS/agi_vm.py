@@ -84,6 +84,8 @@ def skip_until(code, q, target):
 
 
 class Interp:
+    GFX4 = os.environ.get('AGI_GFX4') == '1'
+
     def __init__(self, path, quiet=False):
         self.path = path
         self.last_key = 0
@@ -216,6 +218,16 @@ class Interp:
         return c[0], c[1]
 
     # ------------------------------------------------------------ sprites (por hardware: ver agi2spr.py y ENGINE/agispr.asm)
+    # geometria: HiRes 8x1 = pixel AGI estirado x1,6 (ax = (5 * x) >> 3), imagen desde la linea 8, pantalla 256x192; GFX4 (160w) = 1:1, imagen desde la linea 0 de la ventana, 160x168
+    ROW0 = 0 if GFX4 else 8
+    XMAX = 192 if GFX4 else 288                 # coordenada de hardware (+32) desde la que el sprite cae fuera por la derecha
+    YMAX = 200 if GFX4 else 224
+    HXMAX = 159 if GFX4 else 255
+
+    @staticmethod
+    def agx(hx):
+        return hx if Interp.GFX4 else (5 * hx) >> 3
+
     def draw_order(self):
         """Numeros de los objetos con anim y drawn (prioridad < 16) en el orden en que se pintan, de abajo a arriba: por prioridad, a igual prioridad por y (el de
         mas abajo en la pantalla tapa al de mas arriba) y a igual y por numero."""
@@ -285,24 +297,24 @@ class Interp:
                 start = k
                 k = min(k + agi2spr.loop_maxt(d, o.loop), cap)
                 x0 = agi2spr.lo(o.x) + 32
-                top = 8 + o.y - h + 1 + 32
+                top = self.ROW0 + o.y - h + 1 + 32
                 for j, (tx, ty, col, pix, msk) in enumerate(tiles):
                     slot = start + j
                     if slot >= cap:
                         break
                     sx, sy = x0 + tx * 8, top + ty * 8
-                    if sx <= 24 or sx >= 288 or sy <= 24 or sy >= 224:
+                    if sx <= 24 or sx >= self.XMAX or sy <= 24 or sy >= self.YMAX:
                         continue
                     if pri2 is not None:
                         msk = list(msk)
                         for r in range(8):
-                            py = sy - 32 + r - 8
+                            py = sy - 32 + r - self.ROW0
                             if not 0 <= py < 168:
                                 continue
                             ok = 0
                             for kk in range(8):
                                 hx = sx - 32 + kk
-                                if hx < 0 or hx > 255 or pri2[py * 160 + ((5 * hx) >> 3)] <= o.pri:
+                                if hx < 0 or hx > self.HXMAX or pri2[py * 160 + self.agx(hx)] <= o.pri:
                                     ok |= 0x80 >> kk
                             msk[r] &= ok
                         if not any(msk):
@@ -338,22 +350,22 @@ class Interp:
             hrw, h, tiles = c
             pri2 = self.pri_plane()
             x0 = agi2spr.lo(o.x) + 32
-            top = 8 + o.y - h + 1 + 32
+            top = self.ROW0 + o.y - h + 1 + 32
             vis = False
             for (tx, ty, col, pix, msk) in tiles:
                 sx, sy = x0 + tx * 8, top + ty * 8
-                if sx <= 24 or sx >= 288 or sy <= 24 or sy >= 224:
+                if sx <= 24 or sx >= self.XMAX or sy <= 24 or sy >= self.YMAX:
                     continue
                 if pri2 is None:
                     vis = True
                     break
                 for r in range(8):
-                    py = sy - 32 + r - 8
+                    py = sy - 32 + r - self.ROW0
                     if not 0 <= py < 168:
                         continue
                     for kk in range(8):
                         hx = sx - 32 + kk
-                        if msk[r] & (0x80 >> kk) and (hx < 0 or hx > 255 or pri2[py * 160 + ((5 * hx) >> 3)] <= o.pri):
+                        if msk[r] & (0x80 >> kk) and (hx < 0 or hx > self.HXMAX or pri2[py * 160 + self.agx(hx)] <= o.pri):
                             vis = True
                 if vis:
                     break
@@ -361,8 +373,6 @@ class Interp:
         self.flags[1] = 1 if self.ego_hid else 0
 
     # ------------------------------------------------------------ modo GFX4 (160w, 4 bpp nativo; ver AGI/PLAN160W.md)
-    GFX4 = os.environ.get('AGI_GFX4') == '1'
-
     def cel4(self, o):
         """(ancho, alto, transparente, filas de colores EGA con el espejo hecho) de la celda de o, o None. Mismas reglas que cel_of (FINAL_CEL, BLANK_VIEWS)."""
         import agi2spr
@@ -1027,8 +1037,8 @@ class Interp:
                 f = next(i for i in range(8) if m & (0x80 >> i))
                 l = max(i for i in range(8) if m & (0x80 >> i))
                 bx = x0 + tx * 8
-                ex_min[row] = min(ex_min[row], min(255, (5 * (bx + f)) >> 3))
-                ex_max[row] = max(ex_max[row], min(255, (5 * (bx + l)) >> 3))
+                ex_min[row] = min(ex_min[row], min(255, self.agx(bx + f)))
+                ex_max[row] = max(ex_max[row], min(255, self.agx(bx + l)))
         n = min(h, 128)
         if self.span_rows + n > self.SP_ROWS:
             return None

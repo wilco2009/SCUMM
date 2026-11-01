@@ -10,6 +10,7 @@ trap 'printf "GFX4            equ 0
 " > gfx4.inc' EXIT
 GFX=""; [ "${GFX4:-0}" = 1 ] && GFX="--gfx4"
 export GFX4=${GFX4:-0}
+export AGI_GFX4=$GFX4
 G=${1:-SQ1}
 N=${2:-100}
 SCRIPT=${3:-}

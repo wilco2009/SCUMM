@@ -17,7 +17,7 @@ NVSLOT          equ 8
 
 render:         call OVL_SORT           ; A1: orden de los objetos; A2 (call_e): rotulos por software; A1: sprites
                 IF GFX4
-                ret                     ; fase 2 de AGI/PLAN160W.md: aun sin sprites en 160w
+                jp OVL_DRAW             ; 160w: solo sprites por hardware (los rotulos por software y add.to.pic: fase 3b)
                 ELSE
                 ld hl,OVE_RUN
                 call call_e
