@@ -152,7 +152,9 @@ FREEZE_VIEWS = {'SQ1': {175, 78}, 'KQ1': {97, 107}}
 FORCE_HW = {'SQ1': {75, 95, 102, 73, 251, 62, (109, 1)}}
 # Vistas cuya animacion se salta: todas sus celdas dibujan la ultima del bucle (la huella es igual y no se recompone nada; el ciclo y sus banderas, los de
 # siempre). SQ1, sala 29: el holograma que se compone (vista 63, 9 mosaicos x 8 filas, no cabe en los 64 sprites) por software tardaba muchisimo.
-FINAL_CEL = {'SQ1': {63}}
+# SQ1, sala 67 (intro, adaptacion estetica decidida por el usuario): los nombres de los creditos (vistas 204 y 206) ciclaban blanco, blanco, rojo claro y rojo final;
+# ahora salen ya con el rojo final y el ciclo (mismas celdas, tiempos y banderas) sigue igual.
+FINAL_CEL = {'SQ1': {63, 204, 206}}
 # Vistas que no dibujan nada (sus celdas conservan tamano y bucles; la logica no cambia): SQ1, sala 29: las dos mitades del holograma (vista 64, 72 mosaicos cada
 # una) se deslizan 2 pixeles por ciclo hasta juntarse y por software recomponian 9 x 8 mosaicos por mitad en cada ciclo; ahora aparece la cabeza (vista 63).
 BLANK_VIEWS = {'SQ1': {64}}
