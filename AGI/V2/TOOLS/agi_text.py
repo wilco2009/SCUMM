@@ -116,6 +116,27 @@ def fill_row(bm, at, base, row, colour):
             at[line * 32 + cell] = (c << 4) | c
 
 
+def draw_box_px(img, geom, pic):
+    """160w: la ventana de print en la imagen de 160x168 (lista de codigos de Chroma): 4 pixeles por columna, 8 lineas por fila; blanco con un marco rojo de un pixel y,
+    con show.obj, los mosaicos de la celda (ancho, [(tx, ty, color, dato, mascara)]) centrados (x par) en la parte util."""
+    top, cxl, boxw, nrows = geom
+    white, red = agi2hr.to_chroma(15), agi2hr.to_chroma(4)
+    x0, y0, w, h = cxl * 4, top * 8 - 8, boxw * 4, nrows * 8
+    for y in range(y0, y0 + h):
+        for x in range(x0, x0 + w):
+            edge = y in (y0, y0 + h - 1) or x in (x0, x0 + w - 1)
+            img[y * 160 + x] = red if edge else white
+    if pic:
+        pw, tiles = pic
+        px = x0 + 4 + (((boxw - 2) * 4 - pw) >> 1 & ~1)
+        py = y0 + 8
+        for tx, ty, col, pix, msk in tiles:
+            for r in range(8):
+                for k in range(8):
+                    if msk[r] & (0x80 >> k):
+                        img[(py + ty * 8 + r) * 160 + px + tx * 8 + k] = (col[r] >> 4) if pix[r] & (0x80 >> k) else (col[r] & 15)
+
+
 def printable(s):
     return ''.join(ch if 32 <= ord(ch) <= 127 else ' ' for ch in s)
 
@@ -155,7 +176,7 @@ def box_geom(lines, row=None, col=None, minw=0):
     """(fila de texto de arriba, celda de la izquierda, celdas de ancho, filas de alto) de la ventana de unas lineas. Una celda de relleno a cada lado y una fila
     arriba y otra abajo; centrada en la imagen (filas 1-21) o, con print.at, en (row, col * 6 pixeles) sin salirse de la imagen."""
     maxlen = max(len(l) for l in lines)
-    boxw = (maxlen + 2) if GFX4 else max(((maxlen * 6 + 7) >> 3) + 2, minw)       # 160w: una columna por caracter, sin dibujo (show.obj) en la ventana
+    boxw = max(maxlen + 2, minw) if GFX4 else max(((maxlen * 6 + 7) >> 3) + 2, minw)       # 160w: una columna (4 pixeles de la imagen) por caracter
     nrows = len(lines) + 2
     cells = 40 if GFX4 else 32
     if row is None:
@@ -170,9 +191,10 @@ def box_geom(lines, row=None, col=None, minw=0):
 def draw_box(bm, at, lines, geom, pic=None):
     """Pinta la ventana en los planos de pantalla completa (192 lineas): blanco con letras negras y un marco rojo de un pixel."""
     top, cxl, boxw, nrows = geom
-    if isinstance(bm, TextPlane):               # 160w: la ventana son celdas blancas (inversas) con las lineas dentro; sin marco rojo ni dibujo
+    if isinstance(bm, TextPlane):               # 160w: la ventana (blanco, marco rojo y dibujo) son pixeles de la imagen (draw_box_px); en el plano, celdas transparentes y las lineas (inversas)
         for r in range(top, top + nrows):
-            plane_fill(bm, r, cxl, boxw, 15)
+            for i in range(cxl, cxl + boxw):
+                bm[r * 40 + i] = 0
         for i, l in enumerate(lines):
             if l:
                 plane_put(bm, top + 1 + i, cxl + 1, l, 15)

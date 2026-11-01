@@ -418,7 +418,10 @@ class Interp:
         """Imagen de 160x168 (codigos de Chroma) con los objetos fijos (add.to.pic) ya pintados, y el plano de prioridad de sprites resultante (objetos fijos incluidos)."""
         import agi2hr
         if self.pic is None:
-            return [0] * (160 * 168), None
+            img = [0] * (160 * 168)
+            if self.box is not None:
+                agi_text.draw_box_px(img, self.box[1], self.box[2])
+            return img, None
         img = [agi2hr.to_chroma(v) for v in self.pic.vis]
         pri2 = agi2hr.sprite_priority(self.pic.pri)
         for op in self.pic_ops:
@@ -428,14 +431,16 @@ class Interp:
                 c = self.cel4(o)
                 if c is not None:
                     self.draw_cel4(img, pri2, c, o.x, o.y, o.pri, True)
+        if self.box is not None:
+            agi_text.draw_box_px(img, self.box[1], self.box[2])
         return img, pri2
 
     def screen4(self):
         """Pantalla de imagen de 160x168 a 4 bpp: la imagen con los objetos fijos y, encima, los objetos animados dibujados por software de menor a mayor prioridad
         (draw_order) con la mascara de prioridad. El texto (plano de la FPGA) no esta en ella. Devuelve una lista de 160*168 codigos de Chroma."""
         img, pri2 = self.render4()
-        if pri2 is None:
-            return img
+        if pri2 is None or self.box is not None or self.menu_ui is not None or self.txtm:
+            return img                  # con una ventana, un menu o la pantalla de texto abiertos los sprites se apagan (como hw_sprites)
         for n in self.draw_order():
             o = self.objs[n]
             if o.static:
@@ -1491,7 +1496,7 @@ class Interp:
                 c = agi2spr.cel_tiles(d, 0, 0, framed=True)
             except IndexError:
                 c = None
-            if c and c[2] and c[0] <= 200 and c[1] <= 56:        # el dibujo: bucle 0, celda 0; delante del texto, las filas que ocupa y una en blanco
+            if c and c[2] and c[0] <= (152 if agi_text.GFX4 else 200) and c[1] <= 56:        # el dibujo: bucle 0, celda 0; delante del texto, las filas que ocupa y una en blanco
                 s = '\n' * (((c[1] + 7) >> 3) + 1) + s
                 pic = (c[0], c[2])
             self.do_print(s, None, None, 0, pic)
@@ -1536,7 +1541,7 @@ class Interp:
         width = w if 1 <= w <= 36 else 30
         lines = agi_text.wrap(s, width)
         self.log('print: ' + ' / '.join(lines))
-        self.box = (lines, agi_text.box_geom(lines, row, col, ((pic[0] + 7) >> 3) + 2 if pic else 0), pic)
+        self.box = (lines, agi_text.box_geom(lines, row, col, (((pic[0] + 3) >> 2) if agi_text.GFX4 else ((pic[0] + 7) >> 3)) + 2 if pic else 0), pic)
         self.win_act = False                # drawMessageBox cierra la ventana que dejo un print no bloqueante
         if self.flags[15]:                  # TextMgr::messageBox con VM_FLAG_OUTPUT_MODE: la ventana se queda abierta, la bandera se apaga y no se espera
             self.flags[15] = 0

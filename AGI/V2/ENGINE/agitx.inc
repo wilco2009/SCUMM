@@ -129,16 +129,16 @@ fr_c:           ld a,(dl_row)
 
 text_bg:        ret
 
-; Copia del plano de texto antes de abrir una ventana (A = 0 print, 1 menu): en PG_BGA, tras los 5248 bytes de la imagen limpia (bloque 7: $F480 y $F868)
+; Copia del plano de texto antes de abrir una ventana (A = 0 print, 1 menu): en PG_BGA, tras los 5280 bytes de la imagen limpia (bloque 7: $F4A0 y $F888)
 tp_save:        ld (tp_slot),a
                 ld a,PG_BGA
                 call map7
                 ld hl,TPLANE
-                ld de,$F480
+                ld de,$F4A0
                 ld a,(tp_slot)
                 or a
                 jr z,tps_c
-                ld de,$F480+1000
+                ld de,$F4A0+1000
 tps_c:          ld bc,1000
                 ldir
                 jp map7_back
@@ -157,11 +157,11 @@ t_boxclose:     ld a,(pr_ln)
                 rrca
                 and 31
                 ld (tb_r),a
-                ld hl,$2000
+                ld hl,$F4A0-TPLANE
                 ld a,(tp_slot)
                 or a
                 jr z,tbc_s
-                ld hl,$2000+1000
+                ld hl,$F4A0-TPLANE+1000
 tbc_s:          ld (tb_off),hl
                 ld a,PG_BGA
                 call map7
@@ -182,9 +182,97 @@ bcw_l:          ld a,(tb_r)
                 ld hl,tb_n
                 dec (hl)
                 jr nz,bcw_l
+                call map7_back
+                ld a,(tp_slot)
+                or a
+                ret nz                  ; los menus solo tocan el plano de texto; una ventana de print tambien pinto la imagen
+                ld a,(pr_l0)
+                sub 8
+                ld (pb_y),a
+                ld a,(pr_ln)
+                ld (pb_h),a
+                ld a,(pr_bw)
+                add a,a
+                ld (pb_wb),a
+                xor a
+                ld (pb_k),a
+ir_l:           ld a,(pb_y)
+                ld hl,pb_k
+                add a,(hl)
+                ld (pb_rr),a
+                call im_off
+                ld de,HR_BM
+                add hl,de
+                ld a,(pr_cxl)
+                add a,a
+                ld e,a
+                ld d,0
+                add hl,de
+                ld (pb_dst),hl          ; destino en la imagen
+                ld a,(picvalid)
+                or a
+                jr z,ir_z
+                ld a,(pb_rr)
+                ld b,PG_BGB
+                cp 102
+                jr c,ir_p
+                sub 102
+                ld b,PG_BGA
+ir_p:           call im_off
+                ld de,$E000
+                add hl,de
+                ld a,(pr_cxl)
+                add a,a
+                ld e,a
+                ld d,0
+                add hl,de               ; origen: la imagen limpia
+                push hl
+                ld a,b
+                call map7
+                pop hl
+                ld de,(pb_dst)
+                ld a,(pb_wb)
+                ld c,a
+                ld b,0
+                ldir
+                jr ir_nx
+ir_z:           ld hl,(pb_dst)          ; sin imagen: negro
+                ld a,(pb_wb)
+                ld b,a
+                xor a
+ir_zl:          ld (hl),a
+                inc hl
+                djnz ir_zl
+ir_nx:          ld hl,pb_k
+                inc (hl)
+                ld a,(pb_h)
+                cp (hl)
+                jr nz,ir_l
                 jp map7_back
 
+; A = linea de la imagen -> HL = A * 80 (conserva B y DE)
+im_off:         push de
+                ld l,a
+                ld h,0
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,hl
+                add hl,de
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                pop de
+                ret
+
 tp_slot:        defb 0
+pb_y:           defb 0
+pb_h:           defb 0
+pb_wb:          defb 0
+pb_k:           defb 0
+pb_rr:           defb 0
+pb_dst:         defw 0
 tb_r:           defb 0
 tb_off:         defw 0
                 ELSE

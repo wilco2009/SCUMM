@@ -391,7 +391,11 @@ t_objdesc:      xor a
                 or a
                 ret z
                 ld a,(MSGBUF+1)
+                IF GFX4
+                cp 153                  ; 160w: la ventana (4 pixeles por columna) tiene que caber en las 40 columnas
+                ELSE
                 cp 201
+                ENDIF
                 ret nc
                 ld a,(MSGBUF+2)
                 cp 57
@@ -454,8 +458,145 @@ pic_open:       ld a,(oc_vw)
 ; el dibujo del objeto en la ventana ya pintada: los mosaicos de la celda sobre el bitmap (fila completa: sus colores; fila con huecos: solo la tinta sobre papel blanco)
 t_objpic:
                 IF GFX4
-                ret
-                ENDIF
+; 160w: los mosaicos de la celda en la imagen (4 bpp), centrados en la ventana (x par: cada mosaico son 4 bytes)
+                call pic_open
+                ret z
+                ld a,(pr_bw)
+                sub 2
+                add a,a
+                add a,a
+                ld b,a                  ; pixeles utiles de la ventana
+                ld a,(MSGBUF+1)
+                ld c,a
+                ld a,b
+                sub c
+                srl a
+                and $FE
+                ld b,a
+                ld a,(pr_cxl)
+                inc a
+                add a,a
+                add a,a
+                add a,b                 ; x del borde izquierdo de la celda, en pixeles
+                srl a                   ; en bytes
+                ld (op_c),a
+                ld a,(pr_top)
+                inc a
+                add a,a
+                add a,a
+                add a,a
+                sub 8
+                ld (op_y),a             ; linea de imagen de la primera fila
+                ld a,(MSGBUF)
+                ld (op_n),a
+o4_l:           ld a,(op_n)
+                or a
+                jp z,o4_x
+                dec a
+                ld (op_n),a
+                ld a,(oc_h)
+                ld hl,MSGBUF+16
+                ld bc,26
+                call f_read_n
+                ld a,(MSGBUF+17)        ; ty
+                add a,a
+                add a,a
+                add a,a
+                ld b,a
+                ld a,(op_y)
+                add a,b
+                ld (ov_r),a             ; linea de imagen de la primera fila del mosaico
+                ld a,(MSGBUF+16)        ; tx
+                add a,a
+                add a,a
+                ld b,a
+                ld a,(op_c)
+                add a,b
+                ld (ov_b),a             ; byte (columna) del mosaico
+                ld ix,MSGBUF+18
+                ld b,8
+o4_r:           push bc
+                ld a,(ix+16)
+                or a
+                jr z,o4_nx
+                ld (ov_m),a
+                ld a,(ix+8)
+                ld (ov_p),a
+                ld a,(ix+0)
+                ld (ov_k),a
+                ld a,(ov_r)
+                ld l,a                  ; HL = linea * 80
+                ld h,0
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,hl
+                add hl,de
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld de,HR_BM
+                add hl,de
+                ld a,(ov_b)
+                ld e,a
+                ld d,0
+                add hl,de
+                ld c,0                  ; C = pixel 0-7, B = su bit
+                ld b,$80
+o4_k:           ld a,(ov_m)
+                and b
+                jr z,o4_nk
+                ld a,(ov_p)
+                and b
+                ld a,(ov_k)             ; tinta (nibble alto) si el bit del dato; si no, papel
+                jr z,o4_pp
+                rrca
+                rrca
+                rrca
+                rrca
+o4_pp:          and 15
+                ld e,a
+                bit 0,c
+                jr nz,o4_lo
+                ld a,(hl)
+                and $0F
+                ld d,a
+                ld a,e
+                rlca
+                rlca
+                rlca
+                rlca
+                or d
+                ld (hl),a
+                jr o4_nk
+o4_lo:          ld a,(hl)
+                and $F0
+                or e
+                ld (hl),a
+o4_nk:          bit 0,c
+                jr z,o4_a
+                inc hl
+o4_a:           inc c
+                srl b
+                ld a,c
+                cp 8
+                jr nz,o4_k
+o4_nx:          ld hl,ov_r
+                inc (hl)
+                inc ix
+                pop bc
+                dec b
+                jp nz,o4_r
+                jp o4_l
+o4_x:           ld a,(oc_h)
+                jp f_close
+ov_r:           defb 0
+ov_b:           defb 0
+ov_m:           defb 0
+ov_p:           defb 0
+ov_k:           defb 0
+                ELSE
                 call pic_open
                 ret z
                 ld a,(MSGBUF+1)
@@ -558,6 +699,7 @@ op_nx:          ld hl,(op_o)
                 jp op_l
 op_x:           ld a,(oc_h)
                 jp f_close
+                ENDIF
 
 s_have:         defb "You are carrying:",10,10,0
 s_none:         defb "Nothing",10,0

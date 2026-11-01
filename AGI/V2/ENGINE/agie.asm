@@ -75,13 +75,13 @@ t_bgsave:       ld a,PG_BGB
                 call map_page
                 ld hl,HR_BM
                 ld de,LWIN
-                ld bc,8192
+                ld bc,102*80
                 ldir
                 ld a,PG_BGA
                 call map_page
-                ld hl,HR_BM+8192
+                ld hl,HR_BM+102*80
                 ld de,LWIN
-                ld bc,PLANE4-8192
+                ld bc,PLANE4-102*80
                 ldir
                 jp unmap_win
                 ENDIF

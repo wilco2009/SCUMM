@@ -75,3 +75,6 @@ Un par de colores global en el plano de texto; ausencia de doble buffer (parpade
   (negro sobre blanco, +128). Ventanas `print`, menus y `get.string` = celdas blancas, **sin marco rojo** ni dibujo (`show.obj` solo texto). Se guarda una copia del plano al abrir una ventana/menu
   (en `PG_BGA` tras los 5248 B del fondo) y al cerrar se restaura el rectangulo. `plot`/overlay A2 (rotulos software) quedan fuera con GFX4=1 (nucleo -160 B).
   Pruebas: `sh ENGINE/test_gfx4.sh` (display, print abierto/cerrado, restauracion, menus, text.screen/graphics, clear.lines): Z80 == modelo (1000 codigos). GFX4=0: binarios identicos.
+- Fase 4b (correccion): la ventana de `print` ya no son celdas opacas: son **pixeles de la imagen** (blanco con marco rojo de un pixel, 4 px por columna) y, con `show.obj`, el dibujo del objeto
+  (mosaicos de 8 px nativos) centrado; el plano solo lleva las lineas de texto (celdas inversas) y las celdas bajo la ventana se ponen a transparentes. Al cerrar se restaura la imagen desde el
+  fondo limpio (pagina B = lineas 0-101, A = 102-167, para no partir una linea) y el plano desde su copia. Menus: solo celdas. Pruebas D-print*, D-restore, D-showobj*: Z80 == modelo (imagen y plano).

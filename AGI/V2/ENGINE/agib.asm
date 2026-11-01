@@ -29,7 +29,7 @@
 TXT             equ TMPM
 
                 IF GFX4
-; el plano de una ventana de print: pr_top, pr_nr filas, pr_cxl, pr_bw columnas, todo blanco (inverso)
+; el plano de una ventana de print: pr_top, pr_nr filas, pr_cxl, pr_bw columnas, celdas transparentes (la ventana es de pixeles de la imagen; solo el texto lleva celdas)
 tp_fillbox:     ld a,(pr_top)
                 ld (tb_r),a
                 ld a,(pr_nr)
@@ -38,7 +38,7 @@ tfb_l:          ld a,(pr_cxl)
                 ld b,a
                 ld a,(pr_bw)
                 ld e,a
-                ld c,160
+                ld c,0
                 ld a,(tb_r)
                 call tp_fill
                 ld hl,tb_r
@@ -46,6 +46,69 @@ tfb_l:          ld a,(pr_cxl)
                 ld hl,tb_n
                 dec (hl)
                 jr nz,tfb_l
+                ret
+
+; la ventana de print en la imagen (4 bpp, 4 pixeles por columna): blanco con el marco rojo de un pixel (codigos de Chroma: blanco 15, rojo 2)
+tp_pixbox:      ld a,(pr_top)
+                add a,a
+                add a,a
+                add a,a
+                sub 8
+                ld (pb_y),a
+                ld a,(pr_nr)
+                add a,a
+                add a,a
+                add a,a
+                ld (pb_h),a
+                ld a,(pr_bw)
+                add a,a
+                ld (pb_wb),a
+                xor a
+                ld (pb_k),a
+pb_l:           ld a,(pb_y)
+                ld hl,pb_k
+                add a,(hl)
+                call im_off
+                ld de,HR_BM
+                add hl,de
+                ld a,(pr_cxl)
+                add a,a
+                ld e,a
+                ld d,0
+                add hl,de
+                ld a,(pb_wb)
+                ld b,a
+                ld c,$FF
+                ld a,(pb_k)
+                or a
+                jr z,pb_r
+                ld a,(pb_h)
+                dec a
+                ld d,a
+                ld a,(pb_k)
+                cp d
+                jr nz,pb_f
+pb_r:           ld c,$22
+pb_f:           push hl
+pb_fl:          ld (hl),c
+                inc hl
+                djnz pb_fl
+                pop hl
+                ld a,c
+                cp $22
+                jr z,pb_nx
+                ld (hl),$2F             ; el pixel de la izquierda y el de la derecha
+                ld a,(pb_wb)
+                dec a
+                ld e,a
+                ld d,0
+                add hl,de
+                ld (hl),$F2
+pb_nx:          ld hl,pb_k
+                inc (hl)
+                ld a,(pb_h)
+                cp (hl)
+                jr nz,pb_l
                 ret
 ; Los glifos de 6 pixeles (ASCII 32-127) a la tabla de la FPGA (TFONT, I = $D8): en los codigos 32-127 y, para el texto inverso (bit 7), en los 160-255
 t_fontinit:     ld hl,FONT
@@ -553,10 +616,21 @@ tp_mn:          ld de,40
                 add hl,de
                 djnz tp_m
                 IF GFX4
-                ld a,c                  ; 160w: una columna por caracter y una de relleno a cada lado
+                ld a,c                  ; 160w: una columna por caracter y una de relleno a cada lado; con dibujo (show.obj), la que quepa su ancho (4 pixeles por columna)
                 add a,2
                 ld (pr_bw),a
+                ld a,(oc_pw)
+                or a
+                jr z,tp_np
+                add a,3
+                rrca
+                rrca
+                and 63
+                add a,2
                 ld hl,pr_bw
+                cp (hl)
+                jr c,tp_np
+                ld (hl),a
                 ELSE
                 ld a,c                  ; celdas de ancho = (6 * largo + 7) / 8 + 2
                 add a,a
@@ -643,6 +717,7 @@ tp_dr:          ld a,1                  ; lo que se escribe aqui no pasa a la co
                 xor a
                 call tp_save
                 call tp_fillbox
+                call tp_pixbox
                 ENDIF
                 ld a,(pr_top)
                 add a,a
