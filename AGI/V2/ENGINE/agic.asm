@@ -458,9 +458,46 @@ pic_open:       ld a,(oc_vw)
 ; el dibujo del objeto en la ventana ya pintada: los mosaicos de la celda sobre el bitmap (fila completa: sus colores; fila con huecos: solo la tinta sobre papel blanco)
 t_objpic:
                 IF GFX4
-; 160w: los mosaicos de la celda en la imagen (4 bpp), centrados en la ventana (x par: cada mosaico son 4 bytes)
-                call pic_open
+; 160w: los pixeles exactos de la celda 0 del bucle 0 (su bloque de la segunda tabla del fichero SPR), fila a fila desde el fichero, centrados en la ventana (x par);
+; si la celda no lleva el bloque (no cabia en la pagina), no se dibuja
+                call pic_open           ; abre el fichero (oc_h) y deja el registro de la celda 0 en MSGBUF (mosaicos, ancho, alto)
                 ret z
+                ld hl,2
+                ld a,(oc_h)
+                call f_seek
+                ld a,(oc_h)
+                ld hl,MSGBUF+16
+                ld bc,1
+                call f_read_n           ; numero de celdas
+                ld a,(MSGBUF+16)        ; la segunda tabla: en 4 + 2 * celdas del fichero (la entrada de la celda 0)
+                ld l,a
+                ld h,0
+                add hl,hl
+                ld de,4
+                add hl,de
+                ld a,(oc_h)
+                call f_seek
+                ld a,(oc_h)
+                ld hl,MSGBUF+16
+                ld bc,2
+                call f_read_n
+                ld hl,(MSGBUF+16)
+                ld a,h
+                or l
+                jp z,o4_x
+                inc hl                  ; el fichero lleva delante el tamano (2 bytes)
+                inc hl
+                ld (ov_f),hl
+                ld a,(oc_h)
+                call f_seek
+                ld a,(MSGBUF+2)         ; alto: transparente, 0 y (alto + 1) desplazamientos
+                add a,a
+                add a,4
+                ld c,a
+                ld b,0
+                ld a,(oc_h)
+                ld hl,MSGBUF+16
+                call f_read_n
                 ld a,(pr_bw)
                 sub 2
                 add a,a
@@ -487,45 +524,52 @@ t_objpic:
                 add a,a
                 sub 8
                 ld (op_y),a             ; linea de imagen de la primera fila
-                ld a,(MSGBUF)
-                ld (op_n),a
-o4_l:           ld a,(op_n)
+                xor a
+                ld (ov_r),a
+o4_row:         ld a,(ov_r)
+                ld l,a
+                ld h,0
+                add hl,hl
+                ld de,MSGBUF+18
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)               ; DE = desplazamiento de esta fila
+                inc hl
+                ld c,(hl)
+                inc hl
+                ld b,(hl)               ; BC = el de la siguiente
+                push de
+                ld h,b
+                ld l,c
                 or a
-                jp z,o4_x
-                dec a
-                ld (op_n),a
+                sbc hl,de               ; largo de la fila
+                ld a,h
+                or a
+                jr nz,o4_cap
+                ld a,l
+                cp 120
+                jr c,o4_ok
+o4_cap:         ld hl,119
+o4_ok:          ld (ov_n),hl
+                pop de
+                ld hl,(ov_f)
+                add hl,de
                 ld a,(oc_h)
-                ld hl,MSGBUF+16
-                ld bc,26
+                call f_seek
+                ld a,(oc_h)
+                ld hl,MSGBUF+136
+                ld bc,(ov_n)
                 call f_read_n
-                ld a,(MSGBUF+17)        ; ty
-                add a,a
-                add a,a
-                add a,a
-                ld b,a
-                ld a,(op_y)
-                add a,b
-                ld (ov_r),a             ; linea de imagen de la primera fila del mosaico
-                ld a,(MSGBUF+16)        ; tx
-                add a,a
-                add a,a
-                ld b,a
-                ld a,(op_c)
-                add a,b
-                ld (ov_b),a             ; byte (columna) del mosaico
-                ld ix,MSGBUF+18
-                ld b,8
-o4_r:           push bc
-                ld a,(ix+16)
-                or a
-                jr z,o4_nx
-                ld (ov_m),a
-                ld a,(ix+8)
-                ld (ov_p),a
-                ld a,(ix+0)
-                ld (ov_k),a
-                ld a,(ov_r)
-                ld l,a                  ; HL = linea * 80
+                ld hl,MSGBUF+136
+                ld de,(ov_n)
+                add hl,de
+                dec hl
+                ld (hl),0               ; la fila acaba en 0 aunque se haya recortado
+                ld a,(op_y)             ; direccion de la fila: HR_BM + 80 * linea + byte de la izquierda
+                ld hl,ov_r
+                add a,(hl)
+                ld l,a
                 ld h,0
                 ld d,h
                 ld e,l
@@ -538,63 +582,80 @@ o4_r:           push bc
                 add hl,hl
                 ld de,HR_BM
                 add hl,de
-                ld a,(ov_b)
+                ld a,(op_c)
                 ld e,a
                 ld d,0
                 add hl,de
-                ld c,0                  ; C = pixel 0-7, B = su bit
-                ld b,$80
-o4_k:           ld a,(ov_m)
-                and b
-                jr z,o4_nk
-                ld a,(ov_p)
-                and b
-                ld a,(ov_k)             ; tinta (nibble alto) si el bit del dato; si no, papel
-                jr z,o4_pp
+                ld (ov_a),hl
+                xor a
+                ld (ov_i),a
+                ld hl,MSGBUF+136
+o4_t:           ld a,(hl)
+                or a
+                jr z,o4_rn
+                inc hl
+                ld c,a
+                and 15
+                ld b,a                  ; cuantos pixeles
+                ld a,c
                 rrca
                 rrca
                 rrca
                 rrca
-o4_pp:          and 15
+                and 15
+                ld (ov_k),a
+o4_p:           ld a,(MSGBUF+16)        ; transparente
+                ld c,a
+                ld a,(ov_k)
+                cp c
+                jr z,o4_s
+                push hl
+                push bc
+                ld a,(ov_i)
+                srl a
                 ld e,a
-                bit 0,c
+                ld d,0
+                ld hl,(ov_a)
+                add hl,de
+                ld a,(ov_i)
+                and 1
                 jr nz,o4_lo
                 ld a,(hl)
                 and $0F
                 ld d,a
-                ld a,e
+                ld a,(ov_k)
                 rlca
                 rlca
                 rlca
                 rlca
                 or d
                 ld (hl),a
-                jr o4_nk
+                jr o4_pe
 o4_lo:          ld a,(hl)
                 and $F0
-                or e
+                ld d,a
+                ld a,(ov_k)
+                or d
                 ld (hl),a
-o4_nk:          bit 0,c
-                jr z,o4_a
-                inc hl
-o4_a:           inc c
-                srl b
-                ld a,c
-                cp 8
-                jr nz,o4_k
-o4_nx:          ld hl,ov_r
+o4_pe:          pop bc
+                pop hl
+o4_s:           ld a,(ov_i)
+                inc a
+                ld (ov_i),a
+                djnz o4_p
+                jr o4_t
+o4_rn:          ld hl,ov_r
                 inc (hl)
-                inc ix
-                pop bc
-                dec b
-                jp nz,o4_r
-                jp o4_l
+                ld a,(MSGBUF+2)
+                cp (hl)
+                jp nz,o4_row
 o4_x:           ld a,(oc_h)
                 jp f_close
+ov_f:           defw 0
+ov_n:           defw 0
+ov_a:           defw 0
 ov_r:           defb 0
-ov_b:           defb 0
-ov_m:           defb 0
-ov_p:           defb 0
+ov_i:           defb 0
 ov_k:           defb 0
                 ELSE
                 call pic_open

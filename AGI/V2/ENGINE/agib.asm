@@ -428,12 +428,12 @@ t_gsdesc:       ld a,(gs_cust)          ; la ventana se dibuja una vez (gs_cust 
 gb_go:          ld a,1
                 ld (dl_nobg),a
                 IF GFX4
-                ld a,(pr_top)           ; el cuadro negro de 24 celdas de la linea
+                ld a,(pr_top)           ; el cuadro negro de 32 columnas (la linea de 32 marcas) de la linea
                 add a,3
                 ld hl,pr_cxl
                 ld b,(hl)
                 inc b
-                ld e,24
+                ld e,32
                 ld c,32
                 call tp_fill
                 ENDIF

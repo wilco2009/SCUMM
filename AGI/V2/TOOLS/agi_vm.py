@@ -433,6 +433,48 @@ class Interp:
                         continue
                     img[y * 160 + x] = (col[r] >> 4) if pix[r] & (0x80 >> k) else (col[r] & 15)
 
+    _rawc = {}
+
+    def raw4(self, o):
+        """GFX4: (transparente, ancho, alto, filas de codigos de Chroma) de la celda de o si su fichero SPR lleva el bloque de pixeles exactos; si no, None (se pintan los mosaicos)."""
+        import agi2spr
+        d = self.g.resource('VIEW', o.view)
+        if d is None or o.loop >= d[2]:
+            return None
+        key = (self.path, o.view, o.loop)
+        if key not in self._rawc:
+            try:
+                self._rawc[key] = agi2spr.build_loop_raw(d, o.loop, o.view)[1]
+            except (IndexError, ValueError):
+                self._rawc[key] = []
+        has = self._rawc[key]
+        if o.cel >= len(has) or not has[o.cel]:
+            return None
+        return agi2spr.raw_cel(o.view, d, o.loop, o.cel)
+
+    @staticmethod
+    def blit_raw4(img, pri2, o, rc):
+        t, w, h, rows = rc
+        top = o.y - h + 1
+        for j, row in enumerate(rows):
+            y = top + j
+            if not 0 <= y < 168:
+                continue
+            for i, v in enumerate(row):
+                x = o.x + i
+                if x >= 160 or v == t:
+                    continue
+                if pri2 is not None and pri2[y * 160 + x] > o.pri:
+                    continue
+                img[y * 160 + x] = v
+
+    def blit_obj4(self, img, pri2, o, c):
+        rc = self.raw4(o)
+        if rc is not None:
+            self.blit_raw4(img, pri2, o, rc)
+        else:
+            self.blit_tiles4(img, pri2, o, c)
+
     def render4(self, sw=False):
         """Imagen de 160x168 (codigos de Chroma) con los objetos fijos (add.to.pic) ya pintados, y el plano de prioridad de sprites resultante (objetos fijos incluidos)."""
         import agi2hr
@@ -449,7 +491,7 @@ class Interp:
                 o.view, o.loop, o.cel, o.x, o.y, o.pri = op[1]
                 c = self.cel_of(o)
                 if c is not None:
-                    self.blit_tiles4(img, pri2, o, c)
+                    self.blit_obj4(img, pri2, o, c)
                 if op[2] is not None:
                     self.raise_pri(pri2, op[2])
             elif op[0] == 'z':
@@ -462,7 +504,7 @@ class Interp:
                     continue
                 c = self.cel_of(o)
                 if c is not None and agi2spr.meta(c[2], o.view, o.loop)[0]:
-                    self.blit_tiles4(img, pri2, o, c)
+                    self.blit_obj4(img, pri2, o, c)
         if self.box is not None:
             agi_text.draw_box_px(img, self.box[1], self.box[2])
         return img, pri2
@@ -1525,12 +1567,16 @@ class Interp:
         pic = None
         if s:
             try:
-                c = agi2spr.cel_tiles(d, 0, 0, framed=True)
+                c = agi2spr.cel_tiles(d, 0, 0, framed=not agi_text.GFX4)
             except IndexError:
                 c = None
             if c and c[2] and c[0] <= (152 if agi_text.GFX4 else 200) and c[1] <= 56:        # el dibujo: bucle 0, celda 0; delante del texto, las filas que ocupa y una en blanco
                 s = '\n' * (((c[1] + 7) >> 3) + 1) + s
-                pic = (c[0], c[2])
+                if agi_text.GFX4:
+                    ok = agi2spr.build_loop_raw(d, 0, n)[1][0]
+                    pic = (c[0], agi2spr.raw_cel(n, d, 0, 0) if ok else None)
+                else:
+                    pic = (c[0], c[2])
             self.do_print(s, None, None, 0, pic)
 
     def c_show_obj_v(self, v): self.c_show_obj(self.vars[v])

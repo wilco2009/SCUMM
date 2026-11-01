@@ -90,7 +90,11 @@ sd_row:         ld a,(s4_yc)            ; direccion de la linea: HR_BM + 80 * li
                 jr sd_row
 
 ; la linea s4_yc del objeto IX (cel_open hecho; PROW de esa linea hecho) en la linea que empieza en s4_rowp
-s4_orow:        ld a,(s4_yc)            ; rel = linea - y + alto - 1
+s4_orow:        ld hl,(cv_raw)          ; con los pixeles exactos de la celda, de ahi; si no, con los mosaicos
+                ld a,h
+                or l
+                jp nz,s4_rawrow
+                ld a,(s4_yc)            ; rel = linea - y + alto - 1
                 sub (ix+O_Y)
                 ld b,a
                 ld a,(cv_h)
@@ -167,16 +171,7 @@ s4_k:           ld a,(s4_m)
                 cp 160
                 jr nc,s4_nk
                 ld (s4_ax),a
-                ld a,(sw_pv)
-                or a
-                jr z,s4_vis
-                ld a,(s4_ax)
-                ld l,a
-                ld h,PROW>>8
-                ld a,(ix+O_PRI)
-                cp (hl)
-                jr c,s4_nk              ; el fondo tiene mas prioridad: tapa el pixel
-s4_vis:         ld a,(s4_p)
+                ld a,(s4_p)
                 and b
                 ld a,(s4_c)
                 jr z,s4_pp
@@ -186,7 +181,27 @@ s4_vis:         ld a,(s4_p)
                 rrca
 s4_pp:          and 15
                 ld (s4_col),a
-                ld hl,(s4_rowp)
+                push bc
+                call s4_put
+                pop bc
+s4_nk:          inc c
+                srl b
+                ld a,c
+                cp 8
+                jr nz,s4_k
+                ret
+
+; el pixel s4_ax (0-159) con el color s4_col en la linea que empieza en s4_rowp, si la prioridad del objeto IX lo deja ver contra PROW
+s4_put:         ld a,(sw_pv)
+                or a
+                jr z,sp_v
+                ld a,(s4_ax)
+                ld l,a
+                ld h,PROW>>8
+                ld a,(ix+O_PRI)
+                cp (hl)
+                ret c                   ; el fondo tiene mas prioridad: tapa el pixel
+sp_v:           ld hl,(s4_rowp)
                 ld a,(s4_ax)
                 srl a
                 ld e,a
@@ -194,7 +209,7 @@ s4_pp:          and 15
                 add hl,de
                 ld a,(s4_ax)
                 and 1
-                jr nz,s4_lo
+                jr nz,sp_lo
                 ld a,(hl)
                 and $0F
                 ld d,a
@@ -205,19 +220,77 @@ s4_pp:          and 15
                 rlca
                 or d
                 ld (hl),a
-                jr s4_nk
-s4_lo:          ld a,(hl)
+                ret
+sp_lo:          ld a,(hl)
                 and $F0
                 ld d,a
                 ld a,(s4_col)
                 or d
                 ld (hl),a
-s4_nk:          inc c
-                srl b
-                ld a,c
-                cp 8
-                jr nz,s4_k
                 ret
+
+; la linea s4_yc del objeto IX desde su bloque de pixeles exactos (HL = cv_raw, en la ventana de la logica)
+s4_rawrow:      push hl
+                ld a,(s4_yc)            ; rel = linea - y + alto - 1
+                sub (ix+O_Y)
+                ld b,a
+                ld a,(cv_h)
+                dec a
+                add a,b
+                ld e,a
+                ld d,0
+                pop hl
+                push hl
+                inc hl
+                inc hl
+                add hl,de
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)               ; desplazamiento de la fila
+                pop hl
+                ld a,(hl)
+                ld (s4_tr),a            ; el color transparente
+                add hl,de
+                xor a
+                ld (s4_pi),a
+rr_l:           ld a,(hl)
+                or a
+                ret z
+                inc hl
+                ld c,a
+                and 15
+                ld b,a                  ; cuantos pixeles
+                ld a,c
+                rrca
+                rrca
+                rrca
+                rrca
+                and 15
+                ld (s4_col),a
+rr_p:           ld a,(s4_tr)
+                ld c,a
+                ld a,(s4_col)
+                cp c
+                jr z,rr_n               ; transparente
+                ld a,(ix+O_X)
+                ld c,a
+                ld a,(s4_pi)
+                add a,c
+                jr c,rr_n
+                cp 160
+                jr nc,rr_n
+                ld (s4_ax),a
+                push hl
+                push bc
+                call s4_put
+                pop bc
+                pop hl
+rr_n:           ld a,(s4_pi)
+                inc a
+                ld (s4_pi),a
+                djnz rr_p
+                jr rr_l
 
 ; A = linea -> HL = A * 80
 s4_off:         push de
@@ -827,6 +900,8 @@ sw_prow:        xor a
                 ret
 
 s4_chg:         defb 0
+s4_tr:          defb 0
+s4_pi:          defb 0
 s4_i:           defb 0
 s4_k2:          defb 0
 s4_k3:          defb 0

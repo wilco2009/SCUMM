@@ -126,15 +126,15 @@ def draw_box_px(img, geom, pic):
         for x in range(x0, x0 + w):
             edge = y in (y0, y0 + h - 1) or x in (x0, x0 + w - 1)
             img[y * 160 + x] = red if edge else white
-    if pic:
-        pw, tiles = pic
+    if pic and pic[1]:                      # el dibujo de show.obj: los pixeles exactos de la celda (codigos de Chroma), centrados con x par; sin ellos (no cabian en la pagina) no se dibuja
+        pw = pic[0]
+        t, w, h, rows = pic[1]
         px = x0 + 4 + (((boxw - 2) * 4 - pw) >> 1 & ~1)
         py = y0 + 8
-        for tx, ty, col, pix, msk in tiles:
-            for r in range(8):
-                for k in range(8):
-                    if msk[r] & (0x80 >> k):
-                        img[(py + ty * 8 + r) * 160 + px + tx * 8 + k] = (col[r] >> 4) if pix[r] & (0x80 >> k) else (col[r] & 15)
+        for r, row in enumerate(rows):
+            for i, v in enumerate(row):
+                if v != t:
+                    img[(py + r) * 160 + px + i] = v
 
 
 def printable(s):

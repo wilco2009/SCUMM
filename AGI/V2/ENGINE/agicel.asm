@@ -74,6 +74,29 @@ cel_rd:         call map_page
                 ld (cv_hh),a
                 inc hl
                 ld (cv_p),hl
+                IF GFX4
+                ld a,(LWIN)             ; 160w: el bloque de pixeles exactos de la celda (segunda tabla, tras la de los registros), 0 = no lo hay
+                ld l,a
+                ld h,0
+                add hl,hl
+                ld a,(ix+O_CEL)
+                ld e,a
+                ld d,0
+                add hl,de
+                add hl,de
+                ld de,LWIN+2
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld a,d
+                or e
+                jr z,cr_0
+                ld hl,LWIN
+                add hl,de
+                ex de,hl
+cr_0:           ld (cv_raw),de
+                ENDIF
                 bit 2,(ix+O_F2)         ; objeto fijo (add.to.pic): se pinta contra el fondo, como un rotulo
                 jr z,co_ns
                 ld hl,cv_fl
@@ -91,6 +114,9 @@ cv_fl:          defb 0
 cv_hl:          defb 0
 cv_hh:          defb 0
 cv_p:           defw 0
+                IF GFX4
+cv_raw:         defw 0
+                ENDIF
 
 ; Prioridad frente al fondo (la usan los sprites, en A1, y los rotulos por software, en A2): PROW = la prioridad de los pixeles de AGI de una fila de la imagen
 PROW            equ MSGBUF

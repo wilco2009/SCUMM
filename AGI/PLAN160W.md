@@ -84,3 +84,6 @@ Un par de colores global en el plano de texto; ausencia de doble buffer (parpade
 - Fase 5 (estado): `GFX4=1`: SQ1, KQ2, PQ1, SQ2 y KQ1 (190-240 ciclos con movimiento): trazas, imagen, texto 40x25 y sprites iguales a los del modelo. `GFX4=0`: `dump/runall.sh` 5 OK y los 7 binarios identicos.
   **Pendiente / a afinar con la placa:** exactitud de color en add.to.pic y rotulos (hoy 2 colores por fila de 8 px, como los sprites; los datos exactos de 16 colores necesitarian el RLE de la celda), restauracion con ventana
   abierta durante un cambio de rotulos, tiempo de recomposicion de rotulos grandes (~100 ms estimados), guardar/cargar partida en placa, doble buffer (no hay), calibracion de X/Y de los sprites (+32).
+- Colores exactos (2026-11-01): con GFX4 los `Nvvvl.SPR` llevan, tras los mosaicos, un bloque por celda con sus pixeles exactos (RLE de codigos de Chroma, espejo hecho; segunda tabla de desplazamientos);
+  lo usan add.to.pic, los rotulos anchos y el dibujo de show.obj (los sprites hardware siguen con 2 colores por fila de 8). Si el bloque no cabe en la pagina (~0,3 % de las celdas) se usan los mosaicos.
+- Cuadro de la descripcion al guardar: la linea de marcas son 32 columnas (en HiRes eran 24 celdas de 8 px).

@@ -13,7 +13,12 @@ Fichero Nvvvl.SPR (vvv = vista, l = bucle), little endian:
   +4   u16 por celda: desplazamiento de su registro desde +2
   registro de celda: u8 mosaicos, u8 ancho HiRes, u8 alto, u8 banderas (bit 0 = software), u16 huella de las mascaras, y por mosaico: u8 tx, u8 ty,
   8 bytes de color, 8 de dato y 8 de mascara (los 24 bytes van tal cual a 2105-2128: color, forma, mascara)
-  Las celdas con mas de SW_TILES mosaicos en una fila (rotulos anchos) no caben en los sprites (12 por linea): las dibuja el Z80 en el bitmap, por celdas;
+  Con AGI_GFX4=1 (modo 160w, AGI/PLAN160W.md) los mosaicos son de 8 pixeles nativos (1 pixel de AGI = 1 pixel) y el fichero lleva ademas, tras los registros, el bloque de cada celda
+  con sus pixeles exactos (los 16 colores) para lo que se pinta por software (rotulos anchos, add.to.pic y el dibujo de show.obj); una segunda tabla de u16 (tras la de desplazamientos
+  de los registros, que pasan a empezar en 2 + 4 * celdas) da el desplazamiento de cada bloque (0 = no cabe en la pagina: se usan los mosaicos). Bloque: u8 transparente (codigo de
+  Chroma), u8 0, u16 desplazamientos de las filas (alto + 1, desde el principio del bloque) y las filas: runs de (codigo de Chroma << 4 | longitud 1-15), 0 al final de la fila;
+  el espejo ya esta hecho y el color transparente de la cola de la fila se omite.
+Las celdas con mas de SW_TILES mosaicos en una fila (rotulos anchos) no caben en los sprites (12 por linea): las dibuja el Z80 en el bitmap, por celdas;
   la huella (FNV-1a de las mascaras) dice si dos celdas tienen la misma forma (solo cambian los colores).
 """
 import os
@@ -198,12 +203,58 @@ def loop_maxt(d, loop):
     return max((len(cel_tiles(d, loop, c)[2]) for c in range(ncels)), default=0)
 
 
-def build_loop(d, loop, view=None):
-    """Contenido de Nvvvl.SPR para el bucle `loop` de la vista d (sin el u16 del tamano)."""
+def raw_cel(view, d, loop, cel):
+    """GFX4: (transparente, ancho, alto, filas) de la celda que se dibuja, con codigos de Chroma y el espejo hecho; None en las vistas en blanco."""
+    if view in _blank:
+        return None
+    if view in _final:
+        cel = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)] - 1
+    c = cel_pixels(d, loop, cel)
+    if c is None:
+        return None
+    w, h, trans, rows = c
+    return agi2hr.to_chroma(trans), w, h, [[agi2hr.to_chroma(v) for v in row] for row in rows]
+
+
+def raw_block(rc):
+    """GFX4: el bloque de pixeles exactos de una celda (ver la cabecera)."""
+    t, w, h, rows = rc
+    data = []
+    for row in rows:
+        while row and row[-1] == t:
+            row = row[:-1]
+        out = bytearray()
+        i = 0
+        while i < len(row):
+            n = 1
+            while i + n < len(row) and row[i + n] == row[i] and n < 15:
+                n += 1
+            out.append((row[i] << 4) | n)
+            i += n
+        out.append(0)
+        data.append(bytes(out))
+    base = 2 + 2 * (h + 1)
+    offs = []
+    p = base
+    for r in data:
+        offs.append(p)
+        p += len(r)
+    offs.append(p)
+    b = bytearray((t, 0))
+    for o in offs:
+        b.extend((o & 255, o >> 8))
+    for r in data:
+        b.extend(r)
+    return bytes(b)
+
+
+def build_loop_raw(d, loop, view=None):
+    """build_loop y, en GFX4, la lista (por celda) de si lleva el bloque de pixeles exactos."""
     ncels = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)]
     recs = []
+    raws = []
     for cel in range(ncels):
-        hrw, h, tiles = cel_of(view, d, loop, cel, framed=loop == 0 and cel == 0 and has_desc(d))
+        hrw, h, tiles = cel_of(view, d, loop, cel, framed=(not GFX4) and loop == 0 and cel == 0 and has_desc(d))
         sw, hh = meta(tiles, view, loop)
         r = bytearray((len(tiles), hrw, h, sw, hh & 255, hh >> 8))
         for tx, ty, col, pix, msk in tiles:
@@ -212,15 +263,41 @@ def build_loop(d, loop, view=None):
             r.extend(pix)
             r.extend(msk)
         recs.append(bytes(r))
+        if GFX4:
+            rc = raw_cel(view, d, loop, cel)
+            raws.append(raw_block(rc) if rc else b'')
     maxt = max((r[0] for r in recs), default=0)
+    ntab = 2 if GFX4 else 1
     out = bytearray((ncels, maxt))
-    off = 2 + 2 * ncels
+    off = 2 + 2 * ntab * ncels
     for r in recs:
         out.extend((off & 255, off >> 8))
         off += len(r)
+    has = []
+    if GFX4:
+        rawoff = []
+        for b in raws:
+            if b and off + len(b) <= 8190:
+                rawoff.append(off)
+                off += len(b)
+                has.append(True)
+            else:
+                rawoff.append(0)
+                has.append(False)
+        for o in rawoff:
+            out.extend((o & 255, o >> 8))
     for r in recs:
         out.extend(r)
-    return bytes(out)
+    if GFX4:
+        for b, hv in zip(raws, has):
+            if hv:
+                out.extend(b)
+    return bytes(out), has
+
+
+def build_loop(d, loop, view=None):
+    """Contenido de Nvvvl.SPR para el bucle `loop` de la vista d (sin el u16 del tamano)."""
+    return build_loop_raw(d, loop, view)[0]
 
 
 def main(argv):
