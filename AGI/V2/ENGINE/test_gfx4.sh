@@ -23,4 +23,7 @@ t D-addpic SQ1 3 "all,cmd=add.to.pic:1:0:0:80:100:4:3,cmd=add.to.pic:1:0:0:40:12
 t D-room6 SQ1 40 "room=6" ""
 t D-kq1 KQ1 60 "" ""
 t D-intro SQ1 26 "" ""
+t D-menu-kq1 KQ1 25 "cyc=10,cmd=set:14,cmd=menu.input,if=controller:2>assignn:100:2,if=controller:21>assignn:100:21,cmd=menu.input,if=controller:7>assignn:101:7" "11:dir:3 12:dir:0 13:dir:3 14:dir:0 15:dir:3 16:dir:0 17:dir:3 18:dir:0 19:dir:3 20:dir:0 21:dir:3 22:dir:0 23:dir:5 24:dir:0"
+t D-menu-larry Larry1 25 "cyc=10,cmd=set:14,cmd=menu.input,if=controller:2>assignn:100:2,if=controller:21>assignn:100:21,cmd=menu.input,if=controller:7>assignn:101:7" "11:dir:3 12:dir:0 13:dir:3 14:dir:0 15:dir:3 16:dir:0 17:dir:3 18:dir:0 19:dir:3 20:dir:0 21:dir:3 22:dir:0 23:dir:5 24:dir:0"
+t D-menu-pq1 PQ1 25 "cyc=10,cmd=set:14,cmd=menu.input,if=controller:2>assignn:100:2,if=controller:21>assignn:100:21,cmd=menu.input,if=controller:7>assignn:101:7" "11:dir:3 12:dir:0 13:dir:3 14:dir:0 15:dir:3 16:dir:0 17:dir:3 18:dir:0 19:dir:3 20:dir:0 21:dir:3 22:dir:0 23:dir:5 24:dir:0"
 exit $FAIL

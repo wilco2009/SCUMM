@@ -236,7 +236,11 @@ mg_cl:          push bc
                 ld d,(hl)
                 ex de,hl
                 call mp_len
+                IF GFX4
+                inc a
+                ELSE
                 add a,2
+                ENDIF
                 ld hl,m_col
                 add a,(hl)
                 ld (hl),a
@@ -364,8 +368,10 @@ mb_l:           ld a,(m_j)
                 inc hl
                 ld d,(hl)
                 ld hl,TXT
+                IF GFX4=0
                 ld (hl),' '
                 inc hl
+                ENDIF
                 ld c,0
 mb_cp:          ld a,(de)
                 or a
@@ -375,9 +381,14 @@ mb_cp:          ld a,(de)
                 inc de
                 inc c
                 jr mb_cp
-mb_z:           ld (hl),' '
+mb_z:
+                IF GFX4
+                ld a,c                  ; 160w (ScummVM): el titulo tal cual, sin espacios de mas
+                ELSE
+                ld (hl),' '
                 ld a,c
                 add a,2
+                ENDIF
                 ld (dl_n),a
                 ld a,(m_j)
                 ld hl,m_sel
@@ -403,6 +414,9 @@ mb_ns:          ld a,b
                 ld a,(dl_n)
                 ld hl,m_c2
                 add a,(hl)
+                IF GFX4
+                inc a                   ; el siguiente titulo, un espacio despues
+                ENDIF
                 ld (hl),a
                 ld hl,m_j
                 inc (hl)

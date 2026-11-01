@@ -521,11 +521,11 @@ class Interp:
             col = 0
             cols = []
             for i, (t, items) in enumerate(self.menus):
-                txt = ' ' + t + ' '
+                txt = t                         # 160w (ScummVM): el titulo tal cual y el siguiente un espacio despues; lo que pasa de la columna 40 se corta
                 fg, bg = (15, 0) if i == sel else (0, 15)
                 agi_text.put_line(tp, None, 0, 0, col, txt, fg, bg)
                 cols.append(col)
-                col += len(txt)
+                col += len(txt) + 1
             items = self.menus[sel][1]
             if items:
                 mx = max(len(x[0]) for x in items)
