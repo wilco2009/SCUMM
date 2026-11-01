@@ -241,6 +241,18 @@ s4_ix:          ld l,a
                 pop ix
                 ret
 
+; A = objeto -> HL = S4S + 6 * A (con lo que se pinto: vista, bucle, celda, x, y, prioridad; los O_SVW... del objeto los usa la cache de sprites del A1)
+s4_ss:          ld l,a
+                ld h,0
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,de
+                add hl,hl
+                ld de,S4S
+                add hl,de
+                ret
+
 ; A = objeto -> HL = S4R + 4 * A
 s4_sr:          ld l,a
                 ld h,0
@@ -370,23 +382,30 @@ p1_l:           ld a,(s4_i)
                 jr z,p1_ns
                 bit 0,(ix+O_SDR)
                 jr z,p1_c
+                ld a,(s4_i)
+                call s4_ss
                 ld a,(ix+O_VIEW)
-                cp (ix+O_SVW)
+                cp (hl)
                 jr nz,p1_c
+                inc hl
                 ld a,(ix+O_LOOP)
-                cp (ix+O_SLP)
+                cp (hl)
                 jr nz,p1_c
+                inc hl
                 ld a,(ix+O_CEL)
-                cp (ix+O_SCL)
+                cp (hl)
                 jr nz,p1_c
+                inc hl
                 ld a,(ix+O_X)
-                cp (ix+O_SX)
+                cp (hl)
                 jr nz,p1_c
+                inc hl
                 ld a,(ix+O_Y)
-                cp (ix+O_SY)
+                cp (hl)
                 jr nz,p1_c
+                inc hl
                 ld a,(ix+O_PRI)
-                cp (ix+O_SPR)
+                cp (hl)
                 jr z,p1_nx
 p1_c:           ld a,1
                 ld (s4_chg),a
@@ -427,18 +446,25 @@ d1_l:           ld a,(hq_cnt)
                 call s4_draw
                 call unmap_win
                 set 0,(ix+O_SDR)
+                ld a,(s4_i)
+                call s4_ss
                 ld a,(ix+O_VIEW)
-                ld (ix+O_SVW),a
+                ld (hl),a
+                inc hl
                 ld a,(ix+O_LOOP)
-                ld (ix+O_SLP),a
+                ld (hl),a
+                inc hl
                 ld a,(ix+O_CEL)
-                ld (ix+O_SCL),a
+                ld (hl),a
+                inc hl
                 ld a,(ix+O_X)
-                ld (ix+O_SX),a
+                ld (hl),a
+                inc hl
                 ld a,(ix+O_Y)
-                ld (ix+O_SY),a
+                ld (hl),a
+                inc hl
                 ld a,(ix+O_PRI)
-                ld (ix+O_SPR),a
+                ld (hl),a
                 ld a,(s4_i)
                 call s4_sr
                 ld a,(s4_bx0)
@@ -592,6 +618,7 @@ sw_y:           defb 0
 sw_pv:          defb 0
 sw_py:          defb 0
 S4R:            defs 4*NOBJ
+S4S:            defs 6*NOBJ
 BKO:            defs 32                 ; copia de SCR (A1) y la pagina de su bucle: el add.to.pic que se pinta
 bk_pg:          defb 0
 bk_on:          defb 0

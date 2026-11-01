@@ -191,6 +191,10 @@ start:          di
                 ld b,7
                 ld a,7
                 call sc_map
+                IF GFX4
+                xor a
+                ld (2069),a             ; sin plano de texto hasta que esten los glifos (ov_load); video_init vuelve a llamarse desde el reinicio y no lo toca
+                ENDIF
                 call video_init
                 call init
                 call ov_load
@@ -337,8 +341,8 @@ video_init:     ld a,85
                 ld (2070),a             ; ventana de imagen: filas de texto 1-21 (lineas 8-175)
                 ld a,22
                 ld (2071),a
-                xor a
-                ld (2069),a             ; sin plano de texto (lo activa el texto, fase 4)
+                ld a,85
+                ld (2057),a             ; sin doble buffer (el de una ejecucion anterior de HiRes)
                 ld a,176
                 ld (2045),a             ; 160x200 a 4 bpp
                 ld a,$0F

@@ -22,4 +22,5 @@ t D-showobj2 SQ1 8 "cyc=3,cmd=show.obj:186" ""
 t D-addpic SQ1 3 "all,cmd=add.to.pic:1:0:0:80:100:4:3,cmd=add.to.pic:1:0:0:40:120:0:2" ""
 t D-room6 SQ1 40 "room=6" ""
 t D-kq1 KQ1 60 "" ""
+t D-intro SQ1 26 "" ""
 exit $FAIL
