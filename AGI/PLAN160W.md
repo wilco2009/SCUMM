@@ -78,3 +78,9 @@ Un par de colores global en el plano de texto; ausencia de doble buffer (parpade
 - Fase 4b (correccion): la ventana de `print` ya no son celdas opacas: son **pixeles de la imagen** (blanco con marco rojo de un pixel, 4 px por columna) y, con `show.obj`, el dibujo del objeto
   (mosaicos de 8 px nativos) centrado; el plano solo lleva las lineas de texto (celdas inversas) y las celdas bajo la ventana se ponen a transparentes. Al cerrar se restaura la imagen desde el
   fondo limpio (pagina B = lineas 0-101, A = 102-167, para no partir una linea) y el plano desde su copia. Menus: solo celdas. Pruebas D-print*, D-restore, D-showobj*: Z80 == modelo (imagen y plano).
+- Fase 3b (rotulos anchos y add.to.pic en 4 bpp): hecha. `ENGINE/agisw4.asm` (overlay A2 con GFX4=1, en lugar de agisw.asm): los mosaicos del Nvvvl.SPR (8 px nativos, 2 colores por fila) se pintan
+  en la imagen contra la prioridad (sw_prow); add.to.pic va a la pantalla y al fondo limpio; los rotulos se recomponen cuando algo cambia (restaurar sus rectangulos desde el fondo y repintar todos).
+  Modelo: `render4(sw=True)`. Pruebas D-addpic, D-room6 (SQ1 sala 6, cupulas) y D-kq1: Z80 == modelo.
+- Fase 5 (estado): `GFX4=1`: SQ1, KQ2, PQ1, SQ2 y KQ1 (190-240 ciclos con movimiento): trazas, imagen, texto 40x25 y sprites iguales a los del modelo. `GFX4=0`: `dump/runall.sh` 5 OK y los 7 binarios identicos.
+  **Pendiente / a afinar con la placa:** exactitud de color en add.to.pic y rotulos (hoy 2 colores por fila de 8 px, como los sprites; los datos exactos de 16 colores necesitarian el RLE de la celda), restauracion con ventana
+  abierta durante un cambio de rotulos, tiempo de recomposicion de rotulos grandes (~100 ms estimados), guardar/cargar partida en placa, doble buffer (no hay), calibracion de X/Y de los sprites (+32).

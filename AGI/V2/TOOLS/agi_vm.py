@@ -414,7 +414,26 @@ class Interp:
                     shown = True
         return shown
 
-    def render4(self):
+    @staticmethod
+    def blit_tiles4(img, pri2, o, c):
+        """Los mosaicos (ancho, alto, [(tx, ty, color, dato, mascara)]) de la celda c de o a la imagen de 160x168 (agisw4.asm): un pixel con la mascara a 1 se pinta si la
+        prioridad del plano en ese pixel es <= la del objeto; tinta (dato 1) o papel de su fila."""
+        w, h, tiles = c
+        top = o.y - h + 1
+        for tx, ty, col, pix, msk in tiles:
+            for r in range(8):
+                y = top + ty * 8 + r
+                if not 0 <= y < 168 or not msk[r]:
+                    continue
+                for k in range(8):
+                    x = o.x + tx * 8 + k
+                    if x >= 160 or not msk[r] & (0x80 >> k):
+                        continue
+                    if pri2 is not None and pri2[y * 160 + x] > o.pri:
+                        continue
+                    img[y * 160 + x] = (col[r] >> 4) if pix[r] & (0x80 >> k) else (col[r] & 15)
+
+    def render4(self, sw=False):
         """Imagen de 160x168 (codigos de Chroma) con los objetos fijos (add.to.pic) ya pintados, y el plano de prioridad de sprites resultante (objetos fijos incluidos)."""
         import agi2hr
         if self.pic is None:
@@ -425,12 +444,25 @@ class Interp:
         img = [agi2hr.to_chroma(v) for v in self.pic.vis]
         pri2 = agi2hr.sprite_priority(self.pic.pri)
         for op in self.pic_ops:
-            if op[0] == 's':
+            if op[0] == 's':                # add.to.pic: los mosaicos de la celda contra la prioridad de la imagen y de los anteriores, que luego sube (como el Z80)
                 o = Obj()
                 o.view, o.loop, o.cel, o.x, o.y, o.pri = op[1]
-                c = self.cel4(o)
+                c = self.cel_of(o)
                 if c is not None:
-                    self.draw_cel4(img, pri2, c, o.x, o.y, o.pri, True)
+                    self.blit_tiles4(img, pri2, o, c)
+                if op[2] is not None:
+                    self.raise_pri(pri2, op[2])
+            elif op[0] == 'z':
+                pri2 = agi2hr.sprite_priority(self.pic.pri)         # new.room: los rangos de los fijos se olvidan
+        if sw:                              # rotulos anchos (mas de SW_TILES mosaicos en una fila): por software, de menor a mayor prioridad
+            import agi2spr
+            for n in self.draw_order():
+                o = self.objs[n]
+                if o.static:
+                    continue
+                c = self.cel_of(o)
+                if c is not None and agi2spr.meta(c[2], o.view, o.loop)[0]:
+                    self.blit_tiles4(img, pri2, o, c)
         if self.box is not None:
             agi_text.draw_box_px(img, self.box[1], self.box[2])
         return img, pri2

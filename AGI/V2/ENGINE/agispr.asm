@@ -16,13 +16,9 @@ PG_VC0          equ 33
 NVSLOT          equ 8
 
 render:         call OVL_SORT           ; A1: orden de los objetos; A2 (call_e): rotulos por software; A1: sprites
-                IF GFX4
-                jp OVL_DRAW             ; 160w: solo sprites por hardware (los rotulos por software y add.to.pic: fase 3b)
-                ELSE
                 ld hl,OVE_RUN
                 call call_e
                 jp OVL_DRAW
-                ENDIF
 
 ; El A2 esta mapeado en lugar del A1: el teclado lo lee el A1 un momento
 kp_a2:          push af

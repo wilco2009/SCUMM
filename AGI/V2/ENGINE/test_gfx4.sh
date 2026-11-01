@@ -19,4 +19,7 @@ t D-menu-open SQ1 16 "cyc=10,cmd=set:14,cmd=menu.input,if=controller:2>assignn:1
 t D-restore SQ1 16 "cyc=3,cmd=display:5:5:10,cyc=4,cmd=print:10" "9:key:13"
 t D-showobj SQ1 8 "cyc=3,cmd=show.obj:216" ""
 t D-showobj2 SQ1 8 "cyc=3,cmd=show.obj:186" ""
+t D-addpic SQ1 3 "all,cmd=add.to.pic:1:0:0:80:100:4:3,cmd=add.to.pic:1:0:0:40:120:0:2" ""
+t D-room6 SQ1 40 "room=6" ""
+t D-kq1 KQ1 60 "" ""
 exit $FAIL
