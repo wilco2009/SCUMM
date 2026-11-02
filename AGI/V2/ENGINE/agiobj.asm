@@ -188,8 +188,21 @@ ua_l:           res 0,(ix+O_F1)
                 djnz ua_l
                 ret
 
-h_draw:         ld hl,OVC_DRAW          ; en el overlay C (el nucleo no tiene sitio)
+h_draw:
+                IF GFX4
+                call argobj
+                bit 1,(ix+O_F1)
+                push af                 ; Z = aun no estaba dibujado
+                ld hl,OVC_DRAW          ; en el overlay C (el nucleo no tiene sitio)
+                call call_c
+                pop af
+                ret nz
+                ld hl,OVB_XPAR          ; el texto va siempre por encima: las celdas bajo el objeto recien dibujado se vuelven transparentes
+                jp call_b
+                ELSE
+                ld hl,OVC_DRAW          ; en el overlay C (el nucleo no tiene sitio)
                 jp call_c
+                ENDIF
 
 h_erase:        call argobj
                 res 1,(ix+O_F1)

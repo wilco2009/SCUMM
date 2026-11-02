@@ -555,6 +555,10 @@ class Interp:
                 agi_text.put_line(tp, None, 8, *op[1:])
             elif op[0] == 'f':
                 agi_text.fill_row(tp, None, 8, op[1], op[2])
+            elif op[0] == 'x':
+                for r in range(op[1], op[2] + 1):
+                    for c in range(op[3], op[4] + 1):
+                        tp[r * 40 + c] = 0
         if self.box is not None:
             agi_text.draw_box(tp, None, self.box[0], self.box[1], self.box[2])
         if self.menu_ui is not None:
@@ -1211,6 +1215,21 @@ class Interp:
             o.xp, o.yp = o.x, o.y           # cmdDraw: xPos_prev = xPos tras fixPosition
             o.dontupd = False
             self.log('draw o%d view %d at %d,%d' % (n, o.view, o.x, o.y))
+            if Interp.GFX4:
+                self.xpar(o)
+
+    def xpar(self, o):
+        """160w: el texto va siempre sobre la imagen y en AGI el objeto se pinta sobre el texto: las celdas de texto que toca el objeto recien dibujado pasan a transparentes
+        (columnas x/4 a min(x+ancho-1,159)/4, filas 1 + (y-alto+1)/8 a 1 + y/8, maximo 21). Igual que t_xpar del overlay B."""
+        c = self.cel4(o)
+        if c is None or o.x >= 160 or c[0] == 0 or c[1] == 0:
+            return
+        c0 = o.x >> 2
+        c1 = min(o.x + c[0] - 1, 159) >> 2
+        r0 = 1 + (max(o.y - c[1] + 1, 0) >> 3)
+        r1 = min(1 + (o.y >> 3), 21)
+        if r0 <= r1:
+            self.pic_ops.append(('x', r0, r1, c0, c1))
 
     def c_erase(self, n): self.obj(n).drawn = False
 

@@ -41,6 +41,7 @@ TCELL           equ 32+8*GFX4           ; celdas de una linea de pantalla (8 pix
 TPLANE          equ HR_BM+168*80        ; 160w: los 1000 codigos del plano de texto, justo tras la imagen
 TFONT           equ $D800               ; 160w: tabla de glifos de 2 KB alineada (registro I); los codigos 0-31 y 128-159 no se usan, asi que su sitio lo comparte el plano de texto
 OVB_FONT        equ $2024
+OVB_XPAR        equ $2027               ; 160w: draw deja transparentes las celdas de texto bajo el objeto
 LWIN            equ $8000
 TOKLIM          equ $AA                 ; parte baja del limite de TOKS (TOKS+90)
 KEYMAP          equ $7100               ; por tecla ASCII (0-127): controlador y si esta puesto (2 bytes)

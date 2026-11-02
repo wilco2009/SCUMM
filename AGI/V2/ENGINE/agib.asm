@@ -24,6 +24,7 @@
                 jp t_clear_rect         ; OVB_CLRRECT
                 IF GFX4
                 jp t_fontinit           ; OVB_FONT
+                jp t_xpar               ; OVB_XPAR
                 ENDIF
 
 TXT             equ TMPM
@@ -110,6 +111,75 @@ pb_nx:          ld hl,pb_k
                 cp (hl)
                 jr nz,pb_l
                 ret
+; draw (160w): las celdas de texto que toca el objeto ARGS (recien dibujado) pasan a transparentes (codigo 0); el texto va siempre sobre la imagen y en AGI el objeto se pinta sobre el texto
+; columnas: x/4 a min(x+ancho-1,159)/4; filas de texto: 1 + (y-alto+1)/8 a 1 + y/8 (maximo 21)
+t_xpar:         call argobj
+                call obj_info
+                ld a,d
+                or a
+                ret z
+                ld a,e
+                or a
+                ret z
+                ld a,(ix+O_X)
+                cp 160
+                ret nc
+                srl a
+                srl a
+                ld (tx_c),a
+                ld a,(ix+O_X)
+                add a,d
+                jr c,tx_m
+                dec a
+                cp 160
+                jr c,tx_k
+tx_m:           ld a,159
+tx_k:           srl a
+                srl a
+                ld hl,tx_c
+                sub (hl)
+                inc a
+                ld (tx_n),a
+                ld a,(ix+O_Y)
+                ld c,a
+                sub e
+                jr c,tx_t0
+                inc a
+                jr tx_t1
+tx_t0:          xor a
+tx_t1:          srl a
+                srl a
+                srl a
+                inc a
+                ld (tx_r),a
+                ld a,c
+                srl a
+                srl a
+                srl a
+                inc a
+                cp 22
+                jr c,tx_r1
+                ld a,21
+tx_r1:          ld (tx_e),a
+tx_l:           ld a,(tx_e)
+                ld hl,tx_r
+                cp (hl)
+                ret c
+                ld a,(tx_c)
+                ld b,a
+                ld a,(tx_n)
+                ld e,a
+                ld c,0
+                ld a,(hl)
+                call tp_fill
+                ld hl,tx_r
+                inc (hl)
+                jr tx_l
+tx_c:           defb 0
+tx_n:           defb 0
+tx_r:           defb 0
+tx_e:           defb 0
+
 ; Los glifos de 6 pixeles (ASCII 32-127) a la tabla de la FPGA (TFONT, I = $D8): en los codigos 32-127 y, para el texto inverso (bit 7), en los 160-255
 t_fontinit:     ld hl,FONT
                 ld de,TFONT+256
