@@ -998,22 +998,21 @@ di_endf:        ex de,hl
                 jp rl_go
 
 ; skipInstructionsUntil: DE = ip, A = $FC o $FF; salta instrucciones de condicion hasta ese byte (inclusive)
-skip_until:     ld c,a
+skip_until:     ld b,a                  ; destruye BC (do_if lo repone)
 su_l:           ld a,(de)
                 inc de
-                cp c
+                cp b
                 ret z
                 cp $FC
                 jr nc,su_l
                 cp $0E
                 jr z,su_s
+                ld hl,cargtab-1
+                add a,l
                 ld l,a
-                ld h,0
-                push de
-                ld de,cargtab-1
-                add hl,de
-                pop de
-                ld a,(hl)
+                jr nc,su_n
+                inc h
+su_n:           ld a,(hl)
                 add a,e
                 ld e,a
                 jr nc,su_l
