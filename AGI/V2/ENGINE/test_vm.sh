@@ -6,8 +6,11 @@ cd "$(dirname "$0")"
 # GFX4=1: modo 160w (AGI/PLAN160W.md); gfx4.inc queda a 0 al acabar (es el binario de master)
 printf 'GFX4            equ %s
 ' "${GFX4:-0}" > gfx4.inc
+printf 'TESTS           equ %s
+' "${TESTS:-1}" > tests.inc                  # la traza de pasos (trace_step) solo se ensambla en las pruebas
 trap 'printf "GFX4            equ 0
-" > gfx4.inc' EXIT
+" > gfx4.inc; printf "TESTS           equ 0
+" > tests.inc' EXIT
 GFX=""; [ "${GFX4:-0}" = 1 ] && GFX="--gfx4"
 export GFX4=${GFX4:-0}
 export AGI_GFX4=$GFX4

@@ -14,6 +14,7 @@
 ; =====================================================================
 
                 include "gfx4.inc"
+                include "tests.inc"            ; TESTS = 1 solo en las pruebas del arnes (test_vm.sh): traza de pasos; en produccion (0) no cuesta nada
                 org 16896
                 jp start
                 defs 16914-$
@@ -721,55 +722,57 @@ mn_t:           inc b
 ; ---------------------------------------------------------------------
 ;  El bucle del bytecode
 ; ---------------------------------------------------------------------
-rl_next:        ld de,(ip)
-                ld hl,(lend)
-                or a
-                sbc hl,de
-                ret z
-                ret c
-                ld a,(exitall)
+; rl_next: tras un comando (puede haber cambiado exitall/stopf/ip). rl_go: DE = ip, tras un if o un goto (no cambian nada de eso)
+rl_next:        ld a,(exitall)
                 or a
                 ret nz
                 ld a,(stopf)
                 or a
                 ret nz
+                ld de,(ip)
+rl_go:          ld hl,(lend)
+                or a
+                sbc hl,de
+                jr z,rl_end
+                jr c,rl_end
+                IF TESTS
                 call trace_step
+                ENDIF
                 ld a,(de)
                 inc de
                 cp $FF
                 jp z,do_if
                 cp $FE
-                jp z,do_goto
+                jr z,do_goto
                 cp NCMDS
                 jr c,rl_cmd
                 ld a,6
                 jp fatal
-rl_cmd:         ld c,a
+rl_end:         ld (ip),de
+                ret
+rl_cmd:         ld c,a                  ; empuja rl_next y el manejador (el ret lo ejecuta), copia los argumentos a ARGS
                 ld b,0
                 ld hl,argtab
                 add hl,bc
                 ld a,(hl)
-                ld hl,ARGS
-                or a
-                jr z,rl_na
-                ld b,a
-rl_ca:          ld a,(de)
-                inc de
-                ld (hl),a
-                inc hl
-                djnz rl_ca
-rl_na:          ld (ip),de
-                ld b,0
                 ld hl,cmdtab
                 add hl,bc
                 add hl,bc
-                ld a,(hl)
+                ld c,(hl)
                 inc hl
-                ld h,(hl)
-                ld l,a
-                ld de,rl_next
-                push de
-                jp (hl)
+                ld b,(hl)
+                ld hl,rl_next
+                push hl
+                push bc
+                ex de,hl
+                or a
+                jr z,rl_na
+                ld c,a
+                ld b,0
+                ld de,ARGS
+                ldir
+rl_na:          ld (ip),hl
+                ret
 
 do_goto:        ex de,hl
                 ld e,(hl)
@@ -777,43 +780,120 @@ do_goto:        ex de,hl
                 ld d,(hl)
                 inc hl
                 add hl,de
-                ld (ip),hl
-                jp rl_next
+                ex de,hl
+                jr rl_go
 
-; DE apunta a las condiciones
-do_if:          xor a
-                ld (c_orm),a
-                ld (c_orres),a
-                ld (c_neg),a
-                inc a
-                ld (c_res),a
+; DE apunta a las condiciones. B = 1 dentro de un OR, C = 1 si la condicion siguiente va negada
+; (el estado vive en registros; equaln/equalv/lessn/lessv/greatern/greaterv/isset/issetv/has van en linea, sin pasar por ARGS)
+do_if:          ld bc,0
 di_l:           ld a,(de)
                 inc de
-                cp $FF
-                jp z,di_end
-                cp $FD
-                jr nz,di_1
-                ld a,1
-                ld (c_neg),a
-                jr di_l
-di_1:           cp $FC
-                jr nz,di_2
-                ld a,(c_orm)
+                cp 10
+                jp nc,di_big
                 or a
-                jr z,di_open
-                xor a                   ; el OR acaba sin ninguna condicion cierta: falso, y se salta hasta el $FF (testIfCode)
-                ld (c_res),a
-                ld (c_orm),a
-                jp di_sf
-di_open:        ld a,1
-                ld (c_orm),a
-                jr di_l
-di_2:           or a
                 jp z,di_bad
+                add a,a
+                ld hl,di_ft-2
+                add a,l
+                ld l,a
+                adc a,h
+                sub l
+                ld h,a
+                ld a,(hl)
+                inc hl
+                ld h,(hl)
+                ld l,a
+                jp (hl)
+
+di_ft:          defw df_equaln,df_equalv,df_lessn,df_lessv,df_greatern,df_greaterv,df_isset,df_issetv,df_has
+
+df_equaln:      ld a,(de)
+                ld l,a
+                ld h,VARS>>8
+                inc de
+                ld a,(de)
+                inc de
+                cp (hl)
+                jp z,di_T
+                jp di_F
+df_lessn:       ld a,(de)
+                ld l,a
+                ld h,VARS>>8
+                inc de
+                ld a,(de)
+                inc de
+                cp (hl)
+                jp z,di_F
+                jp c,di_F
+                jp di_T
+df_greatern:    ld a,(de)
+                ld l,a
+                ld h,VARS>>8
+                inc de
+                ld a,(de)
+                inc de
+                cp (hl)
+                jp c,di_T
+                jp di_F
+df_isset:       ld a,(de)
+                inc de
+                ld l,a
+                ld h,FLAGS>>8
+                ld a,(hl)
+                or a
+                jp nz,di_T
+                jp di_F
+df_issetv:      ld a,(de)
+                inc de
+                ld l,a
+                ld h,VARS>>8
+                ld l,(hl)
+                ld h,FLAGS>>8
+                ld a,(hl)
+                or a
+                jp nz,di_T
+                jp di_F
+df_has:         ld a,(de)
+                inc de
+                ld l,a
+                ld h,INV>>8
+                ld a,(hl)
+                inc a
+                jp z,di_T
+                jp di_F
+; A = v[arg0], (HL) = v[arg1]
+df_vv:          push bc
+                ld a,(de)
+                inc de
+                ld l,a
+                ld h,VARS>>8
+                ld c,(hl)
+                ld a,(de)
+                inc de
+                ld l,a
+                ld a,c
+                pop bc
+                cp (hl)
+                ret
+df_equalv:      call df_vv
+                jp z,di_T
+                jp di_F
+df_lessv:       call df_vv
+                jp c,di_T
+                jp di_F
+df_greaterv:    call df_vv
+                jp z,di_F
+                jp c,di_F
+                jp di_T
+
+; resto de condiciones y los bytes de control
+di_big:         cp $FC
+                jr nc,di_ctl
                 cp NCONDS+1
-                jp nc,di_bad
+                jr nc,di_bad
+                push bc
                 cp $0E
-                jr nz,di_norm
+                jr nz,ds_norm
                 ld a,(de)               ; said: k palabras de 16 bits
                 inc de
                 ld (saidk),a
@@ -825,8 +905,8 @@ di_2:           or a
                 ex de,hl
                 ld (ip),de
                 call hc_said
-                jp di_res
-di_norm:        dec a
+                jr ds_res
+ds_norm:        dec a
                 ld c,a
                 ld b,0
                 ld hl,cargtab
@@ -834,14 +914,14 @@ di_norm:        dec a
                 ld a,(hl)
                 ld hl,ARGS
                 or a
-                jr z,di_na
+                jr z,ds_na
                 ld b,a
-di_ca:          ld a,(de)
+ds_ca:          ld a,(de)
                 inc de
                 ld (hl),a
                 inc hl
-                djnz di_ca
-di_na:          ld (ip),de
+                djnz ds_ca
+ds_na:          ld (ip),de
                 ld b,0
                 ld hl,ccmdtab
                 add hl,bc
@@ -851,50 +931,71 @@ di_na:          ld (ip),de
                 ld h,(hl)
                 ld l,a
                 call jp_hl
-di_res:         ld b,a
-                ld a,(c_neg)
+ds_res:         pop bc
+                ld de,(ip)
                 or a
-                jr z,di_nn
+                jp nz,di_T
+                jp di_F
+
+di_ctl:         cp $FF
+                jr z,di_endt
+                cp $FD
+                jr z,di_neg
+                cp $FC
+                jr nz,di_bad
                 ld a,b
-                xor 1
-                ld b,a
-                xor a
-                ld (c_neg),a
-di_nn:          ld a,(c_orm)
                 or a
-                jr z,di_and
-                ld a,b                  ; en un OR, la primera cierta salta hasta el $FC que lo cierra
-                or a
-                jr z,di_nx
-                ld de,(ip)
-                ld a,$FC
+                jr z,di_open
+                ld a,$FF                ; el OR acaba sin ninguna condicion cierta: falso, y se salta hasta el $FF (testIfCode)
                 call skip_until
-                xor a
-                ld (c_orm),a
+                jr di_endf
+di_open:        ld b,1
                 jp di_l
-di_and:         ld a,b                  ; en un Y, la primera falsa salta hasta el $FF
+di_neg:         ld c,1
+                jp di_l
+di_bad:         ld a,7
+                jp fatal
+
+; condicion cierta / falsa (ya con el NOT aplicado al salir)
+di_T:           ld a,c
                 or a
-                jr nz,di_nx
-                ld (c_res),a
-                ld de,(ip)
-di_sf:          ld a,$FF
+                jr nz,di_tn
+di_tp:          ld a,b
+                or a
+                jp z,di_l               ; en un Y, sigue
+                ld a,$FC                ; en un OR, la primera cierta salta hasta el $FC que lo cierra
                 call skip_until
-                jp di_end
-di_nx:          ld de,(ip)
+                ld bc,0
                 jp di_l
-di_end:         ex de,hl
+di_tn:          ld c,0
+                jr di_fp
+di_F:           ld a,c
+                or a
+                jr nz,di_fn
+di_fp:          ld a,b
+                or a
+                jp nz,di_l              ; en un OR, sigue
+                ld a,$FF                ; en un Y, la primera falsa salta hasta el $FF
+                call skip_until
+                jr di_endf
+di_fn:          ld c,0
+                jr di_tp
+
+di_endt:        ex de,hl
                 ld e,(hl)
                 inc hl
                 ld d,(hl)
                 inc hl
-                ld a,(c_res)
-                or a
-                jr nz,di_t
+                ex de,hl
+                jp rl_go
+di_endf:        ex de,hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                inc hl
                 add hl,de
-di_t:           ld (ip),hl
-                jp rl_next
-di_bad:         ld a,7
-                jp fatal
+                ex de,hl
+                jp rl_go
 
 ; skipInstructionsUntil: DE = ip, A = $FC o $FF; salta instrucciones de condicion hasta ese byte (inclusive)
 skip_until:     ld c,a
@@ -930,6 +1031,7 @@ su_s:           ld a,(de)               ; said: n palabras de 16 bits
 jp_hl:          jp (hl)
 
 ; DE = direccion del codigo de operacion: apunta (logica, pc) en la traza y cuenta el paso
+                IF TESTS
 trace_step:     push de
                 ld hl,(nsteps)
                 inc hl
@@ -959,6 +1061,7 @@ trace_step:     push de
                 call unmap_win
 ts_end:         pop de
                 ret
+                ENDIF
 
 ; ---------------------------------------------------------------------
 ;  Sala nueva, reloj, resumen, sonidos

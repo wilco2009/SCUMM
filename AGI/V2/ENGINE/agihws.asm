@@ -14,7 +14,9 @@ SPR_X           equ 2102
 SPR_Y           equ 2104
 SPR_COL         equ 2105                ; color, forma y mascara: 24 bytes seguidos
 
-t_sinit:        ld hl,SHD
+t_sinit:        ld a,64
+                ld (hw_hi),a
+                ld hl,SHD
                 ld de,SHD+1
                 ld bc,511
                 ld (hl),0
@@ -212,8 +214,11 @@ hq_cp:          ld a,c
 hq_dn:
                 xor a
                 ld (sw_force),a
-                ld a,(sk)               ; apagar los que sobran
-hq_off:         cp 64
+                ld a,(sk)               ; apagar los que sobran: solo hasta el tope del ciclo anterior (los de mas arriba ya estaban apagados)
+                ld hl,hw_hi
+                ld c,(hl)
+                ld (hl),a               ; desde sk hacia arriba queda todo apagado
+hq_off:         cp c
                 ret nc
                 ld (hw_k),a
                 ld l,a
@@ -1137,6 +1142,7 @@ vtry:           defb 0
 vlen2:          defw 0
 nmv:            defb "SPR/N0000.SPR",0
 sk:             defb 0
+hw_hi:          defb 64                 ; tope de sprites que pudieron quedar activos (hq_off)
 rpri:           defb 0
 rn:             defb 0
 hw_k:           defb 0
