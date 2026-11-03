@@ -60,8 +60,7 @@ def ref_cel(g, view, loop, cel):
     if d[2] == 0:
         return None
     lp = loop if loop < d[2] else 0
-    if view in agi2spr._final:
-        cel = d[d[5 + 2 * lp] | (d[6 + 2 * lp] << 8)] - 1
+    cel = agi2spr.final_cel(view, d, lp, cel)
     return R.decode_view_cel(d, loop, cel)
 
 

@@ -138,7 +138,7 @@ SW_TILES = 6
 
 # Vistas que se dibujan por software (como los rotulos anchos) aunque quepan en los sprites, porque en su sala pasan de los 12 sprites por linea y el hardware
 # deja sin dibujar a los de abajo del orden (una cupula y la mitad del ego): {juego: {vista}}. SQ1, sala 6: tres cupulas de 5 mosaicos por fila (vista 175) y el ego.
-FORCE_SW = {'SQ1': {175}}
+FORCE_SW = {'SQ1': {175}, 'SQ2': {(147, 1), (147, 2)}}
 # Vistas cuya animacion se congela al dibujarlas (tiempo de ciclo 127: casi no cambian de celda y conservan la de set.cel): sus cambios de celda, dibujadas por
 # software, recomponen lineas cada ciclo y eran el 60 % del tiempo de la sala. SQ1, sala 6: las luces de las cupulas (vista 175); sala 31: los pistones de la maquina (vista 78).
 # KQ1, salas 1 y 2 (castillo): la bandera de la torre (vista 97, 8-9 mosaicos por fila: por software) y los cocodrilos del foso (vista 107, dos objetos) cambiaban de
@@ -160,7 +160,12 @@ FINAL_CEL = {'SQ1': {63, 204, 206}}
 # (vista, bucle) en lugar de una vista: solo ese bucle. SQ2, sala 9 (desierto): los arboles negros de fondo (vista 44, bucle 0, objetos 2 a 5) no caben en los
 # sprites junto a los verdes (bucle 1); decision del usuario: solo se ven los verdes.
 BLANK_VIEWS = {'SQ1': {64}, 'SQ2': {(44, 0)}}
+# (vista, bucle) en lugar de una vista: solo ese bucle. Animacion de dos fotogramas (estado inicial y estado final): la celda 0 se queda como es y todas las demas
+# dibujan la ultima del bucle; ciclo, tiempos y banderas siguen igual. SQ2, sala 66: las dos paredes que se levantan a los lados (vista 147, bucles 1 y 2, 19
+# mosaicos cada una) crecian en 5 celdas con sprites y la de la derecha salia incompleta (limite de 64); ahora van por software (FORCE_SW) y no recomponen nada.
+TWO_FRAMES = {'SQ2': {(147, 1), (147, 2)}}
 _force = set()
+_two = set()
 _freeze = set()
 _hw = set()
 _final = set()
@@ -169,13 +174,21 @@ _blank = set()
 
 def set_game(path):
     """Elige las vistas forzadas a software del juego (carpeta `path`)."""
-    global _force, _freeze, _hw, _final, _blank
+    global _two, _force, _freeze, _hw, _final, _blank
     name = os.path.basename(os.path.normpath(path)).upper()
     _force = FORCE_SW.get(name, set())
+    _two = TWO_FRAMES.get(name, set())
     _freeze = FREEZE_VIEWS.get(name, set())
     _hw = FORCE_HW.get(name, set())
     _final = FINAL_CEL.get(name, set())
     _blank = BLANK_VIEWS.get(name, set())
+
+
+def final_cel(view, d, loop, cel):
+    """Celda que se dibuja: la ultima del bucle en FINAL_CEL; en TWO_FRAMES, la 0 o la ultima."""
+    if view in _final or ((view, loop) in _two and cel > 0):
+        return d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)] - 1
+    return cel
 
 
 def cel_of(view, d, loop, cel, framed=False):
@@ -198,7 +211,7 @@ def meta(tiles, view=None, loop=None):
         per[ty] = per.get(ty, 0) + 1
         for b in (tx, ty) + tuple(msk):
             h = ((h ^ b) * 0x0101) & 0xFFFF
-    return (1 if per and view not in _hw and (view, loop) not in _hw and (max(per.values()) > SW_TILES or view in _force) else 0), h
+    return (1 if per and view not in _hw and (view, loop) not in _hw and (max(per.values()) > SW_TILES or view in _force or (view, loop) in _force) else 0), h
 
 
 def loop_maxt(d, loop):

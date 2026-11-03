@@ -390,8 +390,7 @@ class Interp:
         loop, cel = o.loop, o.cel
         if loop >= d[2]:
             loop = 0
-        if o.view in agi2spr._final:
-            cel = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)] - 1
+        cel = agi2spr.final_cel(o.view, d, loop, cel)
         try:
             return agi2spr.cel_pixels(d, loop, cel if cel < d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)] else 0)
         except IndexError:
