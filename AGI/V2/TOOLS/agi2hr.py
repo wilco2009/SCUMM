@@ -19,7 +19,7 @@ Formato (little endian):
   +5632 atributos: 168 x 32 bytes (papel en el nibble alto, tinta en el bajo)      -> va a $C000 tal cual
   +11008 prioridad: por cada una de las 168 filas, runs de (prioridad << 4 | (longitud - 1)); cada fila suma 160 pixeles
   +11008+n+m  maximos por bloques de 8 pixeles de AGI de la prioridad de los sprites (para saltarse la mascara)
-  +11008+n  prioridad de los sprites: el mismo formato, pero con las lineas de control (0-3) sustituidas por la primera prioridad >= 4 hacia abajo (4 si no hay)
+  +11008+n  prioridad de los sprites: el mismo formato, pero con las lineas de control (0-2) sustituidas por la primera prioridad >= 3 hacia abajo (4 si no hay)
 
 Con --gfx4 (modo 160w de la FPGA, 160x200 a 4 bpp; ver AGI/PLAN160W.md) el fichero es la version 2: misma cabecera ('AGIP', +4 = 2, +6 = 160), y a partir de +256
 la imagen nativa 160x168 sin cuantificar (13.440 bytes: 80 por linea, nibble alto = pixel de la izquierda, indice = codigo de Chroma, el de la paleta por omision pal16),
@@ -138,14 +138,14 @@ def rle_priority(pri):
 
 
 def sprite_priority(pri):
-    """Plano de prioridad contra el que se comparan los sprites: una linea de control (0-3) toma la primera prioridad >= 4 que
-    haya debajo (4 si no hay ninguna)."""
+    """Plano de prioridad contra el que se comparan los sprites: una linea de control (0-2, como SpritesMgr::drawCel y GfxMgr::checkControlPixel de ScummVM;
+    el 3 es una prioridad de verdad, por ejemplo el agua) toma la primera prioridad >= 3 que haya debajo (4 si no hay ninguna)."""
     out = list(pri)
     below = [4] * W
     for y in range(H - 1, -1, -1):
         for x in range(W):
             v = out[y * W + x]
-            if v < 4:
+            if v < 3:
                 v = below[x]
                 out[y * W + x] = v
             below[x] = v
