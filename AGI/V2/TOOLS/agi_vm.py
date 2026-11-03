@@ -498,8 +498,8 @@ class Interp:
                 c = self.cel_of(o)
                 if c is not None:
                     self.blit_obj4(img, pri2, o, c)
-                if op[2] is not None:
-                    self.raise_pri(pri2, op[2])
+                for sp in op[2] or ():
+                    self.raise_pri(pri2, sp)
             elif op[0] == 'z':
                 pri2 = agi2hr.sprite_priority(self.pic.pri)         # new.room: los rangos de los fijos se olvidan
         if sw:                              # rotulos anchos (mas de SW_TILES mosaicos en una fila): por software, de menor a mayor prioridad
@@ -683,8 +683,9 @@ class Interp:
                 c = self.cel_of(o)
                 if c is not None:
                     self.blit_cel(bm, at, 8, o, c, pri2)
-                if op[2] is not None and pri2 is not None:
-                    self.raise_pri(pri2, op[2])
+                if pri2 is not None:
+                    for sp in op[2] or ():
+                        self.raise_pri(pri2, sp)
             elif op[0] == 'z':
                 pri2 = agi2hr.sprite_priority(self.pic.pri) if self.pic is not None else None       # new.room: los rangos de los fijos se olvidan
             else:
@@ -1142,8 +1143,13 @@ class Interp:
         span = self.add_spans(o)
         self.pic_ops.append(('s', rec, span))
 
+    GAP_MIN = 8                         # hueco minimo (pixeles de AGI) entre dos mosaicos de una fila para partir los rangos (agihws.asm: GAPMIN)
+
     def add_spans(self, o):
-        """Lo que un objeto fijo tapa a los sprites: por cada fila de la celda, el rango de pixeles de AGI (5 * x // 8 del HiRes) del primer al ultimo pixel opaco."""
+        """Lo que un objeto fijo tapa a los sprites: por cada fila de la celda, el rango de pixeles de AGI (5 * x // 8 del HiRes) del primer al ultimo pixel opaco.
+        Si una fila tiene un hueco de GAP_MIN pixeles o mas entre dos mosaicos (el mayor de la fila, el primero si hay dos iguales), el rango se parte en dos cabeceras
+        (izquierda y derecha del hueco) para que el hueco (una puerta, una ventana) no tape a los sprites; si no caben dos cabeceras queda el rango unico.
+        Devuelve la lista de rangos (1 o 2) o None."""
         import agi2spr
         c = self.cel_of(o)
         if c is None or len(self.spans) >= self.SP_MAX:
@@ -1151,6 +1157,9 @@ class Interp:
         h, tiles = c[1], c[2]
         ex_min = [255] * 128
         ex_max = [0] * 128
+        gl = [0] * 128
+        gs = [0] * 128
+        ge = [0] * 128
         x0 = agi2spr.lo(o.x)
         for tx, ty, col, pix, msk in tiles:
             for r in range(8):
@@ -1160,7 +1169,12 @@ class Interp:
                 f = next(i for i in range(8) if m & (0x80 >> i))
                 l = max(i for i in range(8) if m & (0x80 >> i))
                 bx = x0 + tx * 8
-                ex_min[row] = min(ex_min[row], min(255, self.agx(bx + f)))
+                first = min(255, self.agx(bx + f))
+                if ex_min[row] != 255 and first > ex_max[row]:
+                    g = first - ex_max[row] - 1
+                    if g >= self.GAP_MIN and g > gl[row]:
+                        gl[row], gs[row], ge[row] = g, ex_max[row] + 1, first - 1
+                ex_min[row] = min(ex_min[row], first)
                 ex_max[row] = max(ex_max[row], min(255, self.agx(bx + l)))
         n = min(h, 128)
         if self.span_rows + n > self.SP_ROWS:
@@ -1172,7 +1186,23 @@ class Interp:
         self.span_rows += n
         span = (o.y - h + 1, o.pri, pairs)
         self.spans.append(span)
-        return span
+        if any(gl[:n]) and len(self.spans) < self.SP_MAX and self.span_rows + n <= self.SP_ROWS:
+            pa, pb = [], []
+            for i in range(n):
+                a0, a1 = pairs[i]
+                if gl[i] and a0 <= a1:
+                    pa.append((a0, gs[i] - 1))
+                    pb.append((ge[i] + 1, a1))
+                else:
+                    pa.append((a0, a1))
+                    pb.append((255, 0))
+            span = (o.y - h + 1, o.pri, pa)
+            self.spans[-1] = span
+            span2 = (o.y - h + 1, o.pri, pb)
+            self.spans.append(span2)
+            self.span_rows += n
+            return [span, span2]
+        return [span]
 
     def c_add_to_pic_v(self, *a): self.c_add_to_pic(*[self.vars[i] for i in a])
 

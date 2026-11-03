@@ -1212,6 +1212,8 @@ SHD:            defs 8*64
 ;  SPP: un par (ax0, ax1) por fila, vacio = (255, 0). Se vacian con draw.pic y new.room.
 ; ---------------------------------------------------------------------
 
+GAPMIN          equ 8                   ; hueco minimo (pixeles de AGI) entre dos mosaicos de una fila para partir sus rangos (agi_vm.GAP_MIN)
+
 t_spclr:        xor a
                 ld (sp_n),a
                 ld hl,0
@@ -1282,6 +1284,13 @@ t_addhdr:       ld ix,SCR
                 ld bc,127
                 ld (hl),0
                 ldir
+                ld hl,ex_gl
+                ld de,ex_gl+1
+                ld bc,127
+                ld (hl),0
+                ldir
+                xor a
+                ld (ap_gap),a
                 ld a,(cv_h)
                 ld (ap_h),a
                 ld a,(ix+O_X)
@@ -1348,6 +1357,45 @@ ap_l2:          ld a,d
                 ld d,0
                 ld hl,ex_min
                 add hl,de
+                ld a,(hl)
+                cp 255
+                jr z,ap_ng              ; la fila aun no tiene mosaicos
+                ld hl,ex_max
+                add hl,de
+                ld a,c
+                sub (hl)                ; primero - ultimo del mosaico anterior
+                jr c,ap_ng
+                jr z,ap_ng
+                dec a                   ; pixeles vacios entre los dos
+                cp GAPMIN
+                jr c,ap_ng
+                ld b,a
+                ld hl,ex_gl
+                add hl,de
+                ld a,b
+                cp (hl)
+                jr c,ap_ng              ; el mayor de la fila; a igualdad, el primero
+                jr z,ap_ng
+                ld (hl),b
+                ld hl,ex_ge
+                add hl,de
+                ld a,c
+                dec a
+                ld (hl),a               ; fin del hueco
+                ld hl,ex_max
+                add hl,de
+                ld a,(hl)
+                inc a
+                ld hl,ex_gs
+                add hl,de
+                ld (hl),a               ; principio del hueco
+                ld a,1
+                ld (ap_gap),a
+ap_ng:          ld a,(ap_row)
+                ld e,a
+                ld d,0
+                ld hl,ex_min
+                add hl,de
                 ld a,c
                 cp (hl)
                 jr nc,ap_m1
@@ -1404,12 +1452,12 @@ ap_n1:          ld (ap_n),a             ; filas
                 or a
                 sbc hl,de
                 ret nc                  ; no caben
-                ld a,(sp_n)             ; cabecera
-                add a,a
-                add a,a
-                add a,a
+                ld a,(sp_n)             ; cabecera (8 * sp_n: hasta 376, no cabe en 8 bits)
                 ld l,a
                 ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
                 ld de,SPH
                 add hl,de
                 push hl
@@ -1494,6 +1542,116 @@ ap_p2:          ld c,a
                 sla c
                 rl b
                 ldir
+                ld a,(ap_gap)           ; hay un hueco: la cabecera sale partida en dos (izquierda y derecha del hueco) si caben las dos
+                or a
+                jp z,ap_nsp
+                ld a,(sp_n)
+                cp SP_MAX
+                jp nc,ap_nsp
+                ld hl,(sp_u)
+                ld a,(ap_n)
+                ld e,a
+                ld d,0
+                add hl,de
+                ld de,SP_ROWS+1
+                or a
+                sbc hl,de
+                jp nc,ap_nsp
+                ld a,(sp_n)             ; la cabecera 2 (en iy): como la 1 pero con los pares a continuacion
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld de,SPH
+                add hl,de
+                push hl
+                pop iy                  ; cabecera nueva
+                ld de,-8
+                add hl,de               ; cabecera 1
+                push iy
+                pop de
+                ld bc,8
+                ldir
+                ld hl,(sp_u)            ; pares de la cabecera 2
+                add hl,hl
+                ld de,SPP
+                add hl,de
+                ld (iy+4),l
+                ld (iy+5),h
+                ld a,(iy-4)             ; pares de la cabecera 1 (+$C000: pagina A2)
+                ld l,a
+                ld a,(iy-3)
+                ld h,a
+                ld de,$C000
+                add hl,de
+                ld (ap_p1a),hl
+                ld l,(iy+4)
+                ld h,(iy+5)
+                add hl,de
+                ld (ap_p2a),hl
+                xor a
+                ld (ap_i),a
+ap_sl:          ld a,(ap_i)             ; fila i: par completo = (min, max)
+                ld e,a
+                ld d,0
+                ld hl,ap_pairs
+                add hl,de
+                add hl,de
+                ld b,(hl)               ; ax0
+                inc hl
+                ld c,(hl)               ; ax1
+                ld hl,(ap_p2a)          ; por defecto: la 2 vacia (255, 0)
+                ld (hl),255
+                inc hl
+                ld (hl),0
+                ld hl,ex_gl
+                add hl,de
+                ld a,(hl)
+                or a
+                jr z,ap_sn              ; sin hueco en esta fila
+                ld a,b
+                cp c
+                jr z,ap_sg
+                jr nc,ap_sn             ; fila vacia
+ap_sg:          ld hl,ex_gs
+                add hl,de
+                ld a,(hl)
+                dec a                   ; la 1 acaba antes del hueco
+                ld hl,(ap_p1a)
+                inc hl
+                ld (hl),a
+                ld hl,ex_ge
+                add hl,de
+                ld a,(hl)
+                inc a                   ; la 2 empieza despues del hueco y acaba donde acababa el rango entero
+                ld hl,(ap_p2a)
+                ld (hl),a
+                inc hl
+                ld (hl),c
+ap_sn:          ld hl,(ap_p1a)
+                inc hl
+                inc hl
+                ld (ap_p1a),hl
+                ld hl,(ap_p2a)
+                inc hl
+                inc hl
+                ld (ap_p2a),hl
+                ld a,(ap_i)
+                inc a
+                ld (ap_i),a
+                ld hl,ap_n
+                cp (hl)
+                jr nz,ap_sl
+                ld a,(ap_n)
+                ld e,a
+                ld d,0
+                ld hl,(sp_u)
+                add hl,de
+                ld (sp_u),hl
+                ld hl,sp_n
+                inc (hl)
+ap_nsp:
                 ; sube PG_PMX: por cada fila con rango, los bloques de 8 pixeles que toca
                 ld hl,ap_pairs
                 ld (ap_pp),hl
@@ -1647,6 +1805,12 @@ ap_bx:          defw 0
 ap_tp:          defw 0
 ap_r0:          defw 0
 ap_pp:          defw 0
+ap_gap:         defb 0
+ap_p1a:         defw 0
+ap_p2a:         defw 0
+ex_gl:          defs 128
+ex_gs:          defs 128
+ex_ge:          defs 128
 ex_min:         defs 128
 ex_max:         defs 128
 ap_pairs:       defs 256

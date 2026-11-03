@@ -368,7 +368,23 @@ class Ref:
                 if not 0 <= py < H:
                     continue
                 xs = [x + i for i in range(w) if bm[j * w + i] != key and 0 <= x + i < W]
+                cols = [i for i in range(w) if bm[j * w + i] != key and 0 <= x + i < W]
+                # hueco (agihws.asm, GAPMIN): el mayor entre dos mosaicos (de 8 columnas de la celda) consecutivos de la fila; ahi no se sube la prioridad
+                gap = None
+                if cols:
+                    runs = {}
+                    for i in cols:
+                        a = runs.setdefault(i // 8, [i, i])
+                        a[1] = i
+                    ks = sorted(runs)
+                    best = 0
+                    for k1, k2 in zip(ks, ks[1:]):
+                        g = runs[k2][0] - runs[k1][1] - 1
+                        if g >= 8 and g > best:
+                            best, gap = g, (x + runs[k1][1] + 1, x + runs[k2][0] - 1)
                 for px in range(min(xs), max(xs) + 1) if xs else ():
+                    if gap is not None and gap[0] <= px <= gap[1]:
+                        continue
                     if self.eff_pri(px, py) < pri:
                         self.pri[py * W + px] = pri
         if border <= 3 and not spans:      # (el Z80 no pone la caja de prioridad en el plano de los sprites: solo vale para el paso del ego)
