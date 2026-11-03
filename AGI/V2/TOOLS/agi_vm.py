@@ -229,9 +229,15 @@ class Interp:
         return hx if Interp.GFX4 else (5 * hx) >> 3
 
     def draw_order(self):
-        """Numeros de los objetos con anim y drawn (prioridad < 16) en el orden en que se pintan, de abajo a arriba: por prioridad, a igual prioridad por y (el de
-        mas abajo en la pantalla tapa al de mas arriba) y a igual y por numero."""
-        return [n for p, y, n in sorted((o.pri, 0 if o.static else o.y, n) for n, o in self.objs.items() if o.anim and o.drawn and o.pri < 16)]
+        """Numeros de los objetos con anim y drawn (prioridad < 16) en el orden en que se pintan, de abajo a arriba. ScummVM (SpritesMgr::buildStaticSpriteList / buildRegularSpriteList)
+        pinta primero la lista de los que no se actualizan (sin update) y luego la de los que si, cada una por sortOrder (la y, o con prioridad fijada la y de su banda,
+        GfxMgr::priorityToY: (pri - 5) * 12 + 48) y numero. Aqui va la prioridad antes (como el plano de prioridad que escribe drawCel: con las listas de ScummVM da lo mismo
+        salvo con una tabla de prioridades distinta de la de por defecto, set.pri.base) y a igual prioridad: sin update antes, luego sortOrder y numero."""
+        def so(o):
+            if o.static:
+                return 0
+            return max(0, (o.pri - 5) * 12 + 48) if o.fixpri else o.y
+        return [n for p, u, y, n in sorted((o.pri, 1 if o.upd else 0, so(o), n) for n, o in self.objs.items() if o.anim and o.drawn and o.pri < 16)]
 
     def pri_plane(self):
         """Plano de prioridad de los pixeles de AGI (160 x 168, agi2hr.sprite_priority) con el rango de cada objeto fijo (add.to.pic) subido a su prioridad; None sin imagen."""
@@ -1685,7 +1691,7 @@ class Interp:
 
     def c_show_mem(self): self.do_print('Enough memory', None, None, 0)
 
-    def c_shake_screen(self): pass          # solo visual: lo hace el hardware (fino X/Y) en el Z80
+    def c_shake_screen(self, n=0): pass         # solo visual: lo hace el hardware (fino X/Y) en el Z80
     def c_text_screen(self):
         """La pantalla de texto: las filas 1-21 en negro y sin sprites hasta graphics."""
         self.txtm = True

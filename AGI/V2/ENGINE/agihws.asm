@@ -240,8 +240,8 @@ hq_nx:          ld a,(hw_k)
                 inc a
                 jr hq_off
 
-; Los objetos con anim y drawn (prioridad < 16) en ORD, por (prioridad, y, numero): a igual prioridad se pinta despues (encima) el de y mayor, y a igual y el de
-; numero mayor; hq_cnt = cuantos. Ordenacion por insercion con claves de 16 bits (prioridad * 256 + y).
+; Los objetos con anim y drawn (prioridad < 16) en ORD, por (prioridad, upd, sortOrder, numero) (SpritesMgr: lista estatica antes que la regular, cada una por sortOrder y numero): a igual
+; prioridad se pinta despues (encima) el de sortOrder mayor, y a igual sortOrder el de numero mayor; hq_cnt = cuantos. Ordenacion por insercion con claves de 16 bits ((prioridad * 2 + upd) * 256 + sortOrder, ver od_l).
 sort_objs:      xor a
                 ld (hq_cnt),a
                 ld (rn),a
@@ -249,13 +249,34 @@ sort_objs:      xor a
 od_l:           ld a,(ix+O_F1)
                 and 3
                 cp 3
-                jr nz,od_n
+                jp nz,od_n
                 ld a,(ix+O_PRI)
                 cp 16
-                jr nc,od_n
-                ld h,a
-                ld l,(ix+O_Y)
-                bit 2,(ix+O_F2)         ; los fijos van antes que los demas de su prioridad
+                jp nc,od_n
+                add a,a                 ; clave alta = prioridad * 2 + upd: a igual prioridad los que no se actualizan (la lista estatica de ScummVM) van antes
+                bit 2,(ix+O_F1)
+                jr z,od_u
+                inc a
+od_u:           ld h,a
+                ld l,(ix+O_Y)           ; sortOrder de ScummVM: la y, o con prioridad fijada la y de la banda (priorityToY: (pri - 5) * 12 + 48 = 12 * (pri - 1))
+                bit 5,(ix+O_F1)
+                jr z,od_f
+                ld l,0                  ; prioridad 0: sortOrder 0
+                ld a,(ix+O_PRI)
+                or a
+                jr z,od_f
+                dec a
+                ld c,a
+                add a,a
+                add a,a
+                ld b,a                  ; 4 * (pri - 1)
+                ld a,c
+                add a,a
+                add a,a
+                add a,a                 ; 8 * (pri - 1)
+                add a,b
+                ld l,a
+od_f:           bit 2,(ix+O_F2)         ; los objetos fijos (add.to.pic) van antes que los demas de su prioridad
                 jr z,od_y
                 ld l,0
 od_y:           ld (od_key),hl

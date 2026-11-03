@@ -214,3 +214,29 @@ Perfil en produccion (modo real, sala 12): el `if` era el 55 % del tiempo (do_if
 - `rl_next`/`rl_go`: tras if/goto solo se comprueba el final de la logica (exitall/stopf/ip no cambian); argumentos a ARGS con `ldir`; el manejador se ejecuta por `ret`. Al entrar a un manejador ya no quedan BC/DE/HL del despacho antiguo.
 - Sala 12, instrucciones por ciclo: 45.233 -> 42.029 (trace/hq_off) -> 33.780 (if) -> 32.013 (comandos): -29 %.
 - Pendiente: skip_until mas rapido, pd_patch, cachear vista/loop/cel de los objetos.
+
+### 2026-11-03 — Referencia independiente de ScummVM para la ruta grafica 160w (`TOOLS/refscummvm.py`, `TOOLS/refcheck.py`, `dump/refcheck.sh`)
+Motivo: el fallo de a608633 (prioridad 3 = agua tratada como control en el plano de sprites) no lo vio `runall.sh` porque compara el Z80 con `agi_vm.py` y ambos compartian el fallo.
+- `refscummvm.py`: port literal de `engines/agi` (f7403b6): `picture.cpp` (lineas de Sarien, pinceles con salpicado, relleno por tramos), `GfxMgr::checkControlPixel/priorityFromY/priorityToY`,
+  `SpritesMgr::drawCel/addToPic/addToPicDrawPriorityBox` y `view.cpp` (celdas con espejo). No usa `agi_read.Picture` ni el modelo.
+- `refcheck.py` (`sh dump/refcheck.sh [JUEGO...]`, ~10 min para los 5 en paralelo, solo Python, no usa el Z80): para cada sala de cada juego (`AGI_BOOT=room=N`, la logica del juego crea los objetos) y para
+  posiciones del ego (rejilla + pixeles de control/prioridad 3) compone la pantalla de ScummVM (lista estatica y regular ordenadas como `buildSpriteListAdd`) y la compara con `screen4()` del modelo
+  y con la cobertura de `hw_sprites()` (colores no: 2 por fila de 8, limite del hardware). Z80 == modelo lo sigue comprobando `runall.sh`. `--selftest-oldpri` reinyecta el fallo de a608633 y lo detecta.
+  Excepciones documentadas que aplica: BLANK_VIEWS, FINAL_CEL, rotulos por software (no entran en hw), salas con >64 sprites reservados.
+- **Hallazgos y arreglos:**
+  1. `agi_read.Picture` (la que usa `agi2hr.py` para generar todas las imagenes) NO era el algoritmo de ScummVM: lineas en coma flotante, pinceles/salpicado aproximados (hojas y matorrales salian como
+     manchas lisas) y relleno propio; 26 de 408 imagenes difieren (visual y/o prioridad: KQ2 12, PQ1 10, SQ2 26 cambian el plano de prioridad). Ahora `Picture` usa `refscummvm.Ref`
+     (la antigua queda como `PictureApprox`). **Hay que regenerar los `.GFX` / SD Content de los 5 juegos y las imagenes cambian de aspecto (ahora como en ScummVM).**
+  2. Orden de dibujo de los sprites (`sort_objs` en `agihws.asm`, `draw_order` en el modelo): era (prioridad, y, numero); ScummVM pinta primero la lista de los que no se actualizan (sin `update`) y luego la
+     de los que si, por `sortOrder` (la y, o con prioridad fijada `(pri - 5) * 12 + 48`). Ahora clave = (prioridad * 2 + upd, sortOrder, numero). Efecto: con dos objetos de la misma prioridad
+     (p. ej. el ego junto a un objeto fijo con `stop.update` en SQ1 salas 5 y 9) el de ScummVM tapa al otro; antes se tapaban al reves.
+  3. `agi_vm.py`: `c_shake_screen` no aceptaba su argumento (el modelo se caia en SQ1 salas 2 y 77).
+- **Diferencias que quedan (limitaciones conocidas, el comprobador las separa y no son fallo):**
+  a. add.to.pic: el plano de prioridad de los sprites sube por *rangos por fila* (primer a ultimo pixel opaco, SPH/SPP, memoria) en vez de por pixel, y la caja de linea de control de add.to.pic no entra en el plano
+     de sprites (solo en el paso del ego): un sprite puede quedar tapado en los huecos de un objeto fijo. Peor caso medido: SQ2 sala 56 (hasta 716 px con el ego en los huecos de los arboles), SQ2 sala 81 (22 px),
+     KQ2 107 (10 px). Arreglarlo exige prioridad por pixel de los objetos fijos (plano de 160x168 o mascaras por objeto): pendiente de decision.
+  b. Pixeles de linea de control (1-14 por sala): ScummVM mira lo que hay debajo en el momento de dibujar (objetos fijos y sprites ya pintados); el plano del Z80 sustituye el control de antemano. Tambien con dos sprites
+     solapados sobre un pixel de control: ScummVM no escribe prioridad ahi, asi que el segundo dibujado tapa al primero aunque tenga menos prioridad; el Z80 ordena por prioridad.
+  c. El hardware: 2 colores por fila de 8 px en los sprites (los objetos con bloque de pixeles exactos van por software); salas con mas de 64 sprites reservados (SQ2 9 y 56) pierden sprites.
+- **No verificable aqui:** el aspecto en el hardware real y en EightyOne 160w (sin emulador ni placa); la referencia no modela `set.pri.base`, el `fixPosition` de ScummVM con colisiones en add.to.pic de prioridad 0, ni
+  el movimiento (solo la composicion de la pantalla con el estado de objetos que deja la logica del juego en el modelo, 14 ciclos tras entrar en la sala).

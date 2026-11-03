@@ -330,7 +330,8 @@ def _rnd(v, direction):
     return f if v - f < 0.499 else math.ceil(v)
 
 
-class Picture:
+class PictureApprox:
+    """Version antigua (lineas en coma flotante, pinceles aproximados, relleno propio): NO es la de ScummVM. Solo queda para comparar; ver Picture."""
     def __init__(self, data, base=None):
         self.vis = list(base.vis) if base else [15] * (W * H)
         self.pri = list(base.pri) if base else [4] * (W * H)
@@ -499,6 +500,19 @@ class Picture:
                     r.extend([(40, 40, 40)] * 4)
             out.append(r)
         return out, (2 * W * scale + 4)
+
+
+class Picture(PictureApprox):
+    """Imagen AGI v2 con el algoritmo de ScummVM (engines/agi/picture.cpp, port literal en refscummvm.py): lineas de Bresenham de Sarien, pinceles con salpicado
+    y relleno por tramos. `base`: imagen sobre la que se superpone (overlay.pic, sin borrar). Atributos: vis, pri (160 x 168)."""
+    def __init__(self, data, base=None):
+        import refscummvm
+        r = refscummvm.Ref()
+        if base:
+            r.vis, r.pri = list(base.vis), list(base.pri)
+        r.draw_picture(bytes(data), clear=not base)
+        self.vis, self.pri = r.vis, r.pri
+        self.d = data
 
 
 # --------------------------------------------------------------------------- vistas
