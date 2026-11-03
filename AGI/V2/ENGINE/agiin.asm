@@ -418,13 +418,10 @@ h_print_at_v:   ld a,(ARGS)
                 call getv
                 ld (pr_msg),a
                 ld a,(ARGS+1)
-                call getv
                 ld (pr_row),a
                 ld a,(ARGS+2)
-                call getv
                 ld (pr_col),a
                 ld a,(ARGS+3)
-                call getv
                 ld (pr_w),a
 pr_go:          call OVL_SPRINIT        ; con la ventana abierta los sprites se apagan
                 ld hl,OVB_PRINT

@@ -51,7 +51,7 @@ CMDS = [
     ('show.mem', ''), ('pause', ''), ('echo.line', ''), ('cancel.line', ''), ('init.joy', ''),
     ('toggle.monitor', ''), ('version', ''), ('script.size', 'n'), ('set.game.id', 'm'), ('log', 'm'),
     ('set.scan.start', ''), ('reset.scan.start', ''), ('reposition.to', 'onn'), ('reposition.to.v', 'ovv'), ('trace.on', ''),
-    ('trace.info', 'nnn'), ('print.at', 'mnnn'), ('print.at.v', 'vvvv'), ('discard.view.v', 'v'), ('clear.text.rect', 'nnnnn'),
+    ('trace.info', 'nnn'), ('print.at', 'mnnn'), ('print.at.v', 'vnnn'), ('discard.view.v', 'v'), ('clear.text.rect', 'nnnnn'),
     ('set.upper.left', 'nn'), ('set.menu', 'm'), ('set.menu.item', 'mc'), ('submit.menu', ''), ('enable.item', 'c'),
     ('disable.item', 'c'), ('menu.input', ''), ('show.obj.v', 'v'), ('open.dialogue', ''), ('close.dialogue', ''),
     ('mul.n', 'vn'), ('mul.v', 'vv'), ('div.n', 'vn'), ('div.v', 'vv'), ('close.window', ''),

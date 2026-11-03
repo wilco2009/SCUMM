@@ -157,7 +157,9 @@ FORCE_HW = {'SQ1': {75, 95, 102, 73, 251, 62, (109, 1)}}
 FINAL_CEL = {'SQ1': {63, 204, 206}}
 # Vistas que no dibujan nada (sus celdas conservan tamano y bucles; la logica no cambia): SQ1, sala 29: las dos mitades del holograma (vista 64, 72 mosaicos cada
 # una) se deslizan 2 pixeles por ciclo hasta juntarse y por software recomponian 9 x 8 mosaicos por mitad en cada ciclo; ahora aparece la cabeza (vista 63).
-BLANK_VIEWS = {'SQ1': {64}}
+# (vista, bucle) en lugar de una vista: solo ese bucle. SQ2, sala 9 (desierto): los arboles negros de fondo (vista 44, bucle 0, objetos 2 a 5) no caben en los
+# sprites junto a los verdes (bucle 1); decision del usuario: solo se ven los verdes.
+BLANK_VIEWS = {'SQ1': {64}, 'SQ2': {(44, 0)}}
 _force = set()
 _freeze = set()
 _hw = set()
@@ -181,7 +183,7 @@ def cel_of(view, d, loop, cel, framed=False):
     if view in _final:
         cel = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)] - 1
     r = cel_tiles(d, loop, cel, framed)
-    return (r[0], r[1], []) if view in _blank else r
+    return (r[0], r[1], []) if view in _blank or (view, loop) in _blank else r
 
 
 def frozen(view):
@@ -207,7 +209,7 @@ def loop_maxt(d, loop):
 
 def raw_cel(view, d, loop, cel):
     """GFX4: (transparente, ancho, alto, filas) de la celda que se dibuja, con codigos de Chroma y el espejo hecho; None en las vistas en blanco."""
-    if view in _blank:
+    if view in _blank or (view, loop) in _blank:
         return None
     if view in _final:
         cel = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)] - 1

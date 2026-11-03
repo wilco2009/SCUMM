@@ -379,7 +379,7 @@ class Interp:
         if o.x >= 160:
             return None
         d = self.g.resource('VIEW', o.view)
-        if d is None or o.view in agi2spr._blank:
+        if d is None or o.view in agi2spr._blank or (o.view, o.loop) in agi2spr._blank:
             return None
         loop, cel = o.loop, o.cel
         if loop >= d[2]:
@@ -1630,7 +1630,7 @@ class Interp:
     def c_print(self, m): self.do_print(self.msg(m)[:250], None, None, 0)
     def c_print_v(self, v): self.c_print(self.vars[v])
     def c_print_at(self, m, r, c, w): self.do_print(self.msg(m)[:250], r, c, w)
-    def c_print_at_v(self, vm, vr, vc, vw): self.c_print_at(self.vars[vm], self.vars[vr], self.vars[vc], self.vars[vw])
+    def c_print_at_v(self, vm, r, c, w): self.c_print_at(self.vars[vm], r, c, w)
 
     def do_print(self, s, row, col, w, pic=None):
         """Ventana de mensaje: se dibuja y el interprete espera una tecla (un evento `key`); cada vuelta de la espera es un ciclo (con sus eventos). La tecla que la
