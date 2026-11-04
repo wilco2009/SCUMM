@@ -12,6 +12,7 @@
                 jp t_prep               ; OVD_PREP: INBUF = descripcion previa de la ranura mn_res
                 jp t_conf               ; OVD_CONF: la ventana de confirmacion en TMPM (guardar: MSGBUF pasa a ser la descripcion)
                 jp t_do                 ; OVD_DO: guarda o carga la ranura mn_res (sv_ok = 1 si se ha cargado)
+                jp summary              ; OVD_SUM: el resumen de un ciclo (solo en las pruebas)
 
 TXT             equ TMPM
 CMD_FWRITE      equ 56
@@ -332,3 +333,222 @@ wf_h:           defb 0
 wf_err:         defb 0
 wf_src:         defw 0
 wf_cnt:         defw 0
+
+                IF TESTS
+; ciclo, pasos, suma de variables, suma de los indices de las banderas puestas, sala, objetos, cadenas, entrada: 15 bytes por ciclo
+summary:        ld hl,SREC
+                ld de,(cyc)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                ld de,(nsteps)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                ld (sp_tmp),hl
+                ld hl,0
+                ld de,VARS
+                ld b,0
+su_v:           ld a,(de)
+                add a,l
+                ld l,a
+                jr nc,su_v1
+                inc h
+su_v1:          inc e
+                djnz su_v
+                push hl                 ; suma de variables
+                ld hl,0
+                ld de,FLAGS
+                ld b,0
+                ld c,0
+su_f:           ld a,(de)
+                or a
+                jr z,su_f1
+                ld a,c
+                add a,l
+                ld l,a
+                jr nc,su_f1
+                inc h
+su_f1:          inc c
+                inc e
+                djnz su_f
+                ex de,hl                ; DE = suma de banderas
+                pop bc                  ; BC = suma de variables
+                ld hl,(sp_tmp)
+                ld (hl),c
+                inc hl
+                ld (hl),b
+                inc hl
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                ld a,(VARS+0)
+                ld (hl),a
+                inc hl
+                push hl
+                call objsum
+                ex de,hl
+                pop hl
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                push hl
+                call strsum
+                ex de,hl
+                pop hl
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                push hl
+                call miscsum
+                ex de,hl
+                pop hl
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                ld a,PG_DBG
+                call map_page
+                ld hl,SREC
+                ld de,(sptr)
+                ld bc,15
+                ldir
+                ld (sptr),de
+                call unmap_win
+                ld hl,nsum
+                inc (hl)
+                ld hl,0
+                ld (nsteps),hl
+                ret
+
+; HL = horizonte + control + bloque + los 23 primeros bytes de cada objeto
+objsum:         ld hl,0
+                ld a,(horizon)
+                call adda
+                ld a,(pctl)
+                call adda
+                ld a,(blkf)
+                call adda
+                ld de,OBJ
+                ld b,NOBJ
+os_o:           ld c,23
+os_i:           ld a,(de)
+                add a,l
+                ld l,a
+                jr nc,os_n
+                inc h
+os_n:           inc de
+                dec c
+                jr nz,os_i
+                ld a,e
+                add a,9
+                ld e,a
+                jr nc,os_p
+                inc d
+os_p:           djnz os_o
+                ld de,OBJP              ; y las posiciones previas
+                ld b,64
+os_pv:          ld a,(de)
+                add a,l
+                ld l,a
+                jr nc,os_pq
+                inc h
+os_pq:          inc de
+                djnz os_pv
+                ret
+adda:           add a,l
+                ld l,a
+                ret nc
+                inc h
+                ret
+
+; ---------------------------------------------------------------------
+;  Resumen de las cadenas, el parser y las teclas (para comparar con el modelo)
+; ---------------------------------------------------------------------
+; HL = suma de (caracter + 1) de las 12 cadenas
+strsum:         ld de,0
+                xor a
+                ld (ss_i),a
+ss_n:           ld a,(ss_i)
+                push de
+                call strptr
+                pop de
+ss_c:           ld a,(hl)
+                inc hl
+                or a
+                jr z,ss_e
+                inc a
+                add a,e
+                ld e,a
+                jr nc,ss_c
+                inc d
+                jr ss_c
+ss_e:           ld a,(ss_i)
+                inc a
+                ld (ss_i),a
+                cp NSTR
+                jr c,ss_n
+                ex de,hl
+                ret
+
+; HL = suma de lo que dependa de la orden pendiente, el parser y las teclas
+miscsum:        ld hl,0
+                ld a,(inwvalid)
+                or a
+                jr z,ms_1
+                ld a,(inwcnt)
+                inc a
+                call adda
+                ld a,(inwcnt)
+                or a
+                jr z,ms_1
+                add a,a
+                ld b,a
+                ld de,INW
+ms_w:           ld a,(de)
+                inc de
+                call adda
+                djnz ms_w
+ms_1:           ld a,(said_done)
+                or a
+                jr z,ms_2
+                ld a,97
+                call adda
+ms_2:           ld a,(keyn)
+                ld b,a
+                or a
+                jr z,ms_3
+ms_k:           ld a,13
+                call adda
+                djnz ms_k
+ms_3:           ld a,(tqn)
+                ld b,a
+                or a
+                jr z,ms_4
+ms_t:           ld a,5
+                call adda
+                djnz ms_t
+ms_4:           ld a,(wcount)
+                ld b,a
+                or a
+                jr z,ms_5
+ms_x:           ld a,3
+                call adda
+                djnz ms_x
+ms_5:           ld de,CTL
+                ld b,0
+ms_c:           ld a,(de)
+                or a
+                jr z,ms_c1
+                ld a,7
+                call adda
+ms_c1:          inc e
+                djnz ms_c
+                ret
+                ELSE
+summary:        ret
+                ENDIF

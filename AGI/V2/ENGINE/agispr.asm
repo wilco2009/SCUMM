@@ -16,9 +16,12 @@ PG_VC0          equ 33
 NVSLOT          equ 8
 
 render:         call OVL_SORT           ; A1: orden de los objetos; A2 (call_e): rotulos por software; A1: sprites
+                ld a,(sw_any)           ; sin rotulos ni puestos ni por poner (ni recomposicion pendiente) no hace falta pasar por el A2
+                or a
+                jr z,rn_ns
                 ld hl,OVE_RUN
                 call call_e
-                jp OVL_DRAW
+rn_ns:          jp OVL_DRAW
 
 ; El A2 esta mapeado en lugar del A1: el teclado lo lee el A1 un momento
 kp_a2:          push af
@@ -341,6 +344,7 @@ pk:             defb 0
 pp:             defb 0
 pmk:            defb 0
 sw_force:       defb 0
+sw_any:         defb 1                  ; 0 = ningun rotulo puesto y nada que recomponer: t_sort la pone si aparece alguno
 kb_dirty:       defb 0
 kb_lacc:        defb 0
 accin:          defb 1

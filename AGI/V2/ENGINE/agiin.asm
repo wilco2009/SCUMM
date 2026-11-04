@@ -98,7 +98,7 @@ ev_key:         ld a,(EVBUF)
 ev_ctrl:        ld a,(EVBUF)
                 ld l,a
                 ld h,CTL>>8
-                ld (hl),1
+                call ctl_set
                 ret
 ev_dir:         ld a,(EVBUF)
                 ld (dirhold),a
@@ -136,7 +136,7 @@ kp_c:           dec hl
                 ld a,(hl)
                 ld l,a
                 ld h,CTL>>8
-                ld (hl),1
+                call ctl_set
                 ret
 
 h_set_key:      ld a,(ARGS)             ; ascii, scan, controlador
@@ -644,7 +644,7 @@ mi_nd:          ld a,(keyn)
                 or a
                 jr nz,mi_end            ; guardar/cargar: el resultado se queda en mn_res
                 ld h,CTL>>8
-                ld (hl),1
+                call ctl_set
                 jr mi_end
 mi_idle:        ld hl,(ncyc)
                 ld a,h
@@ -1340,86 +1340,3 @@ pd_p:           ld a,1
                 add a,'0'
                 jp bs_put
 
-; ---------------------------------------------------------------------
-;  Resumen de las cadenas, el parser y las teclas (para comparar con el modelo)
-; ---------------------------------------------------------------------
-; HL = suma de (caracter + 1) de las 12 cadenas
-strsum:         ld de,0
-                xor a
-                ld (ss_i),a
-ss_n:           ld a,(ss_i)
-                push de
-                call strptr
-                pop de
-ss_c:           ld a,(hl)
-                inc hl
-                or a
-                jr z,ss_e
-                inc a
-                add a,e
-                ld e,a
-                jr nc,ss_c
-                inc d
-                jr ss_c
-ss_e:           ld a,(ss_i)
-                inc a
-                ld (ss_i),a
-                cp NSTR
-                jr c,ss_n
-                ex de,hl
-                ret
-
-; HL = suma de lo que dependa de la orden pendiente, el parser y las teclas
-miscsum:        ld hl,0
-                ld a,(inwvalid)
-                or a
-                jr z,ms_1
-                ld a,(inwcnt)
-                inc a
-                call adda
-                ld a,(inwcnt)
-                or a
-                jr z,ms_1
-                add a,a
-                ld b,a
-                ld de,INW
-ms_w:           ld a,(de)
-                inc de
-                call adda
-                djnz ms_w
-ms_1:           ld a,(said_done)
-                or a
-                jr z,ms_2
-                ld a,97
-                call adda
-ms_2:           ld a,(keyn)
-                ld b,a
-                or a
-                jr z,ms_3
-ms_k:           ld a,13
-                call adda
-                djnz ms_k
-ms_3:           ld a,(tqn)
-                ld b,a
-                or a
-                jr z,ms_4
-ms_t:           ld a,5
-                call adda
-                djnz ms_t
-ms_4:           ld a,(wcount)
-                ld b,a
-                or a
-                jr z,ms_5
-ms_x:           ld a,3
-                call adda
-                djnz ms_x
-ms_5:           ld de,CTL
-                ld b,0
-ms_c:           ld a,(de)
-                or a
-                jr z,ms_c1
-                ld a,7
-                call adda
-ms_c1:          inc e
-                djnz ms_c
-                ret

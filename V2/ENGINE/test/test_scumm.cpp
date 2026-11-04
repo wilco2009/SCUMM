@@ -227,7 +227,9 @@ static std::map<int, std::map<std::string, long long>> prof_by_loop;
 static int prof_n = 0;
 static std::vector<long long> prof_loops;
 static int prof_lo = -1, prof_hi = -1;
+static std::map<int, std::vector<std::pair<unsigned, std::string>>> osyms;
 static const char* sym_of(unsigned pc) {
+  if (pc >= 0x2000 && pc < 0x4000) { auto& v = osyms[blk[1]]; std::pair<unsigned, std::string>* b = 0; for (auto& p : v) if (p.first <= pc && (!b || p.first >= b->first)) b = &p; if (b) return b->second.c_str(); }
   static std::string cur; const std::pair<unsigned, std::string>* best = nullptr;
   for (auto& p : syms) { if (p.first <= pc && (!best || p.first >= best->first)) best = &p; }
   cur = best ? best->second : "?"; return cur.c_str();
@@ -357,6 +359,8 @@ int main(int argc, char** argv) {
   if (const char* os = getenv("TS_OSYM")) { FILE* q = fopen(os, "r"); char line[256];
     while (q && fgets(line, sizeof line, q)) { char name[128]; unsigned v; if (sscanf(line, "%127s EQU %xH", name, &v) == 2 && v < 0x4200) syms.push_back({v, std::string("ovl:") + name}); }
     if (q) fclose(q); }
+  { static const struct { int pg; const char* nm; const char* f; } T[] = {{41, "A", "agia.sym"}, {42, "B", "agib.sym"}, {44, "C", "agic.sym"}, {46, "D", "agid.sym"}, {48, "E", "agie.sym"}, {49, "F", "agif.sym"}};
+    for (auto& t : T) { FILE* q = fopen(t.f, "r"); char line[256]; while (q && fgets(line, sizeof line, q)) { char name[128]; unsigned v; if (sscanf(line, "%127s EQU %xH", name, &v) == 2 && v >= 0x2000 && v < 0x4000) osyms[t.pg].push_back({v, std::string(t.nm) + ":" + name}); } if (q) fclose(q); } }
   if (const char* pf = getenv("TS_PROF")) sscanf(pf, "%d-%d", &prof_lo, &prof_hi);
   if (const char* w = getenv("TS_WATCH")) { unsigned lo = 0, hi = 0, fr = 0; sscanf(w, "%x-%x,%u", &lo, &hi, &fr); w_lo = lo; w_hi = hi; w_from = fr; }
   long long steps = 0;
@@ -367,6 +371,10 @@ int main(int argc, char** argv) {
       motor_tick(true);
       if (prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi) { prof_loops.push_back(prof_work); }
       prof_work = 0; prof_n = frames_done;
+      { static FILE* sl = getenv("TS_SPRLOG") ? fopen(getenv("TS_SPRLOG"), "w") : 0;
+        if (sl) { unsigned h = 2166136261u; int n = 0; for (int i = 0; i < 64; i++) if (spr[i].on) { n++; const uint8_t q[3] = {(uint8_t)i, (uint8_t)spr[i].x, (uint8_t)((spr[i].x >> 8) ^ spr[i].y)}; for (int k = 0; k < 3; k++) h = (h ^ q[k]) * 16777619u; for (int k = 0; k < 8; k++) { h = (h ^ spr[i].col[k]) * 16777619u; h = (h ^ spr[i].pix[k]) * 16777619u; h = (h ^ spr[i].mask[k]) * 16777619u; } }
+          unsigned h2 = 2166136261u, h3 = 2166136261u; for (int k = 0x6D00; k < 0x6F00; k++) h2 = (h2 ^ rd(k)) * 16777619u; for (int k = 0x7300; k < 0x7700; k++) h2 = (h2 ^ rd(k)) * 16777619u; for (int k = 0xA000; k < 0xA000 + 14440; k++) h3 = (h3 ^ rd(k)) * 16777619u;
+          fprintf(sl, "%d %d %08x %08x %08x\n", frames_done, n, h, h2, h3); fflush(sl); } }
       frames_done++; g_fr = frames_done;
       if (const char* pk = getenv("TS_POKE")) {            // TS_POKE=fotograma:direccion:valor[,...]: escribe un byte (hex) en ese fotograma
         unsigned f, a, v; const char* p = pk;
@@ -392,7 +400,7 @@ int main(int argc, char** argv) {
     if (blk[0] == 0 && (z80.pc.w == 0x02E7 || z80.pc.w == 0x0207)) {           // SET_FAST y SLOW_FAST de la ROM: el arnes no tiene ROM, vuelve sin hacer nada
       z80.pc.w = rd16(z80.sp.w); z80.sp.w += 2; continue;
     }
-    if (getenv("TS_BP") && z80.pc.w == (unsigned)strtol(getenv("TS_BP"), 0, 16) && (!getenv("TS_BPA") || (z80.af.w >> 8) == (unsigned)strtol(getenv("TS_BPA"), 0, 16))) {   // TS_BP=direccion (hex): para ahi e imprime los ultimos PC, SP y la pila
+    static const char* ts_bp = getenv("TS_BP"); if (ts_bp && z80.pc.w == (unsigned)strtol(ts_bp, 0, 16) && (!getenv("TS_BPA") || (z80.af.w >> 8) == (unsigned)strtol(getenv("TS_BPA"), 0, 16))) {   // TS_BP=direccion (hex): para ahi e imprime los ultimos PC, SP y la pila
       printf("TS_BP pc=%04X sp=%04X af=%04X bc=%04X de=%04X hl=%04X ix=%04X iy=%04X; pila:", z80.pc.w, z80.sp.w, z80.af.w, z80.bc.w, z80.de.w, z80.hl.w, z80.ix.w, z80.iy.w);
       for (int k = 0; k < 6; k++) printf(" %04X", rd16(z80.sp.w + 2 * k));
       printf("%cultimos PC:", 10);
@@ -405,10 +413,10 @@ int main(int argc, char** argv) {
     hist[hi++ & 255] = z80.pc.w;
     int ts0 = tstates;
     z80_do_opcode();
-    if (prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi) { const char* sn = sym_of(hist[(hi - 1) & 255]); if (strcmp(sn, "hs_w")) { prof[sn] += 1; prof_by_loop[prof_n][sn] += 1; prof_total++; prof_work++; } }
+    if (prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi) { const char* sn = sym_of(hist[(hi - 1) & 255]); if (strcmp(sn, "hs_w")) { { static const bool ts_t = getenv("TS_T") != 0; int dt = ts_t ? tstates : 1; prof[sn] += dt; prof_by_loop[prof_n][sn] += dt; prof_total += dt; prof_work += dt; } } }
     steps_g++;
     if (cmd_pend) motor_tick(false);
-    if (steps > 50000000LL && !getenv("TS_NOSTOP")) { printf("atascado; ultimos PC:%c", 10); for (int k = 120; k > 0; k--) printf("%04X ", hist[(hi - k) & 255]); printf("%c", 10); break; }
+    static const char* ts_ns = getenv("TS_NOSTOP"); if (steps > 50000000LL && !ts_ns) { printf("atascado; ultimos PC:%c", 10); for (int k = 120; k > 0; k--) printf("%04X ", hist[(hi - k) & 255]); printf("%c", 10); break; }
     if (++steps > 2000000000LL) { printf("demasiadas instrucciones, pc=%04X%c", z80.pc.w, 10); break; }
   }
   if (prof_lo >= 0) {

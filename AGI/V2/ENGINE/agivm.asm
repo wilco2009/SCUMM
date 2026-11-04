@@ -98,6 +98,7 @@ OVL_FORCE       equ $2015
 OVL_ADDPIC      equ $2018
 OVL_SPCLR       equ $201B
 OVL_ADDHDR      equ $201E
+OVL_PDEDUP      equ $2021
 ; add.to.pic: los datos viven en la pagina del A1 (bloque 1) tras sus cabeceras de prioridad (SPH); los pares de rangos (SPP), en la del A2
 SP_MAX          equ 48                  ; cabeceras de rangos de prioridad
 SP_ROWS         equ 2048                ; filas de rangos (2 bytes cada una: 4 KB, toda la pagina del A2 desde SPP)
@@ -163,6 +164,7 @@ OVD_READ        equ $2000               ; overlay D (ficheros de guardar/cargar)
 OVD_PREP        equ $2003
 OVD_CONF        equ $2006
 OVD_DO          equ $2009
+OVD_SUM         equ $200C               ; solo con TESTS
 OVC_RESTART     equ $2000               ; overlay C (restart.game, status, show.obj): tambien con call_c
 OVC_GFXFIX      equ $2003
 OVC_OBJDESC     equ $2006
@@ -284,7 +286,8 @@ ml_k7:          call tick_clock
                 inc hl
                 ld (cyc),hl
                 jp main_loop
-ml_dbg:         call summary
+ml_dbg:         ld hl,OVD_SUM           ; el resumen de las pruebas (overlay D)
+                call call_d
                 ld hl,(cyc)
                 inc hl
                 ld (cyc),hl
@@ -730,11 +733,16 @@ rl_next:        ld a,(exitall)
                 or a
                 ret nz
                 ld de,(ip)
-rl_go:          ld hl,(lend)
+rl_go:          ld a,(lend+1)           ; casi siempre basta la parte alta
+                cp d
+                jr c,rl_end
+                jr nz,rl_in
+                ld hl,(lend)
                 or a
                 sbc hl,de
                 jr z,rl_end
                 jr c,rl_end
+rl_in:
                 IF TESTS
                 call trace_step
                 ENDIF
@@ -888,12 +896,28 @@ df_greaterv:    call df_vv
 
 ; resto de condiciones y los bytes de control
 di_big:         cp $FC
-                jr nc,di_ctl
-                cp NCONDS+1
-                jr nc,di_bad
-                push bc
+                jp nc,di_ctl
                 cp $0E
-                jr nz,ds_norm
+                jr nz,ds_nosd
+                ld a,(FLAGS+4)          ; said, como testSaid: f4 (ya se acepto la orden) o sin f2 (no hay orden): falso, sin pasar por el overlay C
+                or a
+                jr nz,ds_nof
+                ld a,(FLAGS+2)
+                or a
+                jr nz,ds_sd
+ds_nof:         ld a,(de)
+                inc de
+                add a,a
+                add a,e
+                ld e,a
+                jp nc,di_F
+                inc d
+                jp di_F
+ds_nosd:        cp NCONDS+1
+                jp nc,di_bad
+                push bc
+                jr ds_norm
+ds_sd:          push bc
                 ld a,(de)               ; said: k palabras de 16 bits
                 inc de
                 ld (saidk),a
@@ -1166,137 +1190,6 @@ tc_2:           ld b,a                  ; periodo
                 inc (hl)
                 ret
 
-; ciclo, pasos, suma de variables, suma de los indices de las banderas puestas, sala, objetos, cadenas, entrada: 15 bytes por ciclo
-summary:        ld hl,SREC
-                ld de,(cyc)
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                inc hl
-                ld de,(nsteps)
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                inc hl
-                ld (sp_tmp),hl
-                ld hl,0
-                ld de,VARS
-                ld b,0
-su_v:           ld a,(de)
-                add a,l
-                ld l,a
-                jr nc,su_v1
-                inc h
-su_v1:          inc e
-                djnz su_v
-                push hl                 ; suma de variables
-                ld hl,0
-                ld de,FLAGS
-                ld b,0
-                ld c,0
-su_f:           ld a,(de)
-                or a
-                jr z,su_f1
-                ld a,c
-                add a,l
-                ld l,a
-                jr nc,su_f1
-                inc h
-su_f1:          inc c
-                inc e
-                djnz su_f
-                ex de,hl                ; DE = suma de banderas
-                pop bc                  ; BC = suma de variables
-                ld hl,(sp_tmp)
-                ld (hl),c
-                inc hl
-                ld (hl),b
-                inc hl
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                inc hl
-                ld a,(VARS+0)
-                ld (hl),a
-                inc hl
-                push hl
-                call objsum
-                ex de,hl
-                pop hl
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                inc hl
-                push hl
-                call strsum
-                ex de,hl
-                pop hl
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                inc hl
-                push hl
-                call miscsum
-                ex de,hl
-                pop hl
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                ld a,PG_DBG
-                call map_page
-                ld hl,SREC
-                ld de,(sptr)
-                ld bc,15
-                ldir
-                ld (sptr),de
-                call unmap_win
-                ld hl,nsum
-                inc (hl)
-                ld hl,0
-                ld (nsteps),hl
-                ret
-
-; HL = horizonte + control + bloque + los 23 primeros bytes de cada objeto
-objsum:         ld hl,0
-                ld a,(horizon)
-                call adda
-                ld a,(pctl)
-                call adda
-                ld a,(blkf)
-                call adda
-                ld de,OBJ
-                ld b,NOBJ
-os_o:           ld c,23
-os_i:           ld a,(de)
-                add a,l
-                ld l,a
-                jr nc,os_n
-                inc h
-os_n:           inc de
-                dec c
-                jr nz,os_i
-                ld a,e
-                add a,9
-                ld e,a
-                jr nc,os_p
-                inc d
-os_p:           djnz os_o
-                ld de,OBJP              ; y las posiciones previas
-                ld b,64
-os_pv:          ld a,(de)
-                add a,l
-                ld l,a
-                jr nc,os_pq
-                inc h
-os_pq:          inc de
-                djnz os_pv
-                ret
-adda:           add a,l
-                ld l,a
-                ret nc
-                inc h
-                ret
-
 ; sonidos cuyo final ya llego: ponen su bandera (se mira al empezar el ciclo)
 snd_due:        ld a,(FLAGS+9)          ; sonido apagado: se para lo que suene
                 or a
@@ -1425,12 +1318,24 @@ varptr:         ld a,(ARGS)
 h_nop:          ret
 h_set_game_id:  ld hl,OVC_GAMEID
                 jp call_c
-clr_ctl:        ld hl,CTL
+clr_ctl:        ld a,(ctl_d)
+                or a
+                ret z
+                xor a
+                ld (ctl_d),a
+                ld hl,CTL
                 ld de,CTL+1
                 ld bc,255
                 ld (hl),0
                 ldir
                 ret
+
+; HL = CTL + controlador
+ctl_set:        ld (hl),1
+                ld a,h
+                ld (ctl_d),a
+                ret
+ctl_d:          defb 1                  ; distinto de 0: hay controladores que borrar (al arrancar, CTL sin iniciar)
 
 h_return:       ld hl,(lend)
                 ld (ip),hl
@@ -2088,6 +1993,8 @@ qw:             defb 0
 bdr:            defb 0
 pk_d:           defb 0
 vclamp:         defb 0
+vs_cp:          defw 0
+VSC:            defs 128,$FF            ; cache de vscan (agiobj.asm)
 ocn:            defb 0
 occ:            defb 0
 trcount:        defw 0

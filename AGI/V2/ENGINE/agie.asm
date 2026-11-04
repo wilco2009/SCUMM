@@ -23,7 +23,23 @@ sw_run:         ld a,PG_OVL
                 ldir
                 call map7_back
                 IF GFX4
-                jp sw4_run
+                call sw4_run
+                ld a,(s4_force)         ; sw_any: quedan rotulos puestos o algo por recomponer
+                or a
+                jr nz,sr_any
+                ld ix,OBJ
+                ld de,32
+                ld b,NOBJ
+sr_l:           bit 0,(ix+O_SDR)
+                jr nz,sr_any
+                add ix,de
+                djnz sr_l
+                xor a
+                ld (sw_any),a
+                ret
+sr_any:         ld a,1
+                ld (sw_any),a
+                ret
                 ELSE
                 call sw_scan
                 call sw_close

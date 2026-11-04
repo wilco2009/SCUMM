@@ -107,6 +107,7 @@ lp_o:           ld (fh),a
                 ld bc,(prisz2)
                 call f_read_n
                 call pri_index
+                call OVL_PDEDUP
                 ld a,PG_PMX             ; maximos de la prioridad por bloques (para los sprites)
                 call map_page
                 ld a,(fh)

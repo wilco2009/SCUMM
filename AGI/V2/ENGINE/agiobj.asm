@@ -71,7 +71,42 @@ obj_cell:       ld a,1
                 jr vscan
 obj_info:       xor a
 vscan:          ld (vclamp),a
-                xor a
+                push ix                 ; cache por objeto (n & 15): vista, bucle y celda -> ocn, occ, ancho y alto. Solo guarda lo que existe, asi que un acierto no ajusta nada
+                pop hl
+                ld a,h
+                rrca
+                ld a,l
+                rra
+                rrca
+                and $78
+                ld e,a
+                ld d,0
+                ld hl,VSC
+                add hl,de
+                ld (vs_cp),hl
+                ld a,(ix+O_VIEW)
+                cp (hl)
+                jr nz,vs_m
+                inc hl
+                ld a,(ix+O_LOOP)
+                cp (hl)
+                jr nz,vs_m
+                inc hl
+                ld a,(ix+O_CEL)
+                cp (hl)
+                jr nz,vs_m
+                inc hl
+                ld a,(hl)
+                ld (ocn),a
+                inc hl
+                ld a,(hl)
+                ld (occ),a
+                inc hl
+                ld d,(hl)
+                inc hl
+                ld e,(hl)
+                ret
+vs_m:           xor a
                 ld (ocn),a
                 ld (occ),a
                 call map_views
@@ -143,6 +178,25 @@ vs_4:           add a,c
                 ld d,(hl)
                 inc hl
                 ld e,(hl)
+                ld hl,(vs_cp)
+                ld a,(ix+O_VIEW)
+                ld (hl),a
+                inc hl
+                ld a,(ix+O_LOOP)
+                ld (hl),a
+                inc hl
+                ld a,(ix+O_CEL)
+                ld (hl),a
+                inc hl
+                ld a,(ocn)
+                ld (hl),a
+                inc hl
+                ld a,(occ)
+                ld (hl),a
+                inc hl
+                ld (hl),d
+                inc hl
+                ld (hl),e
                 jp unmap_win
 vs_zp:          pop hl
 vs_zero:        ld de,0
@@ -1155,6 +1209,10 @@ cb_obj:         bit 1,(ix+O_F2)         ; ignora a los demas objetos
                 ld iy,OBJ
                 ld b,NOBJ
 cb_l:           push bc
+                ld a,(iy+O_F1)
+                and 3
+                cp 3
+                jr nz,cb_skip           ; no animado y dibujado
                 push iy
                 pop hl
                 push ix
@@ -1162,10 +1220,6 @@ cb_l:           push bc
                 or a
                 sbc hl,de
                 jr z,cb_skip            ; el mismo objeto
-                ld a,(iy+O_F1)
-                and 3
-                cp 3
-                jr nz,cb_skip           ; no animado y dibujado
                 bit 1,(iy+O_F2)
                 jr nz,cb_skip
                 push ix

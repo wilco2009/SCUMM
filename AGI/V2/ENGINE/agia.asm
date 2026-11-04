@@ -18,6 +18,7 @@ HQ_FIX          equ $2040
                 jp t_addpic             ; OVL_ADDPIC
                 jp t_spclr              ; OVL_SPCLR
                 jp t_addhdr             ; OVL_ADDHDR
+                jp t_pdedup             ; OVL_PDEDUP
 
 ; El orden de los objetos que deja t_sort: el overlay A2 (que se mapea en lugar de este) lo lee de aqui, por el bloque 7, asi que va en una direccion fija
                 defs HQ_FIX-$

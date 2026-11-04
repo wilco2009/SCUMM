@@ -57,11 +57,28 @@ t_sort:         call sort_objs
                 ret z
                 xor a
                 ld (ts_n),a
-                ld ix,OBJ
-ts_1:           ld a,(ix+O_F1)
-                and 3
-                cp 3
-                jp nz,ts_1n
+                ld (ts_w),a
+ts_1:           ld a,(ts_n)             ; solo los que se van a dibujar (ORD)
+                ld hl,hq_cnt
+                cp (hl)
+                jr nc,ts_1e
+                ld e,a
+                ld d,0
+                ld hl,ORD
+                add hl,de
+                ld a,(hl)
+                ld (ts_o),a
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld de,OBJ
+                add hl,de
+                push hl
+                pop ix
                 call cel_open
                 jp c,ts_1n
                 ld a,(cv_fl)
@@ -69,19 +86,21 @@ ts_1:           ld a,(ix+O_F1)
                 call unmap_win
                 bit 0,c
                 jp z,ts_1n
-                ld a,(ts_n)
+                ld a,(ts_o)
                 ld e,a
                 ld d,0
                 ld hl,VPG
                 add hl,de
                 ld (hl),$FE             ; es ancho: su pagina se busca en la segunda vuelta (la cache de 8 vistas puede haberla cambiado)
-ts_1n:          ld de,32
-                add ix,de
-                ld hl,ts_n
+                ld a,1
+                ld (ts_w),a
+                ld (sw_any),a           ; hay que pasar por el A2
+ts_1n:          ld hl,ts_n
                 inc (hl)
-                ld a,(hl)
-                cp NOBJ
-                jp c,ts_1
+                jr ts_1
+ts_1e:          ld a,(ts_w)
+                or a
+                ret z
                 xor a
                 ld (ts_n),a
                 ld ix,OBJ
@@ -119,6 +138,8 @@ cel_open:       ld a,(ix+O_X)
                 jp z,co_no
                 jp cel_rd
 ts_n:           defb 0
+ts_o:           defb 0
+ts_w:           defb 0
 hw_res:         defb 0                  ; sprites que reserva el ego (0 si no va por hardware)
 hw_res0:        defb 0                  ; la reserva con la que estan armados los objetos
 hw_aft:         defb 0                  ; 1 = ya se paso por el ego
@@ -582,6 +603,18 @@ hw_pc:          inc a
                 and 31
                 ld (hw_bx0),a
                 ENDIF
+                IF GFX4
+                ld a,(cv_w)
+                dec a
+                rrca
+                rrca
+                rrca
+                and 31
+                inc a
+                ld (hw_nvis),a          ; bytes de VIS
+                ld hl,$FFFF
+                ld (hg_off),hl
+                ENDIF
                 xor a
                 ld (hw_i),a
 hw_tl:          ld a,(hw_i)
@@ -824,6 +857,390 @@ hg_cd:          ld a,c
                 or a
                 sbc hl,de
                 ld (hw_gb),hl
+                IF GFX4
+; 160w: las mascaras salen directamente de los tramos del RLE de la fila (hg_vis): no se expande la fila pixel a pixel ni se mira cada pixel. El resultado es el mismo que con
+; PROW y hg_okb (que siguen para el dibujo por software, en A2). hg_nb: bit r = la fila r del grupo puede tener el fondo por encima (PG_PMX, una sola pasada por las 8 filas).
+                ld a,PG_PMX
+                call map7
+                ld a,(hw_bx0)
+                ld e,a
+                ld a,(hw_bx1)
+                sub e
+                inc a
+                ld (hg_nbl),a           ; bloques
+                ld hl,(hw_gb)
+                add hl,hl
+                add hl,hl
+                ld b,h
+                ld c,l
+                add hl,hl
+                add hl,hl
+                add hl,bc               ; 20 * fila (con signo: una fila negativa no llega a leerse)
+                ld c,e
+                ld b,0
+                add hl,bc
+                ld bc,$E000
+                add hl,bc               ; HL = primer bloque de la primera fila
+                ld de,(hw_gb)           ; DE = fila
+                ld a,(hw_pri)
+                ld c,a
+                ld a,$80                ; centinela: tras 8 filas cae al acarreo
+                ld (hg_nb),a
+hs_r:           ld a,d
+                or a
+                jr nz,hs_no             ; fuera de la imagen: sin prioridad
+                ld a,e
+                cp 168
+                jr nc,hs_no
+                push hl
+                ld a,(hg_nbl)
+                ld b,a
+hs_b:           ld a,c
+                cp (hl)
+                jr c,hs_si              ; un bloque con mas prioridad que el objeto
+                inc hl
+                djnz hs_b
+                pop hl
+hs_no:          or a
+                jr hs_n
+hs_si:          pop hl
+                scf
+hs_n:           ld a,(hg_nb)
+                rra
+                ld (hg_nb),a
+                jr c,hs_e
+                ld a,20
+                add a,l
+                ld l,a
+                jr nc,hs_n1
+                inc h
+hs_n1:          inc de
+                jr hs_r
+hs_e:           call map7_back
+                ld a,(hg_nb)
+                or a
+                jr nz,hg_dec
+                inc a
+                ld (hw_graw),a          ; ninguna: sin mascara que armar
+                ret
+hg_dec:         xor a
+                ld (hw_graw),a
+                ld (hg_r),a
+                ld a,PG_PRI2
+                call map7
+hg_row:         ld hl,hg_nb
+                rrc (hl)
+                jr c,hg_v
+                ld a,1                  ; el fondo no puede taparlo en esta fila
+                jr hg_f
+hg_v:           ld a,(hw_gb)
+                ld hl,hg_r
+                add a,(hl)
+                ld (hg_py),a
+                call hg_vis
+                xor a
+hg_f:           ld (hg_full),a
+                ld a,(hg_r)             ; MK[j * 8 + r] = mascara de la fila r del mosaico j & sus pixeles no tapados
+                ld e,a
+                ld d,0
+                ld hl,MK
+                add hl,de
+                ld (hw_op),hl
+                add a,18
+                ld c,a
+                ld a,(hw_gn)
+                ld b,a
+                ld hl,(hw_gp)
+hg_t:           ld a,(hg_full)
+                or a
+                ld e,$FF
+                jr nz,hg_m
+                ld a,(hl)               ; tx
+                add a,VIS AND 255
+                ld e,a
+                ld a,VIS SHR 8
+                adc a,0
+                ld d,a
+                ld a,(de)
+                ld e,a
+hg_m:           push hl
+                ld a,c
+                add a,l
+                ld l,a
+                jr nc,hg_m1
+                inc h
+hg_m1:          ld a,(hl)
+                and e
+                ld hl,(hw_op)
+                ld (hl),a
+                ld de,8
+                add hl,de
+                ld (hw_op),hl
+                pop hl
+                ld de,26
+                add hl,de
+                djnz hg_t
+                ld hl,hg_r
+                inc (hl)
+                ld a,(hl)
+                cp 8
+                jp c,hg_row
+                jp map7_back
+
+; A = fila de la imagen, PG_PRI2 en el bloque 7 -> VIS: un bit por pixel desde el borde izquierdo del objeto (bit 7 = el primero), 0 = lo tapa el fondo o un add.to.pic. Dos filas con el
+; mismo desplazamiento (t_pdedup) dan la misma VIS: se conserva la de la fila anterior mientras solo tenga la parte de la imagen.
+hg_vis:         ld l,a
+                ld h,0
+                add hl,hl
+                ld de,$E000
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)               ; DE = desplazamiento de la fila
+                ld hl,(hg_off)
+                or a
+                sbc hl,de
+                jr z,hv_pat
+                ld (hg_off),de
+                ld hl,VIS
+                ld a,(hw_nvis)
+                ld b,a
+                ld a,$FF
+hv_f:           ld (hl),a
+                inc hl
+                djnz hv_f
+                ld hl,$E000+336
+                add hl,de
+                ld a,(hw_X0)
+                ld b,a
+                ld e,0
+hv_sk:          ld a,(hl)               ; los tramos que acaban antes del objeto
+                inc hl
+                ld c,a
+                and 15
+                inc a
+                add a,e
+                ld e,a
+                cp b
+                jr c,hv_sk
+                jr z,hv_sk
+                ld a,(hw_pri)           ; si hay bloques por encima, la prioridad del objeto es < 15
+                inc a
+                add a,a
+                add a,a
+                add a,a
+                add a,a
+                ld d,a                  ; D = primer byte de RLE con mas prioridad que el objeto
+hv_t:           ld a,c                  ; B = primer pixel, E = final del tramo (C)
+                cp d
+                jr c,hv_n
+                ld a,(hw_plim)
+                cp e
+                jr c,hv_h
+                ld a,e
+hv_h:           call vis_hide
+hv_n:           ld a,(hw_plim)
+                dec a
+                cp e
+                jr c,hv_pat             ; E >= hw_plim: hasta aqui llega el objeto
+                ld a,(hl)
+                inc hl
+                ld c,a
+                and 15
+                inc a
+                ld b,e
+                add a,e
+                ld e,a
+                jr hv_t
+hv_pat:         ld a,(sp_n)             ; los rangos de los add.to.pic con mas prioridad que el objeto, encima
+                or a
+                ret z
+                push iy
+                ld b,a
+                ld iy,SPH
+pv_l:           push bc
+                ld a,(hw_pri)
+                cp (iy+3)
+                jr nc,pv_n
+                ld a,(hg_py)
+                ld l,a
+                ld h,0
+                ld e,(iy+0)
+                ld d,(iy+1)
+                or a
+                sbc hl,de               ; fila - fila 0 de la celda
+                bit 7,h
+                jr nz,pv_n
+                ld a,h
+                or a
+                jr nz,pv_n
+                ld a,l
+                cp (iy+2)
+                jr nc,pv_n
+                ld l,a
+                ld h,0
+                add hl,hl
+                ld e,(iy+4)
+                ld d,(iy+5)
+                add hl,de
+                ld de,$C000             ; direccion del A2 -> su pagina en el bloque 7
+                add hl,de
+                push hl
+                ld a,PG_OVE
+                call map7
+                pop hl
+                ld e,(hl)               ; ax0
+                inc hl
+                ld d,(hl)               ; ax1
+                ld a,PG_PRI2
+                call map7
+                ld a,d
+                cp e
+                jr c,pv_n               ; vacio
+                inc d
+                ld a,(hw_plim)
+                cp d
+                jr nc,pv_1
+                ld d,a
+pv_1:           ld a,(hw_X0)
+                cp e
+                jr c,pv_2
+                ld e,a
+pv_2:           ld a,e
+                cp d
+                jr nc,pv_n
+                ld b,e
+                ld a,d
+                call vis_hide
+                ld hl,$FFFF
+                ld (hg_off),hl          ; VIS ya no es solo la imagen
+pv_n:           pop bc
+                ld de,8
+                add iy,de
+                djnz pv_l
+                pop iy
+                ret
+
+; Tapa en VIS los pixeles de B a A - 1 (de pantalla). Conserva HL y DE.
+vis_hide:       push hl
+                push de
+                ld e,a
+                ld a,(hw_X0)
+                ld d,a
+                ld a,b
+                sub d
+                ld b,a                  ; primero, desde el borde del objeto
+                ld a,e
+                sub d
+                dec a
+                ld c,a                  ; ultimo
+                ld a,b
+                rrca
+                rrca
+                rrca
+                and 31
+                ld e,a
+                ld a,c
+                rrca
+                rrca
+                rrca
+                and 31
+                sub e
+                ld d,a                  ; bytes - 1
+                ld hl,VIS
+                ld a,e
+                add a,l
+                ld l,a
+                jr nc,vh_0
+                inc h
+vh_0:           ld a,b
+                and 7
+                ld e,a
+                ld a,c
+                and 7
+                ld c,a
+                ld b,d
+                ld d,0
+                push hl
+                ld hl,VTL
+                add hl,de
+                ld e,(hl)               ; E = $FF >> primer bit
+                ld hl,VTR
+                ld a,c
+                add a,l
+                ld l,a
+                jr nc,vh_1
+                inc h
+vh_1:           ld d,(hl)               ; D = de bit 7 al ultimo
+                pop hl
+                ld a,b
+                or a
+                jr nz,vh_m
+                ld a,e
+                and d
+                cpl
+                and (hl)
+                ld (hl),a
+                pop de
+                pop hl
+                ret
+vh_m:           ld a,e
+                cpl
+                and (hl)
+                ld (hl),a
+                inc hl
+                dec b
+                jr z,vh_r
+vh_z:           ld (hl),0
+                inc hl
+                djnz vh_z
+vh_r:           ld a,d
+                cpl
+                and (hl)
+                ld (hl),a
+                pop de
+                pop hl
+                ret
+VTL:            defb $FF,$7F,$3F,$1F,$0F,$07,$03,$01
+VTR:            defb $80,$C0,$E0,$F0,$F8,$FC,$FE,$FF
+
+; PG_PRI2 en la ventana, con su indice hecho (pri_index): cada fila igual a la anterior toma su desplazamiento (hg_vis se ahorra repetirla)
+t_pdedup:       push ix
+                ld ix,LWIN+2
+                ld b,167
+pu_r:           ld e,(ix-2)
+                ld d,(ix-1)
+                ld hl,LWIN+336
+                add hl,de
+                ex de,hl                ; DE = fila anterior
+                push bc
+                ld c,(ix+0)
+                ld b,(ix+1)
+                ld hl,LWIN+336
+                add hl,bc               ; HL = esta fila
+                ld c,0
+pu_b:           ld a,(de)
+                cp (hl)
+                jr nz,pu_n
+                inc hl
+                inc de
+                and 15
+                inc a
+                add a,c
+                ld c,a
+                cp 160
+                jr c,pu_b
+                ld a,(ix-2)             ; iguales
+                ld (ix+0),a
+                ld a,(ix-1)
+                ld (ix+1),a
+pu_n:           pop bc
+                inc ix
+                inc ix
+                djnz pu_r
+                pop ix
+                ret
+                ELSE
                 xor a                   ; antes de armar nada: ¿alguna de las 8 filas puede tener el fondo por encima?
                 ld (hg_r),a
 hg_pre:         ld a,(hg_r)
@@ -981,6 +1398,8 @@ hn_r:           push af
                 pop af
                 or a
                 ret
+t_pdedup:       ret
+                ENDIF
 
 ; Objeto sin cambios desde el ciclo anterior (mismos datos y mismo primer sprite): se salta sus sprites; si no, se arma y se anota
 spr_obj:        push ix                 ; bandera 1 (EGO_INVISIBLE): el resultado del ultimo calculo (drawCel lo pone en cada ciclo, tambien si el ego no cambia)
@@ -1069,6 +1488,26 @@ spr_put:        ld a,(hw_slot)
                 ld (hw_sh),hl
                 ld de,4
                 add hl,de
+                IF GFX4
+                push hl
+                xor a                   ; hw_same = 1: misma vista, bucle, celda y mosaico (con el recorte que sea, bit 7 de la etiqueta): colores y forma ya estan
+                ld (hw_same),a
+                ld de,hw_tag
+                ld b,3
+hp_sm:          ld a,(de)
+                cp (hl)
+                jr nz,hp_sn
+                inc hl
+                inc de
+                djnz hp_sm
+                ld a,(de)
+                xor (hl)
+                and $7F
+                jr nz,hp_sn
+                ld a,1
+                ld (hw_same),a
+hp_sn:          pop hl
+                ENDIF
                 ld de,hw_tag
                 ld b,4
 hp_c:           ld a,(de)
@@ -1113,6 +1552,31 @@ hp_wr:          ld a,(hw_slot)
                 ld a,(hw_dch)
                 or a
                 jr z,hp_nd
+                IF GFX4
+                ld a,(hw_mm)
+                or a
+                jr z,hp_all
+                ld a,(hw_same)
+                or a
+                jr nz,hp_mk             ; el mismo mosaico con otro recorte: solo cambia la mascara
+                ld hl,(hw_p)
+                inc hl
+                inc hl
+                ld de,SPR_COL
+                ld bc,16
+                ldir
+hp_mk:          ld hl,(hw_mkp)
+                ld de,SPR_COL+16
+                ld bc,8
+                ldir
+                jr hp_nd
+hp_all:         ld hl,(hw_p)
+                inc hl
+                inc hl
+                ld de,SPR_COL
+                ld bc,24
+                ldir
+                ELSE
                 ld hl,(hw_p)
                 inc hl
                 inc hl
@@ -1126,6 +1590,7 @@ hp_wr:          ld a,(hw_slot)
                 ld de,SPR_COL+16
                 ld bc,8
                 ldir
+                ENDIF
 hp_nd:          ld a,(hw_pch)
                 or a
                 jr z,hp_ns
@@ -1189,6 +1654,12 @@ hg_full:        defb 0
 hg_tp:          defw 0
 hg_j:           defb 0
 MK:             defs 64
+hg_nb:          defb 0
+hg_nbl:         defb 0
+hw_nvis:        defb 0
+hw_op:          defw 0
+hg_off:         defw $FFFF
+VIS:            defs 32
 HWI:            defs 64
 hw_base:        defb 0
 hw_slot:        defb 0
@@ -1202,6 +1673,7 @@ hw_sy:          defb 0
 hw_sh:          defw 0
 hw_dch:         defb 0
 hw_pch:         defb 0
+hw_same:        defb 0
 hw_tag:         defs 4
 SHD:            defs 8*64
 
@@ -1729,6 +2201,7 @@ ap_xn:          ld hl,(ap_pp)
                 jr nz,ap_x
                 jp map7_back
 
+                IF GFX4=0
 ; Los rangos de los objetos fijos en la fila hg_py -> PROW (el maximo con lo que hubiera)
 pd_patch:       ld a,(sp_n)
                 or a
@@ -1789,6 +2262,7 @@ ps_n:           pop bc
                 djnz ps_l
                 pop iy
                 ret
+                ENDIF
 
 sp_u:           defw 0
 ap_h:           defb 0

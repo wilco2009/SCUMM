@@ -801,6 +801,7 @@ t_bake:         ld a,PG_OVL
                 ld a,1
                 ld (bk_on),a
                 ld (s4_force),a
+                ld (sw_any),a
                 call s4_restore_all
                 ld ix,BKO
                 call cel_open
