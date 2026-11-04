@@ -209,6 +209,8 @@ Pendiente de la sesion: push de los commits locales (11), `get.string` sin limit
 
 - 2026-11-02: bateria de regresion en 160w. `sh V2/dump/runall.sh` corre ahora con GFX4=1 por defecto (`GFX4=0 sh runall.sh` = HiRes 8x1 antiguo); `test_vm.sh` regenera `gfx4.inc` para la prueba y lo restaura tal cual al salir (copia `gfx4.inc.orig`; ya no quedan cambios de finales de linea). `cmp_vm.py` compara con GFX4=1 la imagen 4 bpp (160x168 en $A000), el plano de texto 40x25 y los sprites. Ejecutar sola y sin editar ENGINE mientras corre (comparten `dump/<JUEGO>`). Resultado: SQ1 190, PQ1/SQ2 240, KQ1 189 ciclos y KQ2 155 (el guion acaba antes: se mantiene asi en esta prueba), 5 OK, 0 diferencias.
 
+- 2026-11-04: SQ2 sala 93 (ADAPT de hardware, la capsula del final): la camara de hibernacion (o2, vista 181, bucles 0 y 1, prioridad 5) salia por delante de la capsula (o1, vista 175, prioridad 15): la capsula pasa de `SW_TILES` y se pinta en la imagen, y un sprite siempre tapa a lo pintado por software. Se anaden a `agi2spr.FORCE_SW['SQ2']`; por software se componen por prioridad. Las estrellas (vista 98) siguen con sprites por encima: acaban junto al borde de la capsula y por software recompondrian lineas todo el rato. Probado por el usuario en EightyOne.
+
 ### 2026-11-02 — Velocidad del interprete (calles de PQ1)
 Perfil en produccion (modo real, sala 12): el `if` era el 55 % del tiempo (do_if/di_*/skip_until + hc_*), el bucle de comandos el 14 %, overlays el 20 %. Los comandos en si son casi gratis. La logica no cambia (bateria de 5 juegos: ciclos iguales).
 - `trace_step` solo con `TESTS` (`ENGINE/tests.inc`, `TESTS equ 0` por defecto; `test_vm.sh` lo pone a 1 y lo restaura). La build de produccion ya no traza.

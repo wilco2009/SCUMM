@@ -140,7 +140,9 @@ SW_TILES = 6
 # deja sin dibujar a los de abajo del orden (una cupula y la mitad del ego): {juego: {vista}}. SQ1, sala 6: tres cupulas de 5 mosaicos por fila (vista 175) y el ego.
 # SQ2, sala 56 (capsulas de escape): las puertas de las cuatro capsulas (vista 139, bucles 0 a 2, 12 objetos) reservaban 112 sprites y el robot (vista 141,
 # se dibuja despues) se quedaba sin ninguno: invisible aunque persigue y mata; ahora van por software (los tres bucles juntos: un sprite del interior se dibujaria por encima de la puerta cerrada, que esta en el bitmap) y el robot tiene sitio; sus movimientos de abrir y cerrar se saltan (ADAPT en agi_read.py) (el interior y las luces, sin animacion: FIXED_CEL).
-FORCE_SW = {'SQ1': {175}, 'SQ2': {(147, 1), (147, 2), (139, 0), (139, 1), (139, 2)}}
+# SQ2, sala 93 (la capsula del final): la capsula por fuera (vista 175, prioridad 15) pasa de SW_TILES y se pinta en la imagen, y la camara de hibernacion (o2, vista 181, bucles 0 y 1, prioridad 5)
+# como sprite salia por delante: un sprite siempre tapa a lo pintado por software. Por software las dos, se componen por prioridad (el bucle 2, el ego tumbado, sigue con sprites: o3 no esta al final).
+FORCE_SW = {'SQ1': {175}, 'SQ2': {(147, 1), (147, 2), (139, 0), (139, 1), (139, 2), (181, 0), (181, 1)}}
 # Vistas cuya animacion se congela al dibujarlas (tiempo de ciclo 127: casi no cambian de celda y conservan la de set.cel): sus cambios de celda, dibujadas por
 # software, recomponen lineas cada ciclo y eran el 60 % del tiempo de la sala. SQ1, sala 6: las luces de las cupulas (vista 175); sala 31: los pistones de la maquina (vista 78).
 # KQ1, salas 1 y 2 (castillo): la bandera de la torre (vista 97, 8-9 mosaicos por fila: por software) y los cocodrilos del foso (vista 107, dos objetos) cambiaban de
