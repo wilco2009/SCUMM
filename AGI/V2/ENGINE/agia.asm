@@ -406,7 +406,7 @@ tfo_l:          res 1,(ix+O_SDR)
                 ld (sw_force),a
                 ret
 
-; Cartel recien abierto (clip_on = 1): los sprites se arman una vez con el recorte. Sin el A2: el cartel esta en la imagen y lo pintado por software no debe tocarla; sale al cerrarlo.
+; Cartel recien abierto o lista de menu nueva (clip_on <> 0): los sprites se arman una vez con el recorte. Sin el A2: el cartel esta en la imagen y lo pintado por software no debe tocarla; sale al cerrarlo.
 ; Sin imagen o en la pantalla de texto, los sprites se apagan.
 t_clip:
                 IF GFX4
@@ -416,6 +416,8 @@ t_clip:
                 ld a,(txtm)
                 or a
                 jr nz,tc_off
+                ld a,1
+                ld (clip_on),a
                 call t_force
                 call sort_objs
                 jp t_draw

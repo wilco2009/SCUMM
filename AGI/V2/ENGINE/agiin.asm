@@ -576,9 +576,12 @@ h_menu_input:   ld a,(FLAGS+14)         ; f14: menus disponibles
                 dec (hl)
                 xor a
                 ld (VARS+19),a
-mi_nk:          call OVL_SPRINIT        ; con el menu abierto los sprites se apagan
+mi_nk:          ld a,(mi_dlg)           ; guardar/cargar e inventario: los sprites se apagan. El menu principal los recorta contra su lista (mn_drop, mi_clip)
+                or a
+                call nz,OVL_SPRINIT
                 ld hl,OVF_MENUOPEN
                 call call_f
+                call mi_clip
                 ld a,(mn_res)
                 cp 254
                 jp z,OVL_FORCE          ; no hay menus
@@ -615,6 +618,7 @@ mi_run:         call OVL_KDELIV
                 ld (mn_dir),a
                 ld hl,OVF_MENUNAV
                 call call_f
+                call mi_clip
 mi_nd:          ld a,(keyn)
                 ld hl,mi_k
                 cp (hl)
@@ -660,6 +664,10 @@ mi_end:         ld a,(mi_k)
                 ld hl,OVB_STATUS        ; la barra de estado se redibuja ya (puede abrirse una ventana antes de acabar el ciclo)
                 call call_b
                 jp OVL_FORCE
+mi_clip:        ld a,(clip_on)          ; mn_drop ha cambiado el rectangulo
+                cp 2
+                ret nz
+                jp OVL_CLIP
 mn_res:         defb 0
 mi_dlg:         defb 0
 sv_ok:          defb 0

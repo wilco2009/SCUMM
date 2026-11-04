@@ -427,6 +427,34 @@ mb_e:           xor a
 
 ; La lista del menu elegido (m_it = el marcado)
 mn_drop:        call mn_geom
+                IF GFX4
+                ld a,(mi_dlg)           ; menu principal: los sprites siguen, recortados contra la lista (filas 1 a m_cnt); 2 = hay que rearmarlos (mi_clip). Guardar/cargar e inventario no.
+                or a
+                jr nz,md_nc
+                ld a,2
+                ld (clip_on),a
+                ld a,32
+                ld (clip_y0),a
+                ld b,a
+                ld a,(m_cnt)
+                add a,a
+                add a,a
+                add a,a
+                add a,b
+                ld (clip_y1),a
+                ld a,(pr_cxl)
+                add a,a
+                add a,a
+                add a,b
+                ld (clip_x0),a
+                ld b,a
+                ld a,(pr_bw)
+                add a,a
+                add a,a
+                add a,b
+                ld (clip_x1),a
+md_nc:
+                ENDIF
                 xor a
                 ld (m_i),a
 md_l:           ld a,(m_i)

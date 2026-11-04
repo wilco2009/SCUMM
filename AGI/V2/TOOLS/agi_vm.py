@@ -261,11 +261,12 @@ class Interp:
         pri2 = self.pri_plane()
         out = [None] * 64
         k = 0
-        if self.menu_ui is not None or self.txtm or (self.box is not None and (pri2 is None or not agi_text.GFX4)):
-            return out                  # con un menu o la pantalla de texto abiertos los sprites se apagan
+        over = self.box[1] if self.box is not None else self.menu_rect()
+        if self.txtm or (self.menu_ui is not None and not self.menu_main) or (over is not None and (pri2 is None or not agi_text.GFX4)):
+            return out                  # guardar/cargar, el inventario y la pantalla de texto: los sprites se apagan
         clip = None
-        if self.box is not None:        # con un cartel siguen, recortados contra su rectangulo: la capa de texto no tapa a los sprites (coordenadas del hardware)
-            top, cxl, boxw, nrows = self.box[1]
+        if over is not None:            # con un cartel o el menu principal siguen, recortados contra su rectangulo: la capa de texto no tapa a los sprites (coordenadas del hardware)
+            top, cxl, boxw, nrows = over
             cy0, cx0 = 32 + (top - 1) * 8, 32 + cxl * 4
             clip = (cx0, cx0 + boxw * 4, cy0, cy0 + nrows * 8)
         order = self.draw_order()
@@ -340,6 +341,18 @@ class Interp:
                             continue
                     out[slot] = (sx, sy, col, pix, msk)
         return out
+
+    menu_main = False                   # el menu abierto es el principal (no una lista de guardar/cargar o el inventario)
+
+    def menu_rect(self):
+        """(fila de arriba, columna, columnas, filas) de la lista del menu principal abierto, o None."""
+        if self.menu_ui is None or not self.menu_main or not agi_text.GFX4:
+            return None
+        sel = self.menu_ui[0]
+        col = sum(len(self.menus[i][0]) + 1 for i in range(sel))
+        items = self.menus[sel][1]
+        bw = (max(len(x[0]) for x in items) if items else 0) + 2
+        return 1, min(col, 40 - bw), bw, len(items)
 
     ego_hid = False                     # EGO_INVISIBLE del ultimo calculo
 
@@ -1943,6 +1956,7 @@ class Interp:
         else:
             sel, it = 0, start              # start: la primera linea elegible (la lista de ranuras tiene antes las del titulo)
         self.menu_ui = [sel, it]
+        self.menu_main = remember
         n0, v19 = len(self.keyq), self.vars[19]
         prev = self.dirhold
         res = None
