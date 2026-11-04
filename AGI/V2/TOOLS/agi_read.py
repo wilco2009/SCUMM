@@ -215,7 +215,11 @@ def help_override(path, n, msgs):
 # enseguida y la secuencia v39 de la logica sigue igual, sin esperar a que ande).
 _SET3 = bytes((12, 34)) * 3
 ADAPT = {'SQ1': {31: [(bytes((255, 11, 0)), bytes((35, 3)), bytes((36, 3)))] +
-                     [(b'', bytes((81, 3, x, y, 0, 34)), _SET3) for x, y in ((59, 97), (59, 52), (85, 52), (80, 118))]}}
+                     [(b'', bytes((81, 3, x, y, 0, 34)), _SET3) for x, y in ((59, 97), (59, 52), (85, 52), (80, 118))]},
+        # (velocidad) SQ2, logica 0: la cuenta atras de la explosion de la nave (v144 = 1) recarga v59 (ciclos por "segundo") con 9 (10 ciclos); con 14 (15) dura
+        # un 50 % mas de ciclos: el manejo del ego en nuestro juego es mas lento y es una dificultad anadida que se compensa (decision del usuario). Sigue
+        # dependiendo de la velocidad (A3-01). Solo ese bloque usa la constante; la logica 86 solo compara v59.
+        'SQ2': {0: [(b'', bytes((3, 59, 9)), bytes((3, 59, 14)))]}}
 
 
 def adapt(path, n, d):
