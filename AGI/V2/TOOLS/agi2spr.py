@@ -138,7 +138,9 @@ SW_TILES = 6
 
 # Vistas que se dibujan por software (como los rotulos anchos) aunque quepan en los sprites, porque en su sala pasan de los 12 sprites por linea y el hardware
 # deja sin dibujar a los de abajo del orden (una cupula y la mitad del ego): {juego: {vista}}. SQ1, sala 6: tres cupulas de 5 mosaicos por fila (vista 175) y el ego.
-FORCE_SW = {'SQ1': {175}, 'SQ2': {(147, 1), (147, 2)}}
+# SQ2, sala 56 (capsulas de escape): las puertas de las cuatro capsulas (vista 139, bucles 0 a 2, 12 objetos, ya de dos celdas) reservaban 112 sprites y el robot (vista 141,
+# se dibuja despues) se quedaba sin ninguno: invisible aunque persigue y mata; ahora van por software y el robot tiene sitio.
+FORCE_SW = {'SQ1': {175}, 'SQ2': {(147, 1), (147, 2), (139, 0), (139, 1), (139, 2)}}
 # Vistas cuya animacion se congela al dibujarlas (tiempo de ciclo 127: casi no cambian de celda y conservan la de set.cel): sus cambios de celda, dibujadas por
 # software, recomponen lineas cada ciclo y eran el 60 % del tiempo de la sala. SQ1, sala 6: las luces de las cupulas (vista 175); sala 31: los pistones de la maquina (vista 78).
 # KQ1, salas 1 y 2 (castillo): la bandera de la torre (vista 97, 8-9 mosaicos por fila: por software) y los cocodrilos del foso (vista 107, dos objetos) cambiaban de
