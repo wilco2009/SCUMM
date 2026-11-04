@@ -139,8 +139,8 @@ SW_TILES = 6
 # Vistas que se dibujan por software (como los rotulos anchos) aunque quepan en los sprites, porque en su sala pasan de los 12 sprites por linea y el hardware
 # deja sin dibujar a los de abajo del orden (una cupula y la mitad del ego): {juego: {vista}}. SQ1, sala 6: tres cupulas de 5 mosaicos por fila (vista 175) y el ego.
 # SQ2, sala 56 (capsulas de escape): las puertas de las cuatro capsulas (vista 139, bucles 0 a 2, 12 objetos) reservaban 112 sprites y el robot (vista 141,
-# se dibuja despues) se quedaba sin ninguno: invisible aunque persigue y mata; ahora los marcos y las hojas (bucles 0 y 1) van por software y el robot tiene sitio (los interiores, bucle 2, siguen con sprites); sus movimientos de abrir y cerrar se saltan (ADAPT en agi_read.py).
-FORCE_SW = {'SQ1': {175}, 'SQ2': {(147, 1), (147, 2), (139, 0), (139, 1)}}
+# se dibuja despues) se quedaba sin ninguno: invisible aunque persigue y mata; ahora van por software (los tres bucles juntos: un sprite del interior se dibujaria por encima de la puerta cerrada, que esta en el bitmap) y el robot tiene sitio; sus movimientos de abrir y cerrar se saltan (ADAPT en agi_read.py) (el interior y las luces, sin animacion: FIXED_CEL).
+FORCE_SW = {'SQ1': {175}, 'SQ2': {(147, 1), (147, 2), (139, 0), (139, 1), (139, 2)}}
 # Vistas cuya animacion se congela al dibujarlas (tiempo de ciclo 127: casi no cambian de celda y conservan la de set.cel): sus cambios de celda, dibujadas por
 # software, recomponen lineas cada ciclo y eran el 60 % del tiempo de la sala. SQ1, sala 6: las luces de las cupulas (vista 175); sala 31: los pistones de la maquina (vista 78).
 # KQ1, salas 1 y 2 (castillo): la bandera de la torre (vista 97, 8-9 mosaicos por fila: por software) y los cocodrilos del foso (vista 107, dos objetos) cambiaban de
@@ -166,8 +166,12 @@ BLANK_VIEWS = {'SQ1': {64}, 'SQ2': {(44, 0)}}
 # dibujan la ultima del bucle; ciclo, tiempos y banderas siguen igual. SQ2, sala 66: las dos paredes que se levantan a los lados (vista 147, bucles 1 y 2, 19
 # mosaicos cada una) crecian en 5 celdas con sprites y la de la derecha salia incompleta (limite de 64); ahora van por software (FORCE_SW) y no recomponen nada.
 TWO_FRAMES = {'SQ2': {(147, 1), (147, 2)}}
+# {(vista, bucle): celda}: ese bucle dibuja siempre esa celda, sin animacion (el ciclo, los tiempos y las banderas de la logica siguen igual). SQ2, sala 56: la
+# capsula abierta ciclaba entre dos celdas (el interior, vista 139 bucle 2) y parpadeaban sus luces (bucle 3): ahora fijas, en la celda con la que la logica las pone.
+FIXED_CEL = {'SQ2': {(139, 2): 0, (139, 3): 0}}
 _force = set()
 _two = set()
+_fixed = {}
 _freeze = set()
 _hw = set()
 _final = set()
@@ -176,10 +180,11 @@ _blank = set()
 
 def set_game(path):
     """Elige las vistas forzadas a software del juego (carpeta `path`)."""
-    global _two, _force, _freeze, _hw, _final, _blank
+    global _fixed, _two, _force, _freeze, _hw, _final, _blank
     name = os.path.basename(os.path.normpath(path)).upper()
     _force = FORCE_SW.get(name, set())
     _two = TWO_FRAMES.get(name, set())
+    _fixed = FIXED_CEL.get(name, {})
     _freeze = FREEZE_VIEWS.get(name, set())
     _hw = FORCE_HW.get(name, set())
     _final = FINAL_CEL.get(name, set())
@@ -187,7 +192,9 @@ def set_game(path):
 
 
 def final_cel(view, d, loop, cel):
-    """Celda que se dibuja: la ultima del bucle en FINAL_CEL; en TWO_FRAMES, la 0 o la ultima."""
+    """Celda que se dibuja: la ultima del bucle en FINAL_CEL; en TWO_FRAMES, la 0 o la ultima; en FIXED_CEL, la indicada."""
+    if (view, loop) in _fixed:
+        return min(_fixed[(view, loop)], d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)] - 1)
     if view in _final or ((view, loop) in _two and cel > 0):
         return d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)] - 1
     return cel
@@ -195,8 +202,7 @@ def final_cel(view, d, loop, cel):
 
 def cel_of(view, d, loop, cel, framed=False):
     """cel_tiles de la celda que se dibuja: en las vistas de FINAL_CEL, siempre la ultima del bucle."""
-    if view in _final:
-        cel = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)] - 1
+    cel = final_cel(view, d, loop, cel)
     r = cel_tiles(d, loop, cel, framed)
     return (r[0], r[1], []) if view in _blank or (view, loop) in _blank else r
 
@@ -226,8 +232,7 @@ def raw_cel(view, d, loop, cel):
     """GFX4: (transparente, ancho, alto, filas) de la celda que se dibuja, con codigos de Chroma y el espejo hecho; None en las vistas en blanco."""
     if view in _blank or (view, loop) in _blank:
         return None
-    if view in _final:
-        cel = d[d[5 + 2 * loop] | (d[6 + 2 * loop] << 8)] - 1
+    cel = final_cel(view, d, loop, cel)
     c = cel_pixels(d, loop, cel)
     if c is None:
         return None

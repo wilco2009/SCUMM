@@ -225,7 +225,12 @@ ADAPT = {'SQ1': {31: [(bytes((255, 11, 0)), bytes((35, 3)), bytes((36, 3)))] +
                 56: [(b'', bytes((81, o, x, y, 0, f)), bytes((37, o, x, y, 12, f)))
                      for o, x, y, f in ((5, 13, 91, 30), (6, 45, 91, 30), (7, 75, 91, 30), (8, 107, 91, 30), (1, 23, 68, 30), (2, 55, 68, 30), (3, 85, 68, 30),
                                         (4, 117, 68, 30), (1, 23, 92, 33), (2, 55, 92, 33), (3, 85, 92, 33), (4, 117, 92, 33), (5, 26, 91, 52), (6, 58, 91, 52),
-                                        (7, 88, 91, 52), (8, 120, 91, 52))]}}
+                                        (7, 88, 91, 52), (8, 120, 91, 52))] +
+                # La capsula abierta no tiene animacion: start.update(o9..o12) (el interior cicla entre dos celdas en cada ciclo, y en 160w un cambio de celda de un
+                # objeto por software recompone todos los demas, 12 de ellos enormes: saturaba la CPU) -> stop.cycling(o9..o12): se queda como esta, quieto.
+                [(bytes((58, o)), bytes((59, i)), bytes((70, i))) for o, i in ((5, 9), (6, 10), (7, 11), (8, 12))] +
+                # lo mismo al entrar en la sala con la capsula ya abierta: stop.motion(o9..o12) (no hay movimiento) -> stop.cycling
+                [(bytes((35, i)), bytes((77, i)), bytes((70, i))) for i in (9, 10, 11, 12)]}}
 
 
 def adapt(path, n, d):
