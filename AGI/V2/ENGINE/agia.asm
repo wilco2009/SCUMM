@@ -19,6 +19,7 @@ HQ_FIX          equ $2040
                 jp t_spclr              ; OVL_SPCLR
                 jp t_addhdr             ; OVL_ADDHDR
                 jp t_pdedup             ; OVL_PDEDUP
+                jp t_clip               ; OVL_CLIP
 
 ; El orden de los objetos que deja t_sort: el overlay A2 (que se mapea en lugar de este) lo lee de aqui, por el bloque 7, asi que va en una direccion fija
                 defs HQ_FIX-$
@@ -188,7 +189,10 @@ ke_txt:         ld a,1
                 push bc
                 call kq_put
                 pop bc
-ke_ed:          ld a,(accin)
+ke_ed:          ld a,(pw_ent)           ; con un cartel abierto las teclas no llegan a la linea de entrada (messageBox_KeyPress): el ENTER que lo cierra no se la lleva
+                or a
+                ret nz
+                ld a,(accin)
                 or a
                 ret z
                 ld a,c
@@ -401,4 +405,22 @@ tfo_l:          res 1,(ix+O_SDR)
                 ld a,1
                 ld (sw_force),a
                 ret
+
+; Cartel recien abierto (clip_on = 1): los sprites se arman una vez con el recorte. Sin el A2: el cartel esta en la imagen y lo pintado por software no debe tocarla; sale al cerrarlo.
+; Sin imagen o en la pantalla de texto, los sprites se apagan.
+t_clip:
+                IF GFX4
+                ld a,(picvalid)
+                or a
+                jr z,tc_off
+                ld a,(txtm)
+                or a
+                jr nz,tc_off
+                call t_force
+                call sort_objs
+                jp t_draw
+tc_off:         xor a
+                ld (clip_on),a
+                ENDIF
+                jp t_sinit
 

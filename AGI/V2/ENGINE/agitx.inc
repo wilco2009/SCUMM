@@ -144,7 +144,9 @@ tps_c:          ld bc,1000
                 jp map7_back
 
 ; El rectangulo de la ventana (filas pr_l0 / 8 ..., pr_ln / 8 filas, columnas pr_cxl ..., pr_bw) vuelve a lo que habia: la copia de tp_save
-t_boxclose:     ld a,(pr_ln)
+t_boxclose:     xor a
+                ld (clip_on),a
+                ld a,(pr_ln)
                 rrca
                 rrca
                 rrca

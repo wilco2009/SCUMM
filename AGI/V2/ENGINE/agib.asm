@@ -603,6 +603,35 @@ t_prt:          ld a,(win_act)
                 xor a
                 ld (win_act),a
 tpr_1:          call t_print
+                IF GFX4
+                ld a,1                  ; el rectangulo del cartel en coordenadas del hardware: fila 1 = linea 0 de la imagen, 4 pixeles por columna, 8 lineas por fila
+                ld (clip_on),a
+                ld a,(pr_top)
+                dec a
+                add a,a
+                add a,a
+                add a,a
+                add a,32
+                ld (clip_y0),a
+                ld b,a
+                ld a,(pr_nr)
+                add a,a
+                add a,a
+                add a,a
+                add a,b
+                ld (clip_y1),a
+                ld a,(pr_cxl)
+                add a,a
+                add a,a
+                add a,32
+                ld (clip_x0),a
+                ld b,a
+                ld a,(pr_bw)
+                add a,a
+                add a,a
+                add a,b
+                ld (clip_x1),a
+                ENDIF
                 ld a,(FLAGS+15)
                 or a
                 jr z,tpr_t

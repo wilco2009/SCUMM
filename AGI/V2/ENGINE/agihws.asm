@@ -715,6 +715,9 @@ hw_end:         jp unmap_win
 hw_fin:         ld a,(hw_ego)
                 or a
                 jr nz,hf_ne
+                ld a,(clip_on)          ; con un cartel abierto se queda el ultimo valor
+                or a
+                jr nz,hf_ne
                 ld a,(hw_hid)           ; drawCel: EGO_INVISIBLE = ningun pixel del ego se pinta
                 ld (ego_hid),a
                 ld (FLAGS+1),a
@@ -800,7 +803,13 @@ hm_mk:          ld a,1
                 ld hl,MK
                 add hl,de
                 ld (hw_mkp),hl
-hm_ck:          ld hl,(hw_mkp)
+hm_ck:
+                IF GFX4
+                ld a,(clip_on)
+                or a
+                call nz,hw_cut
+                ENDIF
+                ld hl,(hw_mkp)
                 ld b,8
                 xor a
 hm_o:           or (hl)
@@ -808,6 +817,85 @@ hm_o:           or (hl)
                 djnz hm_o
                 or a
                 ret
+
+                IF GFX4
+; Con un cartel abierto: el mosaico hw_i (en hw_sx, hw_sy, mascaras en hw_mkp) pierde los pixeles que caen dentro del rectangulo; deja las mascaras en CK.
+hw_cut:         ld a,(clip_y1)
+                ld c,a
+                ld a,(hw_sy)
+                cp c
+                ret nc                  ; empieza por debajo
+                add a,8
+                ld c,a
+                ld a,(clip_y0)
+                cp c
+                ret nc                  ; acaba por encima
+                ld a,(clip_x1)
+                ld c,a
+                ld a,(hw_sx)
+                cp c
+                ret nc
+                add a,8
+                ld c,a
+                ld a,(clip_x0)
+                cp c
+                ret nc
+                ld a,(clip_x0)
+                ld d,a
+                ld a,(clip_x1)
+                ld e,a
+                ld a,(hw_sx)
+                ld b,8
+                ld c,0
+hc_x:           sla c                   ; C = pixeles de la fila dentro del rectangulo (bit 7 = el primero)
+                cp d
+                jr c,hc_xn
+                cp e
+                jr nc,hc_xn
+                inc c
+hc_xn:          inc a
+                djnz hc_x
+                ld a,c
+                cpl
+                ld c,a
+                ld a,(clip_y0)
+                ld d,a
+                ld a,(clip_y1)
+                ld e,a
+                ld a,(hw_sy)
+                ld hl,(hw_mkp)
+                push hl
+                ld hl,CK
+                ld (hw_ckp),hl
+                pop hl
+                ld b,8
+hc_y:           push af
+                cp d
+                jr c,hc_all
+                cp e
+                jr nc,hc_all
+                ld a,(hl)
+                and c
+                jr hc_st
+hc_all:         ld a,(hl)
+hc_st:          inc hl
+                push hl
+                ld hl,(hw_ckp)
+                ld (hl),a
+                inc hl
+                ld (hw_ckp),hl
+                pop hl
+                pop af
+                inc a
+                djnz hc_y
+                ld hl,CK
+                ld (hw_mkp),hl
+                ld a,1
+                ld (hw_mm),a
+                ret
+hw_ckp:         defw 0
+CK:             defs 8
+                ENDIF
 
 ; A = ty del mosaico hw_i: arma MK para todos los mosaicos de esa fila a partir de el
 hw_group:       ld (hw_gty),a
@@ -1409,6 +1497,9 @@ spr_obj:        push ix                 ; bandera 1 (EGO_INVISIBLE): el resultad
                 sbc hl,de
                 ld a,h
                 or l
+                jr nz,so_ne
+                ld a,(clip_on)
+                or a
                 jr nz,so_ne
                 ld a,(ego_hid)
                 ld (FLAGS+1),a

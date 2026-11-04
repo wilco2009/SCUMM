@@ -423,8 +423,7 @@ h_print_at_v:   ld a,(ARGS)
                 ld (pr_col),a
                 ld a,(ARGS+3)
                 ld (pr_w),a
-pr_go:          call OVL_SPRINIT        ; con la ventana abierta los sprites se apagan
-                ld hl,OVB_PRINT
+pr_go:          ld hl,OVB_PRINT
                 call call_b
                 ld a,(oc_pw)            ; show.obj: el dibujo del objeto dentro de la ventana
                 or a
@@ -433,7 +432,8 @@ pr_go:          call OVL_SPRINIT        ; con la ventana abierta los sprites se 
                 call call_c
                 xor a
                 ld (oc_pw),a
-pg_w:           ld a,(win_act)          ; bandera 15 (VM_FLAG_OUTPUT_MODE): la ventana queda abierta y no se espera (t_prt)
+pg_w:           call OVL_CLIP           ; los sprites siguen, recortados contra el cartel: se pintan una vez (ni la imagen ni la capa de texto tapan a los sprites); sin imagen se apagan
+                ld a,(win_act)          ; bandera 15 (VM_FLAG_OUTPUT_MODE): la ventana queda abierta y no se espera (t_prt)
                 or a
                 ret nz
                 ld a,1

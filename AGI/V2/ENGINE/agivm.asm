@@ -99,6 +99,7 @@ OVL_ADDPIC      equ $2018
 OVL_SPCLR       equ $201B
 OVL_ADDHDR      equ $201E
 OVL_PDEDUP      equ $2021
+OVL_CLIP        equ $2024
 ; add.to.pic: los datos viven en la pagina del A1 (bloque 1) tras sus cabeceras de prioridad (SPH); los pares de rangos (SPP), en la del A2
 SP_MAX          equ 48                  ; cabeceras de rangos de prioridad
 SP_ROWS         equ 2048                ; filas de rangos (2 bytes cada una: 4 KB, toda la pagina del A2 desde SPP)
@@ -1695,6 +1696,11 @@ h_show_obj:     ld hl,OVC_OBJDESC
 pr_raw:         defb 0
 oc_res:         defb 0
 oc_pw:          defb 0                  ; show.obj: ancho (HiRes) del dibujo, 0 = sin dibujo
+clip_on:        defb 0                  ; 1 = hay un cartel abierto: los sprites se recortan contra su rectangulo (coordenadas del hardware; x1 e y1 no incluidos)
+clip_x0:        defb 0
+clip_x1:        defb 0
+clip_y0:        defb 0
+clip_y1:        defb 0
 pr_bw:          defb 0                  ; geometria de la ventana (la deja t_print, la usa el dibujo del overlay C)
 pr_top:         defb 0
 pr_cxl:         defb 0

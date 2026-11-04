@@ -261,8 +261,13 @@ class Interp:
         pri2 = self.pri_plane()
         out = [None] * 64
         k = 0
-        if self.box is not None or self.menu_ui is not None or self.txtm:
-            return out                  # con una ventana, un menu o la pantalla de texto abiertos los sprites se apagan
+        if self.menu_ui is not None or self.txtm or (self.box is not None and (pri2 is None or not agi_text.GFX4)):
+            return out                  # con un menu o la pantalla de texto abiertos los sprites se apagan
+        clip = None
+        if self.box is not None:        # con un cartel siguen, recortados contra su rectangulo: la capa de texto no tapa a los sprites (coordenadas del hardware)
+            top, cxl, boxw, nrows = self.box[1]
+            cy0, cx0 = 32 + (top - 1) * 8, 32 + cxl * 4
+            clip = (cx0, cx0 + boxw * 4, cy0, cy0 + nrows * 8)
         order = self.draw_order()
         res = 0                         # el ego tiene prioridad en los sprites: lo que se pinta antes que el no pasa de 64 - res
         if 0 in order:
@@ -323,6 +328,14 @@ class Interp:
                                 if hx < 0 or hx > self.HXMAX or pri2[py * 160 + self.agx(hx)] <= o.pri:
                                     ok |= 0x80 >> kk
                             msk[r] &= ok
+                        if clip is not None:
+                            out_m = 0
+                            for kk in range(8):
+                                if clip[0] <= sx + kk < clip[1]:
+                                    out_m |= 0x80 >> kk
+                            for r in range(8):
+                                if clip[2] <= sy + r < clip[3]:
+                                    msk[r] &= ~out_m & 255
                         if not any(msk):
                             continue
                     out[slot] = (sx, sy, col, pix, msk)
@@ -519,7 +532,7 @@ class Interp:
         (draw_order) con la mascara de prioridad. El texto (plano de la FPGA) no esta en ella. Devuelve una lista de 160*168 codigos de Chroma."""
         img, pri2 = self.render4()
         if pri2 is None or self.box is not None or self.menu_ui is not None or self.txtm:
-            return img                  # con una ventana, un menu o la pantalla de texto abiertos los sprites se apagan (como hw_sprites)
+            return img                  # el cartel esta en la imagen; con un menu o la pantalla de texto abiertos los sprites se apagan (como hw_sprites)
         for n in self.draw_order():
             o = self.objs[n]
             if o.static:
