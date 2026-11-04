@@ -159,6 +159,7 @@ static void mcu_byte(uint8_t b) {
         size_t k = mcu_name.rfind('/');
         std::string base = k == std::string::npos ? mcu_name : mcu_name.substr(k + 1);
         std::string path = sd_dir + "/" + mcu_name;
+        if (getenv("TS_FLOG")) printf("OPEN f=%d %s%c", g_fr, base.c_str(), 10);                // TS_FLOG=1: cada fichero que se abre
         FILE* f = fopen(path.c_str(), "rb");                                                  // la ruta relativa tal cual (AGI usa carpetas por tipo)
         if (!f) { path = sd_dir + "/" + base; f = fopen(path.c_str(), "rb"); }
         if (!f) { path = sd_dir + "/gfx/" + base; f = fopen(path.c_str(), "rb"); }

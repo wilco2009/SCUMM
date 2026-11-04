@@ -842,12 +842,7 @@ bt_y:           ld a,(ARGS+2)
                 jp c,ret_true
                 jp ret_false
 
-hc_posn:        call cond_obj
-                ld l,(ix+O_X)
-                ld h,0
-                ld d,h
-                ld e,l
-                jr boxtest
+hc_posn:                                ; no se usa: posn va en linea en do_if (df_posn)
 hc_obj_in_box:  call cond_obj
                 ld c,d
                 ld b,0

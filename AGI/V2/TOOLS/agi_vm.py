@@ -900,9 +900,9 @@ class Interp:
             norm = lambda t: re.sub(r"[ 	\-.,:;!']", '', t.lower())      # cmdCompareStrings: sin espacios ni puntuacion
             return norm(self.strs[a[0]]) == norm(self.strs[a[1]])
         o = self.obj(a[0])
-        w, h = self.cell(o) if o.drawn or o.view else (0, 0)       # testObjInBox usa xSize aunque el objeto no este dibujado (op_test.cpp:305)
-        if name == 'posn':
+        if name == 'posn':                                         # testPosn solo mira x e y: no mide la celda
             return a[1] <= o.x <= a[3] and a[2] <= o.y <= a[4]
+        w, h = self.cell(o) if o.drawn or o.view else (0, 0)       # testObjInBox usa xSize aunque el objeto no este dibujado (op_test.cpp:305)
         if name == 'obj.in.box':
             return o.x >= a[1] and o.y >= a[2] and o.x + w - 1 <= a[3] and o.y <= a[4]
         if name == 'center.posn':

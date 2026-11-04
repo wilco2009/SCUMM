@@ -796,24 +796,71 @@ do_goto:        ex de,hl
 do_if:          ld bc,0
 di_l:           ld a,(de)
                 inc de
-                cp 10
+                cp 12
                 jp nc,di_big
-                or a
-                jp z,di_bad
                 add a,a
-                ld hl,di_ft-2
-                add a,l
+                add a,di_ft AND 255
                 ld l,a
-                adc a,h
-                sub l
-                ld h,a
+                ld h,di_ft SHR 8
                 ld a,(hl)
-                inc hl
+                inc l
                 ld h,(hl)
                 ld l,a
                 jp (hl)
 
-di_ft:          defw df_equaln,df_equalv,df_lessn,df_lessv,df_greatern,df_greaterv,df_isset,df_issetv,df_has
+                IF ($ AND 255) > 232    ; la tabla no cruza pagina (di_l solo suma la parte baja)
+                defs 256-($ AND 255)
+                ENDIF
+di_ft:          defw di_bad,df_equaln,df_equalv,df_lessn,df_lessv,df_greatern,df_greaterv,df_isset,df_issetv,df_has,df_oir,df_posn
+
+df_oir:         ld a,10                 ; obj.in.room va por el camino general
+                jp ds_nosd
+; posn en linea (testPosn de ScummVM solo mira x e y): HL = el objeto
+df_posn:        ld a,(de)
+                inc de
+                cp NOBJ
+                jp nc,go_bad
+                rrca
+                rrca
+                rrca
+                ld l,a
+                and $1F
+                add a,OBJ SHR 8
+                ld h,a
+                ld a,l
+                and $E0
+                add a,O_X
+                ld l,a
+                push bc
+                ld a,(de)
+                ld b,a                  ; x1
+                inc de
+                ld a,(de)
+                ld c,a                  ; y1
+                inc de
+                ld a,(hl)
+                cp b
+                jr c,dp_f2
+                inc hl
+                ld a,(hl)
+                cp c
+                jr c,dp_f2
+                dec hl
+                ld a,(de)               ; x2
+                inc de
+                cp (hl)
+                jr c,dp_f1
+                inc hl
+                ld a,(de)               ; y2
+                inc de
+                cp (hl)
+                jr c,dp_f0
+                pop bc
+                jp di_T
+dp_f2:          inc de
+dp_f1:          inc de
+dp_f0:          pop bc
+                jp di_F
 
 df_equaln:      ld a,(de)
                 ld l,a
