@@ -219,7 +219,13 @@ ADAPT = {'SQ1': {31: [(bytes((255, 11, 0)), bytes((35, 3)), bytes((36, 3)))] +
         # (velocidad) SQ2, logica 0: la cuenta atras de la explosion de la nave (v144 = 1) recarga v59 (ciclos por "segundo") con 9 (10 ciclos); con 14 (15) dura
         # un 50 % mas de ciclos: el manejo del ego en nuestro juego es mas lento y es una dificultad anadida que se compensa (decision del usuario). Sigue
         # dependiendo de la velocidad (A3-01). Solo ese bloque usa la constante; la logica 86 solo compara v59.
-        'SQ2': {0: [(b'', bytes((3, 59, 9)), bytes((3, 59, 14)))]}}
+        'SQ2': {0: [(b'', bytes((3, 59, 9)), bytes((3, 59, 14)))],
+                # SQ2, sala 56 (capsulas): abrir y cerrar las puertas es mover marcos y hojas (move.obj, en software recomponian lineas todo el rato y no se podia ni
+                # escribir): move.obj(o, x, y, 0, f) -> position(o, x, y) + set(f): salta de cerrada a abierta y al reves, con la bandera ya puesta.
+                56: [(b'', bytes((81, o, x, y, 0, f)), bytes((37, o, x, y, 12, f)))
+                     for o, x, y, f in ((5, 13, 91, 30), (6, 45, 91, 30), (7, 75, 91, 30), (8, 107, 91, 30), (1, 23, 68, 30), (2, 55, 68, 30), (3, 85, 68, 30),
+                                        (4, 117, 68, 30), (1, 23, 92, 33), (2, 55, 92, 33), (3, 85, 92, 33), (4, 117, 92, 33), (5, 26, 91, 52), (6, 58, 91, 52),
+                                        (7, 88, 91, 52), (8, 120, 91, 52))]}}
 
 
 def adapt(path, n, d):

@@ -138,16 +138,14 @@ SW_TILES = 6
 
 # Vistas que se dibujan por software (como los rotulos anchos) aunque quepan en los sprites, porque en su sala pasan de los 12 sprites por linea y el hardware
 # deja sin dibujar a los de abajo del orden (una cupula y la mitad del ego): {juego: {vista}}. SQ1, sala 6: tres cupulas de 5 mosaicos por fila (vista 175) y el ego.
-# SQ2, sala 56 (capsulas de escape): las puertas de las cuatro capsulas (vista 139, bucles 0 a 2, 12 objetos, ya de dos celdas) reservaban 112 sprites y el robot (vista 141,
-# se dibuja despues) se quedaba sin ninguno: invisible aunque persigue y mata; ahora van por software y el robot tiene sitio.
-FORCE_SW = {'SQ1': {175}, 'SQ2': {(147, 1), (147, 2), (139, 0), (139, 1), (139, 2)}}
+# SQ2, sala 56 (capsulas de escape): las puertas de las cuatro capsulas (vista 139, bucles 0 a 2, 12 objetos) reservaban 112 sprites y el robot (vista 141,
+# se dibuja despues) se quedaba sin ninguno: invisible aunque persigue y mata; ahora los marcos y las hojas (bucles 0 y 1) van por software y el robot tiene sitio (los interiores, bucle 2, siguen con sprites); sus movimientos de abrir y cerrar se saltan (ADAPT en agi_read.py).
+FORCE_SW = {'SQ1': {175}, 'SQ2': {(147, 1), (147, 2), (139, 0), (139, 1)}}
 # Vistas cuya animacion se congela al dibujarlas (tiempo de ciclo 127: casi no cambian de celda y conservan la de set.cel): sus cambios de celda, dibujadas por
 # software, recomponen lineas cada ciclo y eran el 60 % del tiempo de la sala. SQ1, sala 6: las luces de las cupulas (vista 175); sala 31: los pistones de la maquina (vista 78).
 # KQ1, salas 1 y 2 (castillo): la bandera de la torre (vista 97, 8-9 mosaicos por fila: por software) y los cocodrilos del foso (vista 107, dos objetos) cambiaban de
 # celda cada ciclo y el ego iba muy lento; ahora casi no ciclan (solo esas dos salas usan estas vistas).
-# SQ2, sala 56: las puertas de las capsulas (vista 139) ciclaban entre sus dos celdas sin parar (la elegida no lleva stop.cycling) y por software recomponian lineas cada
-# ciclo: no se podia ni escribir; ahora se quedan en la celda de set.cel (abiertas o cerradas). Tambien se congelan las luces (bucle 3, misma vista).
-FREEZE_VIEWS = {'SQ1': {175, 78}, 'KQ1': {97, 107}, 'SQ2': {139}}
+FREEZE_VIEWS = {'SQ1': {175, 78}, 'KQ1': {97, 107}}
 # (vista, bucle) en lugar de una vista: solo ese bucle. SQ1, sala 37: el despegue de la nave (vista 109, bucle 1, 12 mosaicos por fila) por software iba
 # muy lento; su bucle 0 (58 mosaicos) se queda en software porque con el ego y lo demas no cabe en los 64 sprites.
 # Vistas que van por hardware aunque tengan mas de SW_TILES mosaicos en una fila (hasta 12 por linea): SQ1, sala 33 (esquivar rocas): la nave (vistas 75, 95 y
