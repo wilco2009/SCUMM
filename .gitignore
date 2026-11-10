@@ -21,3 +21,7 @@
 **/build/
 __pycache__/
 *~
+
+# Datos originales de Sierra (AGI v3, SCI): no se redistribuyen
+/AGI/V3/*/
+/SCI/SQ3/

@@ -1,0 +1,138 @@
+{
+ "juego": "iceman",
+ "imagenes": [
+  {
+   "pic": 1,
+   "parejas": 20,
+   "tramado_%": 46.8,
+   "celdas_2x1_distintas_%": 16.05,
+   "mezcla_px_bytes": 10227
+  },
+  {
+   "pic": 2,
+   "parejas": 27,
+   "tramado_%": 54.6,
+   "celdas_2x1_distintas_%": 25.86,
+   "mezcla_px_bytes": 13078
+  },
+  {
+   "pic": 11,
+   "parejas": 27,
+   "tramado_%": 53.3,
+   "celdas_2x1_distintas_%": 14.64,
+   "mezcla_px_bytes": 10953
+  },
+  {
+   "pic": 18,
+   "parejas": 15,
+   "tramado_%": 16.3,
+   "celdas_2x1_distintas_%": 13.47,
+   "mezcla_px_bytes": 8571
+  },
+  {
+   "pic": 23,
+   "parejas": 15,
+   "tramado_%": 21.2,
+   "celdas_2x1_distintas_%": 6.9,
+   "mezcla_px_bytes": 5448
+  },
+  {
+   "pic": 25,
+   "parejas": 14,
+   "tramado_%": 45.9,
+   "celdas_2x1_distintas_%": 8.1,
+   "mezcla_px_bytes": 3454
+  },
+  {
+   "pic": 27,
+   "parejas": 15,
+   "tramado_%": 61.7,
+   "celdas_2x1_distintas_%": 10.99,
+   "mezcla_px_bytes": 2334
+  },
+  {
+   "pic": 39,
+   "parejas": 4,
+   "tramado_%": 2.2,
+   "celdas_2x1_distintas_%": 0.61,
+   "mezcla_px_bytes": 438
+  },
+  {
+   "pic": 56,
+   "parejas": 13,
+   "tramado_%": 53.0,
+   "celdas_2x1_distintas_%": 23.26,
+   "mezcla_px_bytes": 12671
+  },
+  {
+   "pic": 87,
+   "parejas": 19,
+   "tramado_%": 15.1,
+   "celdas_2x1_distintas_%": 8.78,
+   "mezcla_px_bytes": 2805
+  },
+  {
+   "pic": 99,
+   "parejas": 1,
+   "tramado_%": 0.0,
+   "celdas_2x1_distintas_%": 0.0,
+   "mezcla_px_bytes": 359
+  },
+  {
+   "pic": 100,
+   "parejas": 18,
+   "tramado_%": 21.0,
+   "celdas_2x1_distintas_%": 11.05,
+   "mezcla_px_bytes": 8177
+  },
+  {
+   "pic": 199,
+   "parejas": 17,
+   "tramado_%": 89.1,
+   "celdas_2x1_distintas_%": 6.56,
+   "mezcla_px_bytes": 2512
+  },
+  {
+   "pic": 299,
+   "parejas": 10,
+   "tramado_%": 11.4,
+   "celdas_2x1_distintas_%": 3.43,
+   "mezcla_px_bytes": 2734
+  }
+ ],
+ "vistas": {
+  "celdas": 2224,
+  "mosaicos": 16743,
+  "filas8": 102199,
+  "filas8_mas2col": 27758,
+  "bytes_160_4bpp": 479701,
+  "mosaicos_max": 101
+ },
+ "fuentes": {
+  "0": {
+   "alto": 8,
+   "ancho_medio": 6.71,
+   "caracteres_en_320": 47.7
+  },
+  "1": {
+   "alto": 12,
+   "ancho_medio": 5.75,
+   "caracteres_en_320": 55.6
+  },
+  "100": {
+   "alto": 8,
+   "ancho_medio": 7.63,
+   "caracteres_en_320": 41.9
+  },
+  "999": {
+   "alto": 8,
+   "ancho_medio": 4.65,
+   "caracteres_en_320": 68.9
+  }
+ },
+ "texto": {
+  "cadenas": 376,
+  "caracteres": 5078,
+  "longitud_media": 13.5
+ }
+}

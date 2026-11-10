@@ -1,0 +1,156 @@
+{
+ "juego": "sq3",
+ "imagenes": [
+  {
+   "pic": 1,
+   "parejas": 6,
+   "tramado_%": 17.8,
+   "celdas_2x1_distintas_%": 13.46,
+   "mezcla_px_bytes": 4904
+  },
+  {
+   "pic": 2,
+   "parejas": 18,
+   "tramado_%": 4.3,
+   "celdas_2x1_distintas_%": 16.01,
+   "mezcla_px_bytes": 7506
+  },
+  {
+   "pic": 27,
+   "parejas": 12,
+   "tramado_%": 1.0,
+   "celdas_2x1_distintas_%": 4.86,
+   "mezcla_px_bytes": 3133
+  },
+  {
+   "pic": 30,
+   "parejas": 16,
+   "tramado_%": 22.3,
+   "celdas_2x1_distintas_%": 12.95,
+   "mezcla_px_bytes": 3349
+  },
+  {
+   "pic": 31,
+   "parejas": 4,
+   "tramado_%": 0.0,
+   "celdas_2x1_distintas_%": 2.21,
+   "mezcla_px_bytes": 1425
+  },
+  {
+   "pic": 62,
+   "parejas": 16,
+   "tramado_%": 18.5,
+   "celdas_2x1_distintas_%": 10.65,
+   "mezcla_px_bytes": 7519
+  },
+  {
+   "pic": 150,
+   "parejas": 3,
+   "tramado_%": 0.0,
+   "celdas_2x1_distintas_%": 5.68,
+   "mezcla_px_bytes": 5872
+  },
+  {
+   "pic": 151,
+   "parejas": 2,
+   "tramado_%": 0.0,
+   "celdas_2x1_distintas_%": 0.55,
+   "mezcla_px_bytes": 43
+  },
+  {
+   "pic": 152,
+   "parejas": 2,
+   "tramado_%": 0.0,
+   "celdas_2x1_distintas_%": 1.08,
+   "mezcla_px_bytes": 91
+  },
+  {
+   "pic": 153,
+   "parejas": 19,
+   "tramado_%": 21.1,
+   "celdas_2x1_distintas_%": 14.87,
+   "mezcla_px_bytes": 8631
+  },
+  {
+   "pic": 154,
+   "parejas": 17,
+   "tramado_%": 8.4,
+   "celdas_2x1_distintas_%": 12.1,
+   "mezcla_px_bytes": 5270
+  },
+  {
+   "pic": 900,
+   "parejas": 1,
+   "tramado_%": 0.0,
+   "celdas_2x1_distintas_%": 0.0,
+   "mezcla_px_bytes": 7
+  },
+  {
+   "pic": 926,
+   "parejas": 3,
+   "tramado_%": 0.0,
+   "celdas_2x1_distintas_%": 4.15,
+   "mezcla_px_bytes": 1859
+  }
+ ],
+ "vistas": {
+  "celdas": 338,
+  "mosaicos": 2372,
+  "filas8": 13845,
+  "filas8_mas2col": 3099,
+  "bytes_160_4bpp": 70703,
+  "mosaicos_max": 74
+ },
+ "fuentes": {
+  "0": {
+   "alto": 8,
+   "ancho_medio": 6.6,
+   "caracteres_en_320": 48.5
+  },
+  "1": {
+   "alto": 12,
+   "ancho_medio": 5.54,
+   "caracteres_en_320": 57.8
+  },
+  "3": {
+   "alto": 9,
+   "ancho_medio": 4.8,
+   "caracteres_en_320": 66.7
+  },
+  "4": {
+   "alto": 9,
+   "ancho_medio": 4.74,
+   "caracteres_en_320": 67.5
+  },
+  "200": {
+   "alto": 12,
+   "ancho_medio": 6.45,
+   "caracteres_en_320": 49.6
+  },
+  "300": {
+   "alto": 12,
+   "ancho_medio": 6.12,
+   "caracteres_en_320": 52.3
+  },
+  "600": {
+   "alto": 8,
+   "ancho_medio": 5.07,
+   "caracteres_en_320": 63.1
+  },
+  "601": {
+   "alto": 8,
+   "ancho_medio": 5.46,
+   "caracteres_en_320": 58.6
+  },
+  "999": {
+   "alto": 8,
+   "ancho_medio": 4.61,
+   "caracteres_en_320": 69.5
+  }
+ },
+ "texto": {
+  "cadenas": 238,
+  "caracteres": 4714,
+  "longitud_media": 19.8
+ }
+}

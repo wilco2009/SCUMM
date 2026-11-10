@@ -1,0 +1,20 @@
+  -> sala 0 en el ciclo 1 (0 s)
+  -> sala 777 en el ciclo 2 (0 s)
+  -> sala 13 en el ciclo 53 (0 s)
+  -> sala 12 en el ciclo 63 (0 s)
+  -> sala 14 en el ciclo 303 (1 s)
+  -> sala 15 en el ciclo 553 (1 s)
+  -> sala 16 en el ciclo 803 (2 s)
+  -> sala 14 en el ciclo 830 (2 s)
+  -> sala 17 en el ciclo 1053 (2 s)
+  -> sala 18 en el ciclo 1303 (3 s)
+sq3t_12: 2050 ciclos, 913990 bytecodes, 4 s, heap pico 46096, hunk pico 194025, pila 2148, error None
+  sala   0:     1 ciclos (0 modales) bc media  1183 p90  1183 max   1183 | Z80 media  296362 p90  296362 | cast 0.0 | heap 34726 (cod 20710 dat 13718) | wait None
+  sala 777:    51 ciclos (0 modales) bc media   431 p90   424 max    733 | Z80 media  124204 p90  121953 | cast 1.0 | heap 35234 (cod 20916 dat 13926) | wait None
+  sala  13:    10 ciclos (0 modales) bc media   781 p90  1442 max   1442 | Z80 media  232043 p90  476457 | cast 2.7 | heap 43182 (cod 27308 dat 15430) | wait None
+  sala  12:   240 ciclos (0 modales) bc media   430 p90   492 max   1184 | Z80 media  116949 p90  142403 | cast 1.0 | heap 41254 (cod 25508 dat 15268) | wait None
+  sala  14:   473 ciclos (0 modales) bc media   373 p90   402 max   1803 | Z80 media  103882 p90  115892 | cast 3.4 | heap 46066 (cod 29006 dat 16542) | wait None
+  sala  15:   250 ciclos (1 modales) bc media   571 p90   664 max   2057 | Z80 media  145098 p90  180179 | cast 2.3 | heap 44660 (cod 26738 dat 17150) | wait None
+  sala  16:    27 ciclos (0 modales) bc media   344 p90   328 max    955 | Z80 media   85963 p90   80835 | cast 0.0 | heap 40236 (cod 24260 dat 15508) | wait None
+  sala  17:   250 ciclos (0 modales) bc media   341 p90   319 max   1624 | Z80 media   89474 p90   84811 | cast 0.0 | heap 43834 (cod 26394 dat 16886) | wait None
+  sala  18:   748 ciclos (0 modales) bc media   481 p90   456 max   2753 | Z80 media  145778 p90  140101 | cast 6.0 | heap 45000 (cod 27030 dat 17370) | wait None

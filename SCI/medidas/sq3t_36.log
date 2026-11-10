@@ -1,0 +1,7 @@
+  -> sala 0 en el ciclo 1 (0 s)
+  -> sala 777 en el ciclo 2 (0 s)
+  -> sala 50 en el ciclo 53 (0 s)
+sq3t_36: 203 ciclos, 10294663 bytecodes, 69 s, heap pico 44742, hunk pico 84411, pila 2206, error bucle sin ciclo de juego (3 M de bytecodes sin Animate) en Game::play > SQ3::doit > script255/export0 > Dialog::doit kernel {'FirstNode': 17081, 'NextNode': 57746, 'NodeValue': 57746, 'IsObject': 22776, 'DisposeClone': 73177, 'OnControl': 2, 'Clone': 68305, 'GetEvent': 60982, 'GameIsRestarting': 1, 'Wait': 1, 'HaveMouse': 814, 'Random': 1}
+  sala   0:     1 ciclos (0 modales) bc media  1183 p90  1183 max   1183 | Z80 media  296362 p90  296362 | cast 0.0 | heap 34726 (cod 20710 dat 13718) | wait None
+  sala 777:    51 ciclos (0 modales) bc media   431 p90   424 max    733 | Z80 media  124204 p90  121953 | cast 1.0 | heap 35234 (cod 20916 dat 13926) | wait None
+  sala  50:   151 ciclos (2 modales) bc media  1351 p90  1655 max   2293 | Z80 media  361023 p90  446298 | cast 3.0 | heap 44494 (cod 28650 dat 15206) | wait None

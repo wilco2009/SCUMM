@@ -1,0 +1,115 @@
+{
+ "juego": "lsl3",
+ "imagenes": [
+  {
+   "pic": 99,
+   "parejas": 1,
+   "tramado_%": 0.0,
+   "celdas_2x1_distintas_%": 0.0,
+   "mezcla_px_bytes": 92
+  },
+  {
+   "pic": 120,
+   "parejas": 16,
+   "tramado_%": 5.9,
+   "celdas_2x1_distintas_%": 4.93,
+   "mezcla_px_bytes": 1856
+  },
+  {
+   "pic": 130,
+   "parejas": 14,
+   "tramado_%": 42.0,
+   "celdas_2x1_distintas_%": 10.86,
+   "mezcla_px_bytes": 4605
+  },
+  {
+   "pic": 200,
+   "parejas": 19,
+   "tramado_%": 37.5,
+   "celdas_2x1_distintas_%": 18.51,
+   "mezcla_px_bytes": 8136
+  },
+  {
+   "pic": 260,
+   "parejas": 20,
+   "tramado_%": 52.6,
+   "celdas_2x1_distintas_%": 9.46,
+   "mezcla_px_bytes": 4489
+  },
+  {
+   "pic": 266,
+   "parejas": 23,
+   "tramado_%": 9.0,
+   "celdas_2x1_distintas_%": 7.36,
+   "mezcla_px_bytes": 4999
+  },
+  {
+   "pic": 395,
+   "parejas": 26,
+   "tramado_%": 64.8,
+   "celdas_2x1_distintas_%": 17.39,
+   "mezcla_px_bytes": 3633
+  },
+  {
+   "pic": 416,
+   "parejas": 22,
+   "tramado_%": 65.4,
+   "celdas_2x1_distintas_%": 21.2,
+   "mezcla_px_bytes": 6791
+  },
+  {
+   "pic": 450,
+   "parejas": 8,
+   "tramado_%": 15.1,
+   "celdas_2x1_distintas_%": 9.55,
+   "mezcla_px_bytes": 3271
+  },
+  {
+   "pic": 530,
+   "parejas": 15,
+   "tramado_%": 27.0,
+   "celdas_2x1_distintas_%": 21.98,
+   "mezcla_px_bytes": 8074
+  }
+ ],
+ "vistas": {
+  "celdas": 652,
+  "mosaicos": 4526,
+  "filas8": 29493,
+  "filas8_mas2col": 6826,
+  "bytes_160_4bpp": 137325,
+  "mosaicos_max": 53
+ },
+ "fuentes": {
+  "0": {
+   "alto": 8,
+   "ancho_medio": 6.37,
+   "caracteres_en_320": 50.2
+  },
+  "1": {
+   "alto": 12,
+   "ancho_medio": 5.32,
+   "caracteres_en_320": 60.1
+  },
+  "4": {
+   "alto": 9,
+   "ancho_medio": 4.64,
+   "caracteres_en_320": 69.0
+  },
+  "9": {
+   "alto": 16,
+   "ancho_medio": 9.07,
+   "caracteres_en_320": 35.3
+  },
+  "999": {
+   "alto": 8,
+   "ancho_medio": 4.51,
+   "caracteres_en_320": 71.0
+  }
+ },
+ "texto": {
+  "cadenas": 861,
+  "caracteres": 37858,
+  "longitud_media": 44.0
+ }
+}

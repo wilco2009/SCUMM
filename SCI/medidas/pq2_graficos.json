@@ -1,0 +1,115 @@
+{
+ "juego": "pq2",
+ "imagenes": [
+  {
+   "pic": 0,
+   "parejas": 3,
+   "tramado_%": 0.0,
+   "celdas_2x1_distintas_%": 0.0,
+   "mezcla_px_bytes": 91
+  },
+  {
+   "pic": 4,
+   "parejas": 19,
+   "tramado_%": 1.1,
+   "celdas_2x1_distintas_%": 7.17,
+   "mezcla_px_bytes": 4410
+  },
+  {
+   "pic": 25,
+   "parejas": 18,
+   "tramado_%": 36.3,
+   "celdas_2x1_distintas_%": 15.45,
+   "mezcla_px_bytes": 5216
+  },
+  {
+   "pic": 31,
+   "parejas": 21,
+   "tramado_%": 31.9,
+   "celdas_2x1_distintas_%": 11.69,
+   "mezcla_px_bytes": 4406
+  },
+  {
+   "pic": 46,
+   "parejas": 10,
+   "tramado_%": 77.8,
+   "celdas_2x1_distintas_%": 1.12,
+   "mezcla_px_bytes": 441
+  },
+  {
+   "pic": 47,
+   "parejas": 12,
+   "tramado_%": 1.5,
+   "celdas_2x1_distintas_%": 1.35,
+   "mezcla_px_bytes": 1132
+  },
+  {
+   "pic": 48,
+   "parejas": 8,
+   "tramado_%": 58.6,
+   "celdas_2x1_distintas_%": 0.6,
+   "mezcla_px_bytes": 383
+  },
+  {
+   "pic": 49,
+   "parejas": 1,
+   "tramado_%": 0.0,
+   "celdas_2x1_distintas_%": 0.0,
+   "mezcla_px_bytes": 7
+  },
+  {
+   "pic": 60,
+   "parejas": 16,
+   "tramado_%": 6.0,
+   "celdas_2x1_distintas_%": 17.66,
+   "mezcla_px_bytes": 6900
+  },
+  {
+   "pic": 885,
+   "parejas": 9,
+   "tramado_%": 12.9,
+   "celdas_2x1_distintas_%": 2.02,
+   "mezcla_px_bytes": 1245
+  }
+ ],
+ "vistas": {
+  "celdas": 657,
+  "mosaicos": 5680,
+  "filas8": 36581,
+  "filas8_mas2col": 10499,
+  "bytes_160_4bpp": 182928,
+  "mosaicos_max": 78
+ },
+ "fuentes": {
+  "0": {
+   "alto": 8,
+   "ancho_medio": 6.52,
+   "caracteres_en_320": 49.1
+  },
+  "1": {
+   "alto": 12,
+   "ancho_medio": 5.48,
+   "caracteres_en_320": 58.4
+  },
+  "4": {
+   "alto": 9,
+   "ancho_medio": 4.73,
+   "caracteres_en_320": 67.7
+  },
+  "7": {
+   "alto": 23,
+   "ancho_medio": 11.46,
+   "caracteres_en_320": 27.9
+  },
+  "999": {
+   "alto": 8,
+   "ancho_medio": 4.6,
+   "caracteres_en_320": 69.6
+  }
+ },
+ "texto": {
+  "cadenas": 145,
+  "caracteres": 2607,
+  "longitud_media": 18.0
+ }
+}

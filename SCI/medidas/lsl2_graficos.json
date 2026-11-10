@@ -1,0 +1,89 @@
+{
+ "juego": "lsl2",
+ "imagenes": [
+  {
+   "pic": 23,
+   "parejas": 18,
+   "tramado_%": 27.2,
+   "celdas_2x1_distintas_%": 17.58,
+   "mezcla_px_bytes": 5708
+  },
+  {
+   "pic": 90,
+   "parejas": 4,
+   "tramado_%": 14.7,
+   "celdas_2x1_distintas_%": 0.01,
+   "mezcla_px_bytes": 210
+  },
+  {
+   "pic": 91,
+   "parejas": 4,
+   "tramado_%": 27.9,
+   "celdas_2x1_distintas_%": 0.0,
+   "mezcla_px_bytes": 251
+  },
+  {
+   "pic": 92,
+   "parejas": 16,
+   "tramado_%": 22.0,
+   "celdas_2x1_distintas_%": 4.03,
+   "mezcla_px_bytes": 4225
+  },
+  {
+   "pic": 93,
+   "parejas": 13,
+   "tramado_%": 10.4,
+   "celdas_2x1_distintas_%": 6.87,
+   "mezcla_px_bytes": 3314
+  },
+  {
+   "pic": 95,
+   "parejas": 17,
+   "tramado_%": 21.1,
+   "celdas_2x1_distintas_%": 18.2,
+   "mezcla_px_bytes": 6435
+  },
+  {
+   "pic": 96,
+   "parejas": 15,
+   "tramado_%": 16.2,
+   "celdas_2x1_distintas_%": 10.88,
+   "mezcla_px_bytes": 6320
+  }
+ ],
+ "vistas": {
+  "celdas": 365,
+  "mosaicos": 2324,
+  "filas8": 14866,
+  "filas8_mas2col": 3908,
+  "bytes_160_4bpp": 59958,
+  "mosaicos_max": 65
+ },
+ "fuentes": {
+  "0": {
+   "alto": 8,
+   "ancho_medio": 6.4,
+   "caracteres_en_320": 50.0
+  },
+  "1": {
+   "alto": 12,
+   "ancho_medio": 5.36,
+   "caracteres_en_320": 59.7
+  },
+  "4": {
+   "alto": 9,
+   "ancho_medio": 4.69,
+   "caracteres_en_320": 68.2
+  },
+  "999": {
+   "alto": 8,
+   "ancho_medio": 4.55,
+   "caracteres_en_320": 70.3
+  }
+ },
+ "texto": {
+  "cadenas": 189,
+  "caracteres": 5532,
+  "longitud_media": 29.3
+ }
+}

@@ -1,0 +1,105 @@
+{
+ "juego": "camelot",
+ "imagenes": [
+  {
+   "pic": 1,
+   "parejas": 11,
+   "tramado_%": 22.4,
+   "celdas_2x1_distintas_%": 13.04,
+   "mezcla_px_bytes": 4490
+  },
+  {
+   "pic": 2,
+   "parejas": 26,
+   "tramado_%": 37.7,
+   "celdas_2x1_distintas_%": 18.14,
+   "mezcla_px_bytes": 8701
+  },
+  {
+   "pic": 12,
+   "parejas": 17,
+   "tramado_%": 57.3,
+   "celdas_2x1_distintas_%": 19.78,
+   "mezcla_px_bytes": 7675
+  },
+  {
+   "pic": 18,
+   "parejas": 14,
+   "tramado_%": 73.3,
+   "celdas_2x1_distintas_%": 15.25,
+   "mezcla_px_bytes": 5287
+  },
+  {
+   "pic": 55,
+   "parejas": 17,
+   "tramado_%": 91.7,
+   "celdas_2x1_distintas_%": 8.49,
+   "mezcla_px_bytes": 4316
+  },
+  {
+   "pic": 89,
+   "parejas": 11,
+   "tramado_%": 59.3,
+   "celdas_2x1_distintas_%": 10.7,
+   "mezcla_px_bytes": 1761
+  },
+  {
+   "pic": 100,
+   "parejas": 25,
+   "tramado_%": 8.8,
+   "celdas_2x1_distintas_%": 11.0,
+   "mezcla_px_bytes": 5383
+  },
+  {
+   "pic": 101,
+   "parejas": 25,
+   "tramado_%": 41.4,
+   "celdas_2x1_distintas_%": 16.87,
+   "mezcla_px_bytes": 9320
+  },
+  {
+   "pic": 103,
+   "parejas": 18,
+   "tramado_%": 15.7,
+   "celdas_2x1_distintas_%": 14.01,
+   "mezcla_px_bytes": 4744
+  },
+  {
+   "pic": 104,
+   "parejas": 20,
+   "tramado_%": 20.5,
+   "celdas_2x1_distintas_%": 14.9,
+   "mezcla_px_bytes": 5962
+  }
+ ],
+ "vistas": {
+  "celdas": 387,
+  "mosaicos": 5197,
+  "filas8": 33584,
+  "filas8_mas2col": 8500,
+  "bytes_160_4bpp": 166447,
+  "mosaicos_max": 91
+ },
+ "fuentes": {
+  "0": {
+   "alto": 8,
+   "ancho_medio": 6.52,
+   "caracteres_en_320": 49.1
+  },
+  "1": {
+   "alto": 12,
+   "ancho_medio": 5.58,
+   "caracteres_en_320": 57.3
+  },
+  "999": {
+   "alto": 8,
+   "ancho_medio": 4.57,
+   "caracteres_en_320": 69.9
+  }
+ },
+ "texto": {
+  "cadenas": 219,
+  "caracteres": 4068,
+  "longitud_media": 18.6
+ }
+}
