@@ -91,3 +91,6 @@ NNAMES          equ 8
 NM_SIZE         equ 26
 ACTNAME         equ NAMEOV+NNAMES*NM_SIZE ; nombre de cada actor (actorOps 3): pagina del script (0: sin nombre) y direccion de la cadena en el
                                           ; script, que sigue en su pagina; NACTORS x 3
+MS_BUF          equ $8831               ; raton (mouse.asm): lectura del puerto de la FPGA (8 bytes: x, y, botones, rueda, rawx, rawy, seq, estado)
+MS_LX           equ $8839               ; ultima posicion leida (el teclado puede mover el cursor mientras el raton esta quieto)
+MS_LY           equ $883A

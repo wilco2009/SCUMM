@@ -18,6 +18,7 @@
                 jp dk_entry
                 jp hr_ui
                 jp dk_mask
+                jp ms_poll
 
 ov_init:        call sdx_ini
                 ld hl,NAMEOV            ; sin nombres cambiados
@@ -46,6 +47,7 @@ ov_init:        call sdx_ini
                 include "snd.asm"
                 include "dark.asm"
                 include "save.asm"
+                include "mouse.asm"
                 IF $ > $2000
                 defb EL_OVERLAY_NO_CABE_EN_8_KB
                 ENDIF

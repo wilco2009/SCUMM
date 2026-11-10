@@ -12,3 +12,4 @@ OVL_SND_TICK    equ 24
 OVL_DARK        equ 27
 OVL_HRUI        equ 30
 OVL_DKMASK      equ 33
+OVL_MOUSE       equ 36                  ; raton Bluetooth (mouse.asm): A = bit 4 boton izquierdo, bit 5 derecho (0 si no hay raton)

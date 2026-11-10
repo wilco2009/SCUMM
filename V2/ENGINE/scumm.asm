@@ -490,7 +490,13 @@ kr_nsk:         call sc_scan
                 bit 2,a
                 jr nz,kr_nm
                 set 4,c
-kr_nm:          ld hl,(cur_x)           ; H = y, L = x
+kr_nm:          res 5,c                 ; (la T no es un boton)
+                push bc
+                call OVL_MOUSE          ; raton Bluetooth (mouse.asm): mueve cur_x/cur_y; A = botones en los bits 4 (izquierdo) y 5 (derecho); 0 sin raton
+                pop bc
+                or c
+                ld c,a
+                ld hl,(cur_x)           ; H = y, L = x
                 bit 0,c                 ; O: izquierda
                 jr z,kr_p
                 ld a,l
@@ -539,10 +545,23 @@ kr_set:         ld (cur_x),hl
                 ld l,a
                 ld h,0
                 ld (VAR_VIRT_MOUSE_Y),hl
-                ld a,(k_prev)           ; clic: ESPACIO recien pulsado
+                ld a,(k_prev)           ; clic: ESPACIO (o el boton izquierdo) recien pulsado
                 cpl
                 and c
-                bit 4,a
+                ld b,a
+                bit 5,b                 ; boton derecho en la escena: cancela la frase y camina
+                jr z,kr_lc
+                ld a,(cur_y)
+                cp 128
+                jr nc,kr_end
+                ld a,(UI_CURSOR)
+                or a
+                jr z,kr_end
+                push bc
+                call reset_sentence
+                pop bc
+                jr kr_scene
+kr_lc:          bit 4,b
                 jr z,kr_end
                 ld a,(cur_y)
                 cp 128
