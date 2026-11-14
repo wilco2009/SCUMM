@@ -47,12 +47,15 @@ OVB_HANDLERS = ['startSound', 'startMusic', 'stopSound', 'stopMusic', 'isSoundRu
                 'roomOps', 'resourceRoutines', 'lights', 'systemOps', 'saveLoadVars', 'saveLoadGame',
                 # fase 4b-2 (ENGINE/ovb4c.asm): mensajes
                 'print', 'printEgo']
-OVB = [n for n in OVB_HANDLERS if n in vmmodel3.CORE_OPS]
+# OVC_HANDLERS: los del overlay C (ENGINE/ovc1.asm, etiqueta b_<nombre>, despacho ovc_lo/ovc_hi); salieron de B cuando se lleno (fase 4b-2)
+OVC_HANDLERS = ['roomOps', 'resourceRoutines', 'lights', 'systemOps', 'saveLoadGame']
+OVC = [n for n in OVC_HANDLERS if n in vmmodel3.CORE_OPS]
+OVB = [n for n in OVB_HANDLERS if n in vmmodel3.CORE_OPS and n not in OVC]
 # los del nucleo que no necesitan manejador propio: salen al anfitrion con la lectura generica y el modelo los trata igual (H oo [args])
 HOST_CORE = {'oldRoomEffect', 'drawBox'}
 # los de B que empiezan con `call decode` (leen sus operandos con la especificacion): conservan su entrada en spec_lo/spec_hi
-OVB_DECODE = {'lights', 'cursorCommand', 'roomOps'}
-NATIVE = {name: 'h3_ovb' if name in OVB else 'h3_' + name for name in vmmodel3.CORE_OPS if name not in HOST_CORE}
+OVB_DECODE = {'lights', 'cursorCommand', 'roomOps'}      # (los de decode: tambien los de C)
+NATIVE = {name: 'h3_ovb' if name in OVB else 'h3_ovc' if name in OVC else 'h3_' + name for name in vmmodel3.CORE_OPS if name not in HOST_CORE}
 SPEC_HANDLERS = {}
 
 
@@ -137,6 +140,19 @@ def write_vars():
         f.write('\n'.join(out) + '\n')
 
 
+def write_ovctab():
+    """ovctab.inc: ovc_lo / ovc_hi (alineadas a 256, dentro del overlay C): por opcode, la direccion de su manejador b_<nombre>."""
+    out = ['; GENERADO por SCUMM/V3/TOOLS/gen_vmtables3.py (OVC_HANDLERS): no editar a mano', '                defs (256 - ($ & 255)) & 255', 'ovc_lo:']
+    lab = ['b_' + DIS.NAMES[op] if DIS.NAMES[op] in OVC else '0' for op in range(256)]
+    for op in range(256):
+        out.append('        defb %s & 255   ; %02X %s' % (lab[op], op, DIS.NAMES[op]))
+    out.append('ovc_hi:')
+    for op in range(256):
+        out.append('        defb %s / 256' % lab[op])
+    with open(os.path.join(HERE, '..', 'ENGINE', 'ovctab.inc'), 'w') as f:
+        f.write(chr(10).join(out) + chr(10))
+
+
 def write_ovbtab():
     """ovbtab.inc: ovb_lo / ovb_hi (alineadas a 256, dentro del overlay B): por opcode, la direccion de su manejador b_<nombre>."""
     out = ['; GENERADO por SCUMM/V3/TOOLS/gen_vmtables3.py (OVB_HANDLERS): no editar a mano', '                defs (256 - ($ & 255)) & 255',
@@ -186,6 +202,7 @@ def main():
         f.write('\n'.join(out) + '\n')
     write_vars()
     write_ovbtab()
+    write_ovctab()
     hs = sorted({e[2] for e in entries})
     print('%d opcodes, %d manejadores distintos (%d nativos), %d especificaciones' % (
         256, len(hs), len([h for h in hs if h.startswith('h3_')]), em.n))

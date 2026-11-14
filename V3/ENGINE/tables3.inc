@@ -15,7 +15,7 @@ disp_lo:
         defb h3_ovb & 255   ; 09 faceActor
         defb h3_startScript & 255   ; 0A startScript
         defb h_host_r & 255   ; 0B getVerbEntrypoint
-        defb h3_ovb & 255   ; 0C resourceRoutines
+        defb h3_ovc & 255   ; 0C resourceRoutines
         defb h_host & 255   ; 0D walkActorToActor
         defb h3_ovb & 255   ; 0E putActorAtObject
         defb h3_ovb & 255   ; 0F ifState
@@ -37,7 +37,7 @@ disp_lo:
         defb h_host_j & 255   ; 1F isActorInBox
         defb h3_ovb & 255   ; 20 stopMusic
         defb h3_ovb & 255   ; 21 putActor
-        defb h3_ovb & 255   ; 22 saveLoadGame
+        defb h3_ovc & 255   ; 22 saveLoadGame
         defb h3_ovb & 255   ; 23 getActorY
         defb h_host & 255   ; 24 loadRoomWithEgo
         defb h_host & 255   ; 25 pickupObject
@@ -54,7 +54,7 @@ disp_lo:
         defb h_host & 255   ; 30 setBoxFlags
         defb h3_ovb & 255   ; 31 getInventoryCount
         defb h3_ovb & 255   ; 32 setCameraAt
-        defb h3_ovb & 255   ; 33 roomOps
+        defb h3_ovc & 255   ; 33 roomOps
         defb h3_ovb & 255   ; 34 getDist
         defb h_host_r & 255   ; 35 findObject
         defb h_host & 255   ; 36 walkActorToObject
@@ -115,10 +115,10 @@ disp_lo:
         defb h3_ovb & 255   ; 6D putActorInRoom
         defb h3_stopObjectScript & 255   ; 6E stopObjectScript
         defb h3_ovb & 255   ; 6F ifNotState
-        defb h3_ovb & 255   ; 70 lights
+        defb h3_ovc & 255   ; 70 lights
         defb h3_ovb & 255   ; 71 getActorCostume
         defb h_host & 255   ; 72 loadRoom
-        defb h3_ovb & 255   ; 73 roomOps
+        defb h3_ovc & 255   ; 73 roomOps
         defb h3_ovb & 255   ; 74 getDist
         defb h_host_r & 255   ; 75 findObject
         defb h_host & 255   ; 76 walkActorToObject
@@ -143,7 +143,7 @@ disp_lo:
         defb h3_ovb & 255   ; 89 faceActor
         defb h3_startScript & 255   ; 8A startScript
         defb h_host_r & 255   ; 8B getVerbEntrypoint
-        defb h3_ovb & 255   ; 8C resourceRoutines
+        defb h3_ovc & 255   ; 8C resourceRoutines
         defb h_host & 255   ; 8D walkActorToActor
         defb h3_ovb & 255   ; 8E putActorAtObject
         defb h3_ovb & 255   ; 8F ifState
@@ -155,7 +155,7 @@ disp_lo:
         defb h3_ovb & 255   ; 95 actorFromPos
         defb h3_getRandomNr & 255   ; 96 getRandomNr
         defb h3_and & 255   ; 97 and
-        defb h3_ovb & 255   ; 98 systemOps
+        defb h3_ovc & 255   ; 98 systemOps
         defb h_host & 255   ; 99 doSentence
         defb h3_move & 255   ; 9A move
         defb h3_multiply & 255   ; 9B multiply
@@ -165,7 +165,7 @@ disp_lo:
         defb h_host_j & 255   ; 9F isActorInBox
         defb h3_stopObjectCode & 255   ; A0 stopObjectCode
         defb h3_ovb & 255   ; A1 putActor
-        defb h3_ovb & 255   ; A2 saveLoadGame
+        defb h3_ovc & 255   ; A2 saveLoadGame
         defb h3_ovb & 255   ; A3 getActorY
         defb h_host & 255   ; A4 loadRoomWithEgo
         defb h_host & 255   ; A5 pickupObject
@@ -182,7 +182,7 @@ disp_lo:
         defb h_host & 255   ; B0 setBoxFlags
         defb h3_ovb & 255   ; B1 getInventoryCount
         defb h3_ovb & 255   ; B2 setCameraAt
-        defb h3_ovb & 255   ; B3 roomOps
+        defb h3_ovc & 255   ; B3 roomOps
         defb h3_ovb & 255   ; B4 getDist
         defb h_host_r & 255   ; B5 findObject
         defb h_host & 255   ; B6 walkActorToObject
@@ -243,10 +243,10 @@ disp_lo:
         defb h3_ovb & 255   ; ED putActorInRoom
         defb h3_stopObjectScript & 255   ; EE stopObjectScript
         defb h3_ovb & 255   ; EF ifNotState
-        defb h3_ovb & 255   ; F0 lights
+        defb h3_ovc & 255   ; F0 lights
         defb h3_ovb & 255   ; F1 getActorCostume
         defb h_host & 255   ; F2 loadRoom
-        defb h3_ovb & 255   ; F3 roomOps
+        defb h3_ovc & 255   ; F3 roomOps
         defb h3_ovb & 255   ; F4 getDist
         defb h_host_r & 255   ; F5 findObject
         defb h_host & 255   ; F6 walkActorToObject
@@ -272,7 +272,7 @@ disp_hi:
         defb h3_ovb / 256
         defb h3_startScript / 256
         defb h_host_r / 256
-        defb h3_ovb / 256
+        defb h3_ovc / 256
         defb h_host / 256
         defb h3_ovb / 256
         defb h3_ovb / 256
@@ -294,7 +294,7 @@ disp_hi:
         defb h_host_j / 256
         defb h3_ovb / 256
         defb h3_ovb / 256
-        defb h3_ovb / 256
+        defb h3_ovc / 256
         defb h3_ovb / 256
         defb h_host / 256
         defb h_host / 256
@@ -311,7 +311,7 @@ disp_hi:
         defb h_host / 256
         defb h3_ovb / 256
         defb h3_ovb / 256
-        defb h3_ovb / 256
+        defb h3_ovc / 256
         defb h3_ovb / 256
         defb h_host_r / 256
         defb h_host / 256
@@ -372,10 +372,10 @@ disp_hi:
         defb h3_ovb / 256
         defb h3_stopObjectScript / 256
         defb h3_ovb / 256
-        defb h3_ovb / 256
+        defb h3_ovc / 256
         defb h3_ovb / 256
         defb h_host / 256
-        defb h3_ovb / 256
+        defb h3_ovc / 256
         defb h3_ovb / 256
         defb h_host_r / 256
         defb h_host / 256
@@ -400,7 +400,7 @@ disp_hi:
         defb h3_ovb / 256
         defb h3_startScript / 256
         defb h_host_r / 256
-        defb h3_ovb / 256
+        defb h3_ovc / 256
         defb h_host / 256
         defb h3_ovb / 256
         defb h3_ovb / 256
@@ -412,7 +412,7 @@ disp_hi:
         defb h3_ovb / 256
         defb h3_getRandomNr / 256
         defb h3_and / 256
-        defb h3_ovb / 256
+        defb h3_ovc / 256
         defb h_host / 256
         defb h3_move / 256
         defb h3_multiply / 256
@@ -422,7 +422,7 @@ disp_hi:
         defb h_host_j / 256
         defb h3_stopObjectCode / 256
         defb h3_ovb / 256
-        defb h3_ovb / 256
+        defb h3_ovc / 256
         defb h3_ovb / 256
         defb h_host / 256
         defb h_host / 256
@@ -439,7 +439,7 @@ disp_hi:
         defb h_host / 256
         defb h3_ovb / 256
         defb h3_ovb / 256
-        defb h3_ovb / 256
+        defb h3_ovc / 256
         defb h3_ovb / 256
         defb h_host_r / 256
         defb h_host / 256
@@ -500,10 +500,10 @@ disp_hi:
         defb h3_ovb / 256
         defb h3_stopObjectScript / 256
         defb h3_ovb / 256
-        defb h3_ovb / 256
+        defb h3_ovc / 256
         defb h3_ovb / 256
         defb h_host / 256
-        defb h3_ovb / 256
+        defb h3_ovc / 256
         defb h3_ovb / 256
         defb h_host_r / 256
         defb h_host / 256

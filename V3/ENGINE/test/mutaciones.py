@@ -71,10 +71,10 @@ M = [
     ('actorOps elevacion sin redibujar', 'ovb4b.asm', 'k9_ch:          ld (ix+A_ELEV),c\n                ld (ix+A_ELEV+1),b\n                set 0,(ix+A_FLAGS)', 'k9_ch:          ld (ix+A_ELEV),c\n                ld (ix+A_ELEV+1),b\n                set 1,(ix+A_FLAGS)'),
     ('actorOps talk start/stop cruzados', 'ovb4b.asm', '                ld (ix+A_TSTART),c\n                call rd_vb2\n                ld (ix+A_TSTOP),c', '                ld (ix+A_TSTOP),c\n                call rd_vb2\n                ld (ix+A_TSTART),c'),
     ('initActor cambia el ancho', 'ovb4b.asm', '                ld (ix+A_WIDTH),24\n                ld (ix+A_TALKC),15', '                ld (ix+A_WIDTH),25\n                ld (ix+A_TALKC),15'),
-    ('roomOps 1 sin tope superior', 'ovb4b.asm', '                ld hl,(SC+16)\n                ret\nrc_3', '                ld hl,(SC+14)\n                ret\nrc_3'),
-    ('lights no cambia VAR_CURRENT_LIGHTS', 'ovb4b.asm', '                ld hl,(ARGS)\n                ld (VAR_CURRENT_LIGHTS),hl', '                ld hl,(ARGS)\n                ld (VAR_CURRENT_LIGHTS+2),hl'),
-    ('saveLoadGame: 3 por 4', 'ovb4b.asm', '                ld l,3\n                jr z,sg_ok', '                ld l,4\n                jr z,sg_ok'),
-    ('resourceRoutines: el 17 lee operando', 'ovb4b.asm', '                cp 17\n                jr z,rr_nr', '                cp 18\n                jr z,rr_nr'),
+    ('roomOps 1 sin tope superior', 'ovc1.asm', '                ld hl,(SC+16)\n                ret\nrc_3', '                ld hl,(SC+14)\n                ret\nrc_3'),
+    ('lights no cambia VAR_CURRENT_LIGHTS', 'ovc1.asm', '                ld hl,(ARGS)\n                ld (VAR_CURRENT_LIGHTS),hl', '                ld hl,(ARGS)\n                ld (VAR_CURRENT_LIGHTS+2),hl'),
+    ('saveLoadGame: 3 por 4', 'ovc1.asm', '                ld l,3\n                jr z,sg_ok', '                ld l,4\n                jr z,sg_ok'),
+    ('resourceRoutines: el 17 lee operando', 'ovc1.asm', '                cp 17\n                jr z,rr_nr', '                cp 18\n                jr z,rr_nr'),
     # ---- fase 4b-2 (ovb4c.asm y talk_frame de vm_core.asm): mensajes
     ('displayDialog: talk_delay no usa VAR_CHARINC', 'ovb4c.asm', '                ld de,(VAR_CHARINC)\n                add hl,de\n                ld (TALKDLY),hl',
      '                ld de,4\n                add hl,de\n                ld (TALKDLY),hl'),
@@ -121,12 +121,13 @@ def main():
                 fh.write((txt.replace(old, new, 1) if fn == f else txt).encode('utf-8'))
         r = run(['pasmo', 'vm.asm', 'vm.bin', 'vm.sym'], MUT)
         r2 = run(['pasmo', 'ovlb.asm', 'ovlb.bin', 'ovlb.sym'], MUT) if not r.returncode else r
-        if r.returncode or r2.returncode:
-            print('%-45s NO ENSAMBLA: %s' % (name, (r.stderr + r2.stderr).strip().splitlines()[-1:]))
+        r3 = run(['pasmo', 'ovlc.asm', 'ovlc.bin', 'ovlc.sym'], MUT) if not r2.returncode else r2
+        if r.returncode or r2.returncode or r3.returncode:
+            print('%-45s NO ENSAMBLA: %s' % (name, (r.stderr + r2.stderr + r3.stderr).strip().splitlines()[-1:]))
             missed.append(name + ' (no ensambla)')
             continue
         run([os.path.join(B, 'test_vm.exe'), os.path.join(MUT, 'vm.bin'), os.path.join(MUT, 'vm.sym'), os.path.join(MUT, 'ovlb.bin'),
-             os.path.join(B, 'DATA.BIN'), os.path.join(MUT, 'scenarios.txt'), os.path.join(MUT, 'actual.txt')])
+             os.path.join(B, 'DATA.BIN'), os.path.join(MUT, 'scenarios.txt'), os.path.join(MUT, 'actual.txt'), os.path.join(MUT, 'ovlc.bin')])
         r = run([sys.executable, '-I', 'compare_traces.py', os.path.join(MUT, 'expected.txt'), os.path.join(MUT, 'actual.txt'), '0'])
         n = int(r.stdout.strip().split('\n')[0].split('distintos: ')[1])
         print('%-45s %5d escenarios distintos' % (name, n))

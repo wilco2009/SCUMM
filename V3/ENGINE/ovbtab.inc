@@ -13,7 +13,7 @@ ovb_lo:
         defb b_faceActor & 255   ; 09 faceActor
         defb 0 & 255   ; 0A startScript
         defb 0 & 255   ; 0B getVerbEntrypoint
-        defb b_resourceRoutines & 255   ; 0C resourceRoutines
+        defb 0 & 255   ; 0C resourceRoutines
         defb 0 & 255   ; 0D walkActorToActor
         defb b_putActorAtObject & 255   ; 0E putActorAtObject
         defb b_ifState & 255   ; 0F ifState
@@ -35,7 +35,7 @@ ovb_lo:
         defb 0 & 255   ; 1F isActorInBox
         defb b_stopMusic & 255   ; 20 stopMusic
         defb b_putActor & 255   ; 21 putActor
-        defb b_saveLoadGame & 255   ; 22 saveLoadGame
+        defb 0 & 255   ; 22 saveLoadGame
         defb b_getActorY & 255   ; 23 getActorY
         defb 0 & 255   ; 24 loadRoomWithEgo
         defb 0 & 255   ; 25 pickupObject
@@ -52,7 +52,7 @@ ovb_lo:
         defb 0 & 255   ; 30 setBoxFlags
         defb b_getInventoryCount & 255   ; 31 getInventoryCount
         defb b_setCameraAt & 255   ; 32 setCameraAt
-        defb b_roomOps & 255   ; 33 roomOps
+        defb 0 & 255   ; 33 roomOps
         defb b_getDist & 255   ; 34 getDist
         defb 0 & 255   ; 35 findObject
         defb 0 & 255   ; 36 walkActorToObject
@@ -113,10 +113,10 @@ ovb_lo:
         defb b_putActorInRoom & 255   ; 6D putActorInRoom
         defb 0 & 255   ; 6E stopObjectScript
         defb b_ifNotState & 255   ; 6F ifNotState
-        defb b_lights & 255   ; 70 lights
+        defb 0 & 255   ; 70 lights
         defb b_getActorCostume & 255   ; 71 getActorCostume
         defb 0 & 255   ; 72 loadRoom
-        defb b_roomOps & 255   ; 73 roomOps
+        defb 0 & 255   ; 73 roomOps
         defb b_getDist & 255   ; 74 getDist
         defb 0 & 255   ; 75 findObject
         defb 0 & 255   ; 76 walkActorToObject
@@ -141,7 +141,7 @@ ovb_lo:
         defb b_faceActor & 255   ; 89 faceActor
         defb 0 & 255   ; 8A startScript
         defb 0 & 255   ; 8B getVerbEntrypoint
-        defb b_resourceRoutines & 255   ; 8C resourceRoutines
+        defb 0 & 255   ; 8C resourceRoutines
         defb 0 & 255   ; 8D walkActorToActor
         defb b_putActorAtObject & 255   ; 8E putActorAtObject
         defb b_ifState & 255   ; 8F ifState
@@ -153,7 +153,7 @@ ovb_lo:
         defb b_actorFromPos & 255   ; 95 actorFromPos
         defb 0 & 255   ; 96 getRandomNr
         defb 0 & 255   ; 97 and
-        defb b_systemOps & 255   ; 98 systemOps
+        defb 0 & 255   ; 98 systemOps
         defb 0 & 255   ; 99 doSentence
         defb 0 & 255   ; 9A move
         defb 0 & 255   ; 9B multiply
@@ -163,7 +163,7 @@ ovb_lo:
         defb 0 & 255   ; 9F isActorInBox
         defb 0 & 255   ; A0 stopObjectCode
         defb b_putActor & 255   ; A1 putActor
-        defb b_saveLoadGame & 255   ; A2 saveLoadGame
+        defb 0 & 255   ; A2 saveLoadGame
         defb b_getActorY & 255   ; A3 getActorY
         defb 0 & 255   ; A4 loadRoomWithEgo
         defb 0 & 255   ; A5 pickupObject
@@ -180,7 +180,7 @@ ovb_lo:
         defb 0 & 255   ; B0 setBoxFlags
         defb b_getInventoryCount & 255   ; B1 getInventoryCount
         defb b_setCameraAt & 255   ; B2 setCameraAt
-        defb b_roomOps & 255   ; B3 roomOps
+        defb 0 & 255   ; B3 roomOps
         defb b_getDist & 255   ; B4 getDist
         defb 0 & 255   ; B5 findObject
         defb 0 & 255   ; B6 walkActorToObject
@@ -241,10 +241,10 @@ ovb_lo:
         defb b_putActorInRoom & 255   ; ED putActorInRoom
         defb 0 & 255   ; EE stopObjectScript
         defb b_ifNotState & 255   ; EF ifNotState
-        defb b_lights & 255   ; F0 lights
+        defb 0 & 255   ; F0 lights
         defb b_getActorCostume & 255   ; F1 getActorCostume
         defb 0 & 255   ; F2 loadRoom
-        defb b_roomOps & 255   ; F3 roomOps
+        defb 0 & 255   ; F3 roomOps
         defb b_getDist & 255   ; F4 getDist
         defb 0 & 255   ; F5 findObject
         defb 0 & 255   ; F6 walkActorToObject
@@ -270,7 +270,7 @@ ovb_hi:
         defb b_faceActor / 256
         defb 0 / 256
         defb 0 / 256
-        defb b_resourceRoutines / 256
+        defb 0 / 256
         defb 0 / 256
         defb b_putActorAtObject / 256
         defb b_ifState / 256
@@ -292,7 +292,7 @@ ovb_hi:
         defb 0 / 256
         defb b_stopMusic / 256
         defb b_putActor / 256
-        defb b_saveLoadGame / 256
+        defb 0 / 256
         defb b_getActorY / 256
         defb 0 / 256
         defb 0 / 256
@@ -309,7 +309,7 @@ ovb_hi:
         defb 0 / 256
         defb b_getInventoryCount / 256
         defb b_setCameraAt / 256
-        defb b_roomOps / 256
+        defb 0 / 256
         defb b_getDist / 256
         defb 0 / 256
         defb 0 / 256
@@ -370,10 +370,10 @@ ovb_hi:
         defb b_putActorInRoom / 256
         defb 0 / 256
         defb b_ifNotState / 256
-        defb b_lights / 256
+        defb 0 / 256
         defb b_getActorCostume / 256
         defb 0 / 256
-        defb b_roomOps / 256
+        defb 0 / 256
         defb b_getDist / 256
         defb 0 / 256
         defb 0 / 256
@@ -398,7 +398,7 @@ ovb_hi:
         defb b_faceActor / 256
         defb 0 / 256
         defb 0 / 256
-        defb b_resourceRoutines / 256
+        defb 0 / 256
         defb 0 / 256
         defb b_putActorAtObject / 256
         defb b_ifState / 256
@@ -410,7 +410,7 @@ ovb_hi:
         defb b_actorFromPos / 256
         defb 0 / 256
         defb 0 / 256
-        defb b_systemOps / 256
+        defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
@@ -420,7 +420,7 @@ ovb_hi:
         defb 0 / 256
         defb 0 / 256
         defb b_putActor / 256
-        defb b_saveLoadGame / 256
+        defb 0 / 256
         defb b_getActorY / 256
         defb 0 / 256
         defb 0 / 256
@@ -437,7 +437,7 @@ ovb_hi:
         defb 0 / 256
         defb b_getInventoryCount / 256
         defb b_setCameraAt / 256
-        defb b_roomOps / 256
+        defb 0 / 256
         defb b_getDist / 256
         defb 0 / 256
         defb 0 / 256
@@ -498,10 +498,10 @@ ovb_hi:
         defb b_putActorInRoom / 256
         defb 0 / 256
         defb b_ifNotState / 256
-        defb b_lights / 256
+        defb 0 / 256
         defb b_getActorCostume / 256
         defb 0 / 256
-        defb b_roomOps / 256
+        defb 0 / 256
         defb b_getDist / 256
         defb 0 / 256
         defb 0 / 256

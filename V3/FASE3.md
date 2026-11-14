@@ -16,6 +16,7 @@ TS_VM=1 build/test_vm.exe build/vm.bin build/vm.sym build/ovlb.bin build/DATA.BI
 | `ENGINE/vm_core.asm` | Nucleo residente nuevo: entradas, despachador, lectura de operandos de 16 bits, variables (normales, bits, locales, indirectas), ranuras, pila de ranuras, `runScript`, `stopScript`, `freeze`, cutscenes, decodificador generico, anfitrion. Mapa de memoria del bloque 7 |
 | `ENGINE/vm_ops.asm` | Manejadores nativos del nucleo (36 opcodes, `vmmodel3.CORE_OPS`) |
 | `ENGINE/ovb4.asm`, `ovb4b.asm`, `ovb4c.asm` | Manejadores del overlay B de las fases 4a (sonido, objetos, camara, actores), 4b-1 (estados, clases, cadenas, verbos, `actorOps`, sala) y 4b-2 (`print`, `printEgo`, mensajes); se incluyen desde `ovlb.asm` |
+| `ENGINE/ovlc.asm`, `ovc1.asm`, `ovctab.inc` | **Overlay C** (pagina fisica 48; abierto tras la fase 4b-2): `roomOps`, `resourceRoutines`, `lights`, `systemOps` y `saveLoadGame` salieron de B; la fase 5 pone aqui lo suyo. `ovctab.inc` (generada) es su despacho por opcode |
 | `ENGINE/arith32.asm` | Aritmetica de 32 bits (copiada de `geom.asm`: la usa `expression`; la fase 6 la comparte con la geometria) |
 | `ENGINE/ovlb.asm` | Overlay B (D4, pagina 49): de momento `expression`, con pila de 32 bits |
 | `ENGINE/vm.asm` | Montaje de pruebas: codigo desde `$4200`, tablas desde `$8000`, como el programa de la placa |
@@ -213,6 +214,18 @@ Todo en `ENGINE/ovb4c.asm` (overlay B) salvo `talk_frame` y el bufer, que van en
 - **Ranuras de texto:** `print` lee sus subopcodes (0, 1, 2, 4, 6, 7, 15, `$FF`; el resto `E_BADSUB`) sobre `WRK`, copia de los valores por omision de la ranura; la 0 es `actor_talk`, la 1 un
   suceso `E 5 [1, x, y, color, center | overhead * 2, valor]`, la 2 y la 3 no hacen nada. El resumen del modelo (`M=`, y `X=` nuevo con `use_talk_anims`, `msg_count`, la posicion en el bufer,
   `charset_color`, el crc del bufer y el de los valores por omision) lo calcula igual el arnes.
+
+### Overlay C (abierto el 2026-11-14)
+
+B se quedo con 248 B libres tras la 4b-2, asi que se abrio un segundo overlay para lo que viene (fase 5). **Pagina fisica 48** (D4 reservaba 49 y 50; la 48 era la candidata a pagina fria de `OBJCLS`: si
+hace falta, va a la 47). **La fase 9 tiene que quitar tambien la 48 de la cache de paginas** (`DP_OVLIDX`, como la 49).
+- Mecanica: `call_ovc` (residente, copia de `call_ovb` con `OVC_PAGE`) y `h3_ovc` (`ld hl,OVC_OP / jp call_ovc`); `ovlc.asm` tiene un solo punto de entrada (`jp ovc_op` en +0) que reparte por el opcode con
+  `ovc_lo`/`ovc_hi`. `gen_vmtables3.py`: `OVC_HANDLERS` (etiquetas `b_<nombre>` en `ovc1.asm`); los de esa lista dejan de ser de B (`OVB` los excluye) y su entrada en `disp_lo/hi` es `h3_ovc`.
+- **Un overlay no puede llamar a rutinas de otro** (solo uno esta en el bloque 0): lo que C necesite de B va por `call_ovb` con la direccion de B (`ovlb.sym`), o se copia (`ovc1.asm` lleva su `sless`), o sube al
+  residente. Ejecutar un manejador de C desde B (o al reves) si se puede anidar, como `expression`.
+- Salieron de B a C: `roomOps`, `resourceRoutines`, `lights`, `systemOps`, `saveLoadGame` (`saveLoadVars` se queda en B: usa `scan_len` y `str_ptr`). Resultado: **B 7.680 B, con ~680 libres; C 1.024 B (casi todo vacio)**;
+  residente `$4200-$53A8` (+22 B: `call_ovc` y `h3_ovc`; 11.352 B libres).
+- Arnes: `test_vm.exe` admite `ovlc.bin` como 7.o argumento (pagina `OVC_PAGE`); `build_test.sh` y `mutaciones.py` lo ensamblan.
 
 ## Para las fases 4a y 4b
 

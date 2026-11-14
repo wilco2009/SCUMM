@@ -9,6 +9,7 @@ OVLA_PG         equ 0                   ; lo que hay en el bloque 0 fuera del ov
 OVB_EXPR        equ 0                   ; entradas del overlay B (ovlb.asm)
 OVB_OP          equ 3
 OVB_DD          equ 6                   ; displayDialog
+OVC_OP          equ 0                   ; entrada del overlay C (ovlc.asm)
 
                 org $4200
                 include "vm_core.asm"

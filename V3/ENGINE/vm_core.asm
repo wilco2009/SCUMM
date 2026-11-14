@@ -61,6 +61,7 @@ WINDOW          equ $2000       ; ventana de datos: bloque 1, $2000-$37FF (6 KB 
 WINHI           equ $18         ; paginas de 6 KB: un puntero valido tiene (alto - $20) < $18
 BIGHI           equ $10         ; D5: en una pagina de un script grande que no es la ultima, solo empiezan instrucciones en 4 KB
 OVB_PAGE        equ 49          ; overlay B (D4): manejadores con subopcodes, expression, stringOps y la frase
+OVC_PAGE        equ 48          ; overlay C (fase 4b-2: B se llena): sala, recursos y sistema, y lo de la fase 5
 TABPG           equ 15          ; pagina fisica con las tablas frias de DATA.BIN (ROOMDIR, ODIR, OBJROOM, COSTDIR, COSTDIR2)
 HOSTPORT        equ $F1
 MAP_PORT        equ $E7
@@ -967,6 +968,15 @@ call_ovb:       ld a,(OVLCUR)
                 pop af
                 jp map_blk0
 jp_hl:          jp (hl)
+
+; llama a HL en el overlay C (igual que call_ovb: se puede anidar y vuelve a dejar en el bloque 0 lo que hubiera)
+call_ovc:       ld a,(OVLCUR)
+                push af
+                ld a,OVC_PAGE
+                call map_blk0
+                call jp_hl
+                pop af
+                jp map_blk0
 
 ; lee BC bytes de la pagina fria TABPG (desplazamiento HL) en DE, por el bloque 0
 cold_rd:        ld a,(OVLCUR)

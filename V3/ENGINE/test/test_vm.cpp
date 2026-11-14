@@ -57,6 +57,7 @@ static int VARS, OBJST, OBJOWN, OBJCLS, SCRDIR, BIGDIR, SLOTS, LOCALS, CUTDATA, 
 static int ACTORS, NEWNAMES, INVSL, EVARGS, EVVEC, CAMCUR, CAMDEST, CAMMODE, CAMFOL, CAMMOV, HAVEMSG, KEEPTXT, TALKDLY, LASTSND, CURROOM, ASIZE, NACT, NINV, NNAMES;
 static int USERPUT, CURSTATE, MAINTOP, MAINH, STRLEN, STRPOS, STRHEAP, VERBS, VSZ, NVERB, NSTR, ACTNAMES;   // fase 4b-1
 static int USETALK, STRSL, MSGPTR, MSGCNT, MSGEND, CHARCOL, MSGBUF;                                       // fase 4b-2
+static int OVC_PAGE;
 static int NSLOT, NLOCAL, TABPG, OVB_PAGE, COLD_ROOMDIR, COLD_ODIR, COLD_OBJROOM, COLD_COSTDIR, COLD_COSTDIR2;
 static int API_INIT, API_RUN_EXT, API_RUN_OBJECT, API_RUN_SCRIPT, API_FRAME, API_SET_ROOM, API_ABORT;
 static int ES_GO, ES_LOOP;
@@ -367,6 +368,7 @@ int main(int argc, char** argv) {
   STRHEAP = S("STRHEAP"); VERBS = S("VERBS"); VSZ = S("VSZ"); NVERB = S("NVERB"); NSTR = S("NSTR"); ACTNAMES = S("ACTNAMES");
   USETALK = S("USETALK"); STRSL = S("STRSL"); MSGPTR = S("MSGPTR"); MSGCNT = S("MSGCNT"); MSGEND = S("MSGEND"); CHARCOL = S("CHARCOL");
   MSGBUF = S("MSGBUF");
+  OVC_PAGE = S("OVC_PAGE");
   NSLOT = S("NSLOT"); NLOCAL = S("NLOCAL"); TABPG = S("TABPG"); OVB_PAGE = S("OVB_PAGE");
   COLD_ROOMDIR = S("COLD_ROOMDIR"); COLD_ODIR = S("COLD_ODIR"); COLD_OBJROOM = S("COLD_OBJROOM"); COLD_COSTDIR = S("COLD_COSTDIR");
   COLD_COSTDIR2 = S("COLD_COSTDIR2");
@@ -385,6 +387,12 @@ int main(int argc, char** argv) {
   size_t szb = fread(ram[OVB_PAGE], 1, 8192, f); fclose(f);
   printf("vm.bin: %zu bytes en $4200 (codigo hasta $%04X, tablas hasta $%04X); ovlb.bin: %zu bytes en la pagina %d\n", sz,
          S("code_end"), S("tables_end"), szb, OVB_PAGE);
+  if (argc > 7) {                                  // overlay C (opcional)
+    f = fopen(argv[7], "rb");
+    if (!f) { printf("no encuentro %s%c", argv[7], 10); return 2; }
+    size_t szc = fread(ram[OVC_PAGE], 1, 8192, f); fclose(f);
+    printf("ovlc.bin: %zu bytes en la pagina %d%c", szc, OVC_PAGE, 10);
+  }
   if (!load_data(argv[4])) { printf("no puedo leer %s\n", argv[4]); return 2; }
   z80_init(); z80_reset();
 

@@ -518,3 +518,7 @@ h3_expression:  ld hl,OVB_EXPR
 ; ---- manejadores del overlay B repartidos por opcode (ovb_op: fase 4a en adelante)
 h3_ovb:         ld hl,OVB_OP
                 jp call_ovb
+
+; ---- manejadores del overlay C (ovc_op: sala, recursos y sistema)
+h3_ovc:         ld hl,OVC_OP
+                jp call_ovc

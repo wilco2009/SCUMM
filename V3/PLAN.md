@@ -202,7 +202,8 @@ Como se prueba cada manejador nuevo (lo monto la fase 3; `V3/FASE3.md`):
         `python mutaciones.py 1,15 "print|talk_frame"` solo corre las que contengan esas palabras.
       - **T medidos** (`TS_VM=1`): `print` 8.360 T de media y `printEgo` 14.104 (con la conversion y el primer `displayDialog`; v2: 70.000-89.000); `talk_frame` sin mensaje 75 T (133 con `talk_delay`), con mensaje
         esperando 198, y `displayDialog` escribiendo una linea hasta ~4.000.
-      - **ATENCION para la fase 5:** el overlay B queda con 248 B libres (7.944 de 8.192); los manejadores de la fase 5 no caben: hace falta otro overlay (otra pagina fisica) o mover algo.
+      - **Overlay B lleno (248 B libres) -> overlay C abierto el mismo dia** (pagina fisica 48; `ovlc.asm`, `ovc1.asm`, `call_ovc`; detalle en `FASE3.md`, "Overlay C"). Salieron de B a C `roomOps`, `resourceRoutines`, `lights`,
+        `systemOps` y `saveLoadGame`: B 7.680 B (~680 libres), C 1.024 B; la fase 5 pone sus manejadores en C. La fase 9 tiene que quitar la pagina 48 de la cache de paginas.
   - Con la fase 5 (necesitan la sala cargada o la cola de frases): `doSentence`, `startObject`, `getVerbEntrypoint`, `drawObject`, `pickupObject`, `findObject`,
     `isActorInBox`, `loadRoom`, `loadRoomWithEgo`, `pseudoRoom`, `setBoxFlags`, `waitForSentence`. Con la fase 6: `walkActorTo`, `walkActorToActor`, `walkActorToObject`,
     `waitForActor`.
@@ -272,8 +273,8 @@ Como se prueba cada manejador nuevo (lo monto la fase 3; `V3/FASE3.md`):
 | 3 | **Hecha** (2026-11-12): nucleo v3 en el Z80 (`V3/ENGINE`), mapa de memoria, D5, arnes con `DATA.BIN`, modelo en modo nucleo. 1.485/1.485 trazas iguales; residente del nucleo 3.887 B (11.985 libres); despachador 164 T (v2 600-700). Detalle en `V3/FASE3.md`. Sin commit |
 | 4a | **Hecha** (2026-11-13): 27 opcodes mas (sonido, objetos, camara, actores sin caminar) en el overlay B; 1.484/1.484 trazas iguales; residente 11.832 B libres, B 3.328 B. Sin commit |
 | 4b-1 | **Hecha** (2026-11-13): 22 opcodes mas en el nucleo (overlay B). **2.686/2.686 trazas iguales** (1.486 de las salas, locales, objetos y globales + 1.200 sinteticos con `CODE`); mutaciones 41/45 (las 17 nuevas detectadas). Residente `$4200-$51ED`: **11.795 B libres** hasta `$8000`; overlay B **6.656 de 8.192 B** (1.536 libres); hueco de `ODIRBUF` (bloque 4): **187 B** libres; bloque 7: **122 B** libres. Sin commit |
-| 4b-2 | **Hecha** (2026-11-14): `print` y `printEgo` en el nucleo (overlay B, `ovb4c.asm`; `talk_frame` y `MSGBUF` en el residente). **2.687/2.687 trazas iguales** (1.487 de las salas + 1.200 sinteticos); mutaciones 50/54 (las 9 nuevas detectadas). Residente `$4200-$5392`: **11.374 B libres** hasta `$8000` (+421 B, 320 de `MSGBUF`); overlay B **7.944 de 8.192 B (248 libres)**: la fase 5 necesita otro sitio; bloque 7: **60 B** libres; hueco de `ODIRBUF`: 187 B. T: `print` 8.360, `printEgo` 14.104, `talk_frame` 75 T sin mensaje. v2 sin tocar y sin regresiones (Maniac 2.912/2.912, Zak 3.662/3.662). Sin commit |
-| 5 a 10 | Sin empezar. La 5 (salas, objetos y frases) es la siguiente; ver arriba el aviso del overlay B |
+| 4b-2 | **Hecha** (2026-11-14): `print` y `printEgo` en el nucleo (overlay B, `ovb4c.asm`; `talk_frame` y `MSGBUF` en el residente). **2.687/2.687 trazas iguales** (1.487 de las salas + 1.200 sinteticos); mutaciones 50/54 (las 9 nuevas detectadas). Residente `$4200-$5392` (tras abrir el overlay C, `$53A8`: **11.352 B libres** hasta `$8000`; +421 B, 320 de `MSGBUF`); overlay B **7.944 de 8.192 B (248 libres)**, y con el overlay C (`call_ovc`, pagina 48): B 7.680 B y C 1.024 B; bloque 7: **60 B** libres; hueco de `ODIRBUF`: 187 B. T: `print` 8.360, `printEgo` 14.104, `talk_frame` 75 T sin mensaje. v2 sin tocar y sin regresiones (Maniac 2.912/2.912, Zak 3.662/3.662). Sin commit |
+| 5 a 10 | Sin empezar. La 5 (salas, objetos y frases) es la siguiente: sus manejadores van en el overlay C |
 
 ### Pendiente de la fase 1 (lo que el modelo aproxima o no hace)
 
