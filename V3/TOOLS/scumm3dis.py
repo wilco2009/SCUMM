@@ -17,6 +17,7 @@ Uso:
   scumm3dis.py DIR list N                  listado del script global N
   scumm3dis.py DIR check DESCUMM           recorre todos los scripts y compara los limites de instruccion con descumm -3
   scumm3dis.py DIR stats [salida.json]     histograma estatico de opcodes (y subopcodes) en todos los scripts del juego
+  scumm3dis.py DIR spec                    comprueba SPEC (la lectura de operandos como datos) contra el Decoder en todos los scripts
 """
 import json
 import os
@@ -612,6 +613,280 @@ def check(ix, descumm):
     return bad
 
 
+# ---------------------------------------------------------------------------------------- especificacion de operandos (datos)
+# La lectura de operandos de cada opcode como DATOS, para el Z80 (V3/TOOLS/gen_vmtables3.py la convierte en tables3.inc) y para
+# el modelo (vmmodel3.py, modo nucleo: las instrucciones que van al anfitrion se decodifican con run_spec). La orden `spec` la
+# comprueba contra el Decoder de arriba en todos los scripts del juego: mismas longitudes de instruccion.
+#
+# Fichas simples:
+#   R  getResultPos (u16; con 0x2000, otra palabra)       v  getVar
+#   B1 B2 B3  getVarOrDirectByte (bit 0x80, 0x40, 0x20 del opcode en curso)    W1 W2 W3  getVarOrDirectWord
+#   b  byte    w  palabra    J  salto relativo (s16)    L  getWordVararg (u8 opcode + W1, hasta 0xFF)
+#   S  cadena (resStrLen: 0xFF + codigo; salvo 1, 2, 3 y 8, dos bytes mas)
+#   O  byte que pasa a ser el opcode en curso (para las mascaras siguientes), sin argumento     o  igual, y es argumento
+#   Q  si el ultimo valor leido es 0xFE, la instruccion acaba (doSentence)
+#   X  la instruccion acaba aqui (dentro de una lista: print 15, saveLoadVars 4 y 31)
+#   Z  bytes hasta un 0 (pseudoRoom)           N  setVarRange: u8 n y n valores (palabra si el bit 0x80 del opcode, si no byte)
+#   E  lista de expression (solo para la comprobacion: el Z80 y el modelo la hacen a mano)
+# Fichas compuestas (tuplas):
+#   ('SW', mascara, {k: fichas}, por_omision)       un subopcode: byte -> opcode en curso, k = byte & mascara (es argumento)
+#   ('LOOP', fin, mascara, conv, {k: fichas}, por_omision)   lista de subopcodes hasta el byte `fin`; conv = traduccion de actorOps
+#   por_omision: None = subopcode desconocido (E_BADSUB), () = sin operandos
+SUB_BAD = None
+_RES_B = 'R B1'
+_RES_W = 'R W1'
+SPEC = {
+    'stopObjectCode': '', 'breakHere': '', 'endCutscene': '', 'stopMusic': '', 'waitForSentence': '', 'wait': '',
+    'putActor': 'B1 W2 W3', 'walkActorTo': 'B1 W2 W3', 'drawObject': 'W1 W2 W3',
+    'startMusic': 'B1', 'startSound': 'B1', 'stopSound': 'B1', 'waitForActor': 'B1', 'actorFollowCamera': 'B1',
+    'freezeScripts': 'B1', 'stopScript': 'B1', 'loadRoom': 'B1',
+    'getActorRoom': _RES_B, 'getActorElevation': _RES_B, 'getActorMoving': _RES_B, 'getActorFacing': _RES_B,
+    'getActorCostume': _RES_B, 'getActorWidth': _RES_B, 'getActorWalkBox': _RES_B, 'getAnimCounter': _RES_B,
+    'getActorX': _RES_B, 'getActorY': _RES_B, 'getRandomNr': _RES_B, 'isScriptRunning': _RES_B,
+    'getInventoryCount': _RES_B, 'isSoundRunning': _RES_B, 'getStringWidth': _RES_B, 'saveLoadGame': _RES_B,
+    'getObjectOwner': _RES_W, 'move': _RES_W, 'add': _RES_W, 'subtract': _RES_W, 'multiply': _RES_W, 'divide': _RES_W,
+    'and': _RES_W, 'or': _RES_W, 'getClosestObjActor': _RES_W,
+    'actorFromPos': 'R W1 W2', 'getDist': 'R W1 W2', 'getVerbEntrypoint': 'R W1 W2',
+    'findObject': 'R B1 B2', 'findInventory': 'R B1 B2',
+    'increment': 'R', 'decrement': 'R',
+    'isGreaterEqual': 'v W1 J', 'isNotEqual': 'v W1 J', 'isLessEqual': 'v W1 J', 'isLess': 'v W1 J', 'isEqual': 'v W1 J',
+    'isGreater': 'v W1 J', 'equalZero': 'v J', 'notEqualZero': 'v J', 'jumpRelative': 'J',
+    'setState': 'W1 B2', 'setOwnerOf': 'W1 B2', 'ifState': 'W1 B2 J', 'ifNotState': 'W1 B2 J',
+    'faceActor': 'B1 W2', 'putActorAtObject': 'B1 W2', 'walkActorToObject': 'B1 W2',
+    'startScript': 'B1 L', 'chainScript': 'B1 L', 'startObject': 'W1 B2 L', 'cutscene': 'L',
+    'walkActorToActor': 'B1 B2 b', 'animateActor': 'B1 B2', 'putActorInRoom': 'B1 B2', 'isActorInBox': 'B1 B2 J',
+    'panCameraTo': 'W1', 'setCameraAt': 'W1', 'debug': 'W1', 'stopObjectScript': 'W1', 'pickupObject': 'W1',
+    'doSentence': 'B1 Q W2 W3', 'ifClassOfIs': 'W1 L J', 'setClass': 'W1 L', 'loadRoomWithEgo': 'W1 B2 w w',
+    'setVarRange': 'R N', 'delayVariable': 'v', 'delay': 'b b b', 'setBoxFlags': 'B1 b', 'drawBox': 'W1 W2 O W1 W2 B3',
+    'setObjectName': 'W1 S', 'beginOverride': 'b', 'lights': 'B1 b b', 'systemOps': 'b', 'saveRestoreVerbs': 'o B1 B2 B3',
+    'expression': 'R E', 'pseudoRoom': 'b Z',
+}
+_RR = {k: ('B1',) for k in range(64)}
+_RR[17] = ()
+_RR[20] = ('B1', 'W2')
+_RR[35] = _RR[37] = ('B1', 'B2')
+_RR[36] = ('B1', 'B2', 'b')
+SPEC['resourceRoutines'] = [('SW', 0x3F, _RR, SUB_BAD)]
+SPEC['cursorCommand'] = [('SW', 0x1F, {10: 'B1 B2', 11: 'B1 B2 B3', 12: 'B1', 13: 'B1', 14: 'B1 B2'}, ())]
+SPEC['stringOps'] = [('SW', 0x1F, {1: 'B1 S', 2: 'B1 B2', 3: 'B1 B2 B3', 4: 'R B1 B2', 5: 'B1 B2'}, SUB_BAD)]
+SPEC['oldRoomEffect'] = [('SW', 0x1F, {3: 'W1'}, ())]
+_ROOM = {k: () for k in range(1, 7)}
+_ROOM.update({7: 'B1 B2 O B1 B2 O B2', 8: 'B1 B2 B3', 9: 'B1 B2', 10: 'W1', 11: 'W1 W2 W3 O B1 B2', 12: 'W1 W2 W3 O B1 B2',
+              13: 'B1 S', 14: 'B1 S', 15: 'B1 O B1 B2 O B1', 16: 'B1 B2'})
+SPEC['roomOps'] = ['W1', 'W2', ('SW', 0x1F, _ROOM, SUB_BAD)]
+_ACT = {k: 'B1' for k in (0, 1, 3, 4, 6, 12, 14, 16, 19, 22, 23)}
+_ACT.update({k: 'B1 B2' for k in (2, 5, 11, 17)})
+_ACT.update({k: () for k in (8, 10, 18, 20, 21)})
+_ACT.update({7: 'B1 B2 B3', 9: 'W1', 13: 'S'})
+SPEC['actorOps'] = ['B1', ('LOOP', 0xFF, 0x1F, 'actor', _ACT, SUB_BAD)]
+_PARSE = {0: 'W1 W2', 1: 'B1', 2: 'W1', 3: 'W1 W2', 4: (), 6: 'W1', 7: (), 8: 'W1 W2', 15: 'S X'}
+SPEC['print'] = ['B1', ('LOOP', 0xFF, 0x0F, None, _PARSE, SUB_BAD)]
+SPEC['printEgo'] = [('LOOP', 0xFF, 0x0F, None, _PARSE, SUB_BAD)]
+_VERB = {1: 'W1', 2: 'S', 5: 'W1 W2', 20: 'W1', 22: 'W1 B2'}
+_VERB.update({k: 'B1' for k in (3, 4, 16, 18, 23)})
+_VERB.update({k: () for k in (6, 7, 8, 9, 17, 19)})
+SPEC['verbOps'] = ['B1', ('LOOP', 0xFF, 0x1F, None, _VERB, SUB_BAD)]
+SPEC['saveLoadVars'] = ['b', ('LOOP', 0x00, 0x1F, None, {1: 'R R', 2: 'B1 B2', 3: 'S', 4: 'X', 31: 'X'}, ())]
+
+
+def spec_tokens(t):
+    """Fichas de una especificacion (cadena, tupla o lista) como lista: las cadenas se parten por espacios."""
+    if isinstance(t, str):
+        return t.split()
+    out = []
+    for x in t:
+        out += x.split() if isinstance(x, str) else [x]
+    return out
+
+
+class SpecEnd(Exception):
+    """X o Q: la instruccion acaba."""
+
+
+def run_spec(name, rd):
+    """Lee los operandos del opcode `name` con el lector `rd`, que da: byte(), word() (u16), sword(), var() (getVar: el valor),
+    result() (getResultPos: el numero de variable ya resuelto), opcode (atributo: el opcode en curso), string() (bytes en bruto, sin
+    el 0 final), expr() (lista de expression) y bad(k) (subopcode desconocido: lanza). Devuelve (args, resultado, salto): args son
+    los valores en el orden en que se leen (subopcodes incluidos, cadenas como bytes), resultado el numero de variable de la R de
+    arriba (o None) y salto el desplazamiento de la J (o None)."""
+    args, st = [], {'res': None, 'jump': None, 'last': None}
+    top = rd.opcode
+
+    def val(v):
+        st['last'] = v
+        args.append(v)
+
+    def vb(mask):
+        return rd.var() if rd.opcode & mask else rd.byte()
+
+    def vw(mask):
+        return rd.var() if rd.opcode & mask else rd.sword()
+
+    def run(toks, first):
+        for k, t in enumerate(toks):
+            if isinstance(t, tuple):
+                if t[0] == 'SW':
+                    _, mask, table, dflt = t
+                    sub(mask, None, table, dflt)
+                else:
+                    _, end, mask, conv, table, dflt = t
+                    while True:
+                        o = rd.byte()
+                        if o == end:
+                            break
+                        rd.opcode = o
+                        sub(mask, conv, table, dflt, o)
+                continue
+            if t == 'R':
+                r = rd.result()
+                if first and k == 0:
+                    st['res'] = r
+                val(r)
+            elif t == 'v':
+                val(rd.var())
+            elif t[0] == 'B':
+                val(vb({'1': 0x80, '2': 0x40, '3': 0x20}[t[1]]))
+            elif t[0] == 'W':
+                val(vw({'1': 0x80, '2': 0x40, '3': 0x20}[t[1]]))
+            elif t == 'b':
+                val(rd.byte())
+            elif t == 'w':
+                val(rd.word())
+            elif t == 'J':
+                st['jump'] = rd.sword()
+            elif t == 'L':
+                while True:
+                    o = rd.byte()
+                    if o == 0xFF:
+                        break
+                    rd.opcode = o
+                    val(vw(0x80))
+            elif t == 'S':
+                val(rd.string())
+            elif t in ('O', 'o'):
+                o = rd.byte()
+                rd.opcode = o
+                if t == 'o':
+                    val(o)
+            elif t == 'Q':
+                if st['last'] == 0xFE:
+                    raise SpecEnd()
+            elif t == 'X':
+                raise SpecEnd()
+            elif t == 'Z':
+                while True:
+                    c = rd.byte()
+                    if c == 0:
+                        break
+                    val(c)
+            elif t == 'N':
+                n = rd.byte()
+                val(n)
+                for _ in range(n):
+                    val(rd.sword() if top & 0x80 else rd.byte())
+            elif t == 'E':
+                rd.expr()
+            else:
+                raise ValueError(t)
+
+    def sub(mask, conv, table, dflt, o=None):
+        if o is None:
+            o = rd.byte()
+            rd.opcode = o
+        if conv == 'actor':
+            i = (o & 0x1F) - 1
+            if not 0 <= i < len(ACTOROPS_CONVERT):
+                rd.bad(o & 0x1F)
+            o = (o & 0xE0) | ACTOROPS_CONVERT[i]
+            rd.opcode = o
+        k = o & mask
+        val(k)
+        toks = table.get(k, dflt)
+        if toks is None:
+            rd.bad(k)
+        run(spec_tokens(toks), False)
+
+    try:
+        run(spec_tokens(SPEC[name]), True)
+    except SpecEnd:
+        pass
+    rd.opcode = top
+    return args, st['res'], st['jump']
+
+
+class _StaticReader:
+    """Lector de run_spec sobre el Decoder, sin valores de variables (las variables leidas valen None): para comprobar longitudes."""
+
+    def __init__(self, dec, op):
+        self.d, self.opcode = dec, op
+
+    def byte(self):
+        return self.d.byte()
+
+    def word(self):
+        return self.d.word()
+
+    def sword(self):
+        return self.d.sword()
+
+    def var(self):
+        self.d.var()
+        return None
+
+    def result(self):
+        return self.d.result()
+
+    def string(self):
+        s = self.d.p
+        self.d.string()
+        return bytes(self.d.c[s:self.d.p - 1])
+
+    def expr(self):
+        while True:
+            o = self.d.byte()
+            if o == 0xFF:
+                return
+            k = o & 0x1F
+            if k == 1:
+                self.d.vw(o, P1)
+            elif k == 6:
+                op = self.d.byte()
+                run_spec(NAMES[op], _StaticReader(self.d, op))
+            elif k not in (2, 3, 4, 5):
+                raise Bad('expression %d' % k)
+
+    def bad(self, k):
+        raise Bad('subopcode %d' % k)
+
+
+def check_spec(ix):
+    """Recorre todos los scripts: la longitud de cada instruccion con SPEC tiene que ser la del Decoder. Devuelve (instrucciones,
+    distintas, maximo de argumentos, donde)."""
+    n = bad = maxargs = 0
+    worst = None
+    for label, code, starts in all_scripts(ix):
+        try:
+            ins = sweep(code, starts)
+        except Bad:
+            continue
+        for k, (pos, op, name, sb) in enumerate(ins):
+            end = ins[k + 1][0] if k + 1 < len(ins) else len(code)
+            d = Decoder(code, pos + 1)
+            try:
+                args, _, _ = run_spec(name, _StaticReader(d, op))
+            except Bad as e:
+                bad += 1
+                print('%s [%04X] %s: %s' % (label, pos, name, e))
+                continue
+            n += 1
+            if d.p != end:
+                bad += 1
+                print('%s [%04X] %s: SPEC lee %d bytes, el Decoder %d' % (label, pos, name, d.p - pos, end - pos))
+            if len(args) > maxargs:
+                maxargs, worst = len(args), (label, pos, name)
+    return n, bad, maxargs, worst
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__)
@@ -624,6 +899,10 @@ def main():
             print('[%04X] %02X %s %s' % (pos, op, name, ' '.join(sb)))
     elif cmd == 'check':
         return 1 if check(ix, sys.argv[3]) else 0
+    elif cmd == 'spec':
+        n, bad, mx, worst = check_spec(ix)
+        print('instrucciones: %d, distintas: %d; maximo de argumentos: %d (%s)' % (n, bad, mx, worst))
+        return 1 if bad else 0
     elif cmd == 'stats':
         ops, subs, fails, nbytes = stats(ix)
         print('bytes de codigo: %d, opcodes distintos: %d, instrucciones: %d' % (nbytes, len(ops), sum(ops.values())))

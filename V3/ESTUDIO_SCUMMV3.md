@@ -21,7 +21,12 @@ Lo que cambia es el núcleo de la VM y la caminata, y el código ya no cabe en e
   | Bytecodes por fotograma, p99 | 117 | 49 | 40 |
   | Bytecodes, peor fotograma | 607 | 248 | 1.097 |
 
-  - Con 200-500 T por bytecode, el p99 de Indy3 son unos 58.000 T, el 18 % de una vuelta. Indy3 pide `delta` 6: 10 vueltas por segundo, 325.000 T por vuelta a 3,25 MHz.
+  - **Revisado el 2026-11-11 con la medida de la fase 0 del plan:** en el Z80 v2 una instrucción de script cuesta **unos 1.200 T de mediana** (750-1.500; casi la mitad es el coste fijo del despachador), no los 150-400 T que estimaba este estudio.
+    Indy3 pide `delta` 6: 10 vueltas por segundo, 325.000 T por vuelta a 3,25 MHz.
+    - La sala mediana (4,4 bytecodes) cuesta unos 5.000 T y el pasillo (18,9) unos 23.000 T: del 2 al 7 % de la vuelta.
+    - El p99 (117 bytecodes) y las salas 20 y 28 del castillo (112-122 de media) suben a **140.000-146.000 T, el 43-45 % de la vuelta**.
+    - En Zak la vuelta entera cuesta 115.000-150.000 T de media (la VM es el 12-19 %) y 240.000-275.000 T de p90 con scroll.
+    - Así que en las salas pesadas del castillo la VM más el vídeo pasan del presupuesto en las vueltas con scroll y el juego iría a 7-8 vueltas por segundo. Sigue siendo viable, pero **conviene abaratar el despachador**: su coste fijo es de 600-700 T por instrucción.
   - SCI0 movía 500 bytecodes por ciclo de mediana: cien veces más.
 - **Memoria: cabe.** Cada sala necesita unos 34 KB de mediana y 80 KB como máximo, entre imagen HiRes, código, scripts globales, trajes y sonidos. Sobra sitio en los 512 KB paginados.
   - Indy3 solo usa las variables 0-253 (como v2), las locales 0-15 y 1.000 objetos.
@@ -272,14 +277,12 @@ Reparto de memoria propuesto, sin cambiar el del v2:
   Los clics pasan por el script de verbos del juego (`runInputScript`), así que el ego anda por los scripts de verdad.
   También hay un arranque largo de 8.000 fotogramas que se queda en el pasillo (sala 1): 18,9 bytecodes por fotograma de media y 68 de p99.
 - **Protección anticopia (sala 92):** ScummVM no se la salta en Indy3. Tras 30 fotogramas en ella, la VM pone `Var[57] = 1`, que es lo que hace el script local 204 al acertar los cuatro símbolos.
-- **Coste en T:** no se ha medido en el Z80.
-  - Para v2 se usa la estimación de 150-400 T por instrucción de `claude/planning/scumm_interprete.md`, que tampoco está medida.
-  - Para v3 se usan 200-500 T, por las variables de 16 bits.
-  - Se intentó perfilar el v2 con el arnés (`test_scumm.exe` con `TS_PROF`), pero se atasca al arrancar con los datos que hay hoy en `test/build/sd`.
+- **Coste en T:** la primera versión de este estudio usaba 150-400 T por instrucción (estimación de `claude/planning/scumm_interprete.md`), porque el arnés del v2 se atascaba al arrancar.
+  La fase 0 de `PLAN.md` lo arregló (el `DATA.BIN` de `test/build/sd` era de la versión 1) y midió Zak en el Z80 v2: 750-1.500 T por instrucción, 1.200 de mediana. Las cifras del §0 ya usan esa medida.
 
 ## 8. Lo que no está medido
 
-- **El arnés del Z80:** medir con él lo que cuesta de verdad una instrucción y una vuelta del v2 en Zak cambiaría los T, pero no el veredicto. Los scripts de Indy3 se quedan en el 2-20 % de la vuelta incluso con 500 T por bytecode.
+- **El coste de v3 en el Z80:** está medido el de v2 (fase 0 del plan). El de v3 lleva variables de 16 bits y saldrá algo mayor; se mide en la fase 3.
 - **Las secuencias guionizadas largas:** peleas, el zepelín, la persecución en moto. El recorrido entra en cada sala sin el estado de la partida, así que muchos guiones no se disparan. Las salas con más trabajo medidas son la 28, la 20 y la 70 (75-122 bytecodes por fotograma de media).
 - **La caminata:** en la VM es aproximada (punto más cercano de la caja siguiente, no las puertas de `findPathTowardsOld`). Cambia la ruta, no el número de bytecodes.
 - **Loom EGA y las versiones FM-Towns y VGA:** no hay ficheros en disco. Loom usa el mismo formato que Indy3; FM-Towns y VGA, el formato de 256 colores.

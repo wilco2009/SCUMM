@@ -1,0 +1,100 @@
+; loader.asm - carga de DATA.BIN (SCUMM/V2/TOOLS/pack_data.py) en las tablas del nucleo y en las paginas de datos
+;
+; load_data: abre DATA/DATA.BIN, copia SCRDIR, OBJOWN, OBJST, ROOMDIR y ODIR a su sitio y las paginas a la
+; RAM extendida (cada una por la ventana de datos, con map_page; hace falta FULLPAGING). Carry si falla.
+
+LD_TABLES       equ 6400
+COSTDIR         equ $FF40               ; 64 x 3: pagina y direccion de los fotogramas de cada traje (0 = sin datos)
+
+data_name:      defb "DATA/DATA.BIN",0          ; relativo a la carpeta actual: la del juego (SCUMM/MANIAC, SCUMM/ZAK...)
+ld_hdr:         defs 16
+ld_h:           defb 0
+
+load_data:      call dp_close
+                ld hl,data_name
+                call f_open
+                cp $FF
+                jp z,ld_nofile
+                ld (ld_h),a
+                ld a,'F'
+                call ld_trace           ; F: el fichero se ha abierto
+                ld a,(ld_h)
+                ld hl,ld_hdr
+                ld bc,16
+                call f_read_n
+                ld a,'G'
+                call ld_trace           ; G: leida la cabecera
+                ld hl,ld_hdr            ; "SDAT", version 2
+                ld a,(hl)
+                cp 'S'
+                jp nz,ld_bad
+                inc hl
+                ld a,(hl)
+                cp 'D'
+                jp nz,ld_bad
+                ld a,(ld_hdr+4)
+                cp 2
+                jp nz,ld_bad
+                ld a,(ld_h)
+                ld hl,SCRDIR
+                ld bc,768
+                call f_read_n
+                ld a,(ld_h)
+                ld hl,OBJOWN
+                ld bc,780
+                call f_read_n
+                ld a,(ld_h)
+                ld hl,OBJST
+                ld bc,780
+                call f_read_n
+                ld a,(ld_h)
+                ld hl,ROOMDIR
+                ld bc,1024
+                call f_read_n
+                ld a,(ld_h)
+                ld hl,ODIRBUF
+                ld bc,780*3
+                call f_read_n
+                ld a,(ld_h)
+                ld hl,COSTDIR
+                ld bc,64*3
+                call f_read_n
+                ld a,(ld_h)
+                ld hl,PROF              ; el perfil del juego (TOOLS/gameprofile.py)
+                ld bc,256
+                call f_read_n
+                ld a,(ld_h)
+                ld hl,ODIRBUF+780*3     ; el relleno hasta el final de la zona de tablas
+                ld bc,LD_TABLES-16-768-780-780-1024-780*3-64*3-256
+                call f_read_n
+                ld a,'H'
+                call ld_trace           ; H: leidas las tablas
+                ld hl,dp_clr            ; la cache de paginas empieza vacia: las paginas de datos se leen de la SD cuando hacen falta (dp_cache.inc)
+                ld de,dp_clr+1
+                ld bc,DP_CLRLEN-1
+                ld (hl),0
+                ldir
+                ld a,(ld_hdr+6)
+                ld (dp_first),a
+                ld a,(ld_h)
+                ld (dp_h),a             ; el fichero se queda abierto
+                ld a,1
+                ld (dp_on),a
+                ld a,(ld_hdr+5)
+                ld (dp_n),a
+                ld a,'I'
+                call ld_trace           ; I: las paginas se leeran por demanda
+                or a
+                ret
+ld_bad:         ld a,'X'
+                call ld_trace           ; X: la cabecera no es la esperada
+                ld a,(ld_h)
+                call f_close
+ld_fail:        scf
+                ret
+ld_nofile:      ld a,'N'
+                call ld_trace           ; N: no se ha podido abrir
+                scf
+                ret
+
+                include "dp_cache.inc"

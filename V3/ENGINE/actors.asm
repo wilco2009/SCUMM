@@ -1,0 +1,586 @@
+NOCACHE        equ 0                   ; 1: sin cache (para comparar sprites con y sin ella)
+actors_update:  ld a,(gf_have)
+                or a
+                ret z
+                call gf_campx
+                ld (ac_cam),hl
+                ld hl,(ac_stamp)
+                inc hl
+                ld (ac_stamp),hl
+                xor a
+                ld (ac_n),a
+                ld a,(ac_hold)          ; sala nueva: los sprites siguen apagados hasta saber donde van
+                or a
+                jr z,au_run
+                dec a
+                ld (ac_hold),a
+                jr au_hide
+au_run:         xor a                   ; los personajes se dibujan de arriba a abajo (como processActors de ScummVM): el sprite de mas indice va delante
+                ld (ac_cnt),a
+                ld b,1
+ao_l:           ld a,b
+                call actor_addr
+                ld a,(CURROOM)
+                cp (ix+0)
+                jr nz,ao_next
+                ld a,(ix+9)             ; visible
+                or a
+                jr z,ao_next
+                ld d,(ix+3)             ; D = y (los personajes caben en 0-255)
+                ld a,(ac_cnt)
+                ld c,a                  ; C = lugares ocupados
+ao_ins:         ld a,c
+                or a
+                jr z,ao_put
+                dec a
+                add a,a
+                add a,AL mod 256
+                ld l,a
+                ld h,AL / 256
+                ld a,(hl)               ; la clave del anterior
+                cp d
+                jr c,ao_put
+                jr z,ao_put
+                ld a,(hl)               ; si es mayor se desplaza un lugar
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld (hl),a
+                inc hl
+                ld (hl),e
+                dec c
+                jr ao_ins
+ao_put:         ld a,c
+                add a,a
+                add a,AL mod 256
+                ld l,a
+                ld h,AL / 256
+                ld (hl),d
+                inc hl
+                ld (hl),b
+                ld hl,ac_cnt
+                inc (hl)
+ao_next:        inc b
+                ld a,b
+                cp NACTORS
+                jr c,ao_l
+                ld a,(ac_cnt)
+                or a
+                jr z,au_hide
+                ld b,a
+                ld hl,AL
+ad_l:           push bc
+                push hl
+                inc hl
+                ld a,(hl)
+                ld (ac_id),a
+                call actor_addr
+                call ac_cdraw
+                pop hl
+                inc hl
+                inc hl
+                pop bc
+                djnz ad_l
+au_hide:        ld a,(ac_n)             ; los sprites que sobran del fotograma anterior se apagan
+                ld b,a
+                ld a,(ac_used)
+                ld c,a
+                ld a,b
+                ld (ac_used),a
+ac_off:         ld a,b
+                cp c
+                ret nc
+                ld (2100),a
+                xor a
+                ld (2101),a
+                inc b
+                jr ac_off
+
+
+; ---------------------------------------------------------------------------------------------------------------------------------
+;  Cache de sprites: si un actor tiene la misma firma (posicion, traje, pose, direccion, camara, quien habla) y los mismos sprites que en el
+;  fotograma anterior, sus sprites ya estan bien y no se vuelven a escribir (ac_draw cuesta mas de la mitad de lo que tarda una vuelta).
+;  Una entrada vale solo si su marca es la del fotograma anterior: los actores que no se dibujan un fotograma pierden la entrada.
+; ---------------------------------------------------------------------------------------------------------------------------------
+ac_cdraw:       call ac_hash
+                ld (ac_sg),de
+                ld a,(ac_id)
+                ld l,a
+                ld h,0
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,de
+                add hl,hl               ; 6 * actor
+                ld de,ACSIG
+                add hl,de
+                ld (ac_ent),hl
+                IF NOCACHE
+                jr acc_miss
+                ENDIF
+                ld a,(ix+10)            ; caminando: ac_draw avanza el contador de la animacion, no se puede saltar
+                or a
+                jr z,acc_miss
+                ld a,(HAVEMSG)          ; hablando: tambien avanza (la boca)
+                or a
+                jr z,acc_ok
+                ld a,(ac_id)
+                ld b,a
+                ld a,(VAR_TALK_ACTOR)
+                cp b
+                jr z,acc_miss
+acc_ok:         push hl
+                ld de,4
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)               ; marca de la entrada
+                ld hl,(ac_stamp)
+                dec hl
+                or a
+                sbc hl,de
+                pop hl
+                jr nz,acc_miss
+                ld e,(hl)
+                inc hl
+                ld d,(hl)               ; firma de la entrada
+                inc hl
+                push hl
+                ld hl,(ac_sg)
+                or a
+                sbc hl,de
+                pop hl
+                jr nz,acc_miss
+                ld a,(ac_n)
+                cp (hl)                 ; el mismo primer sprite
+                jr nz,acc_miss
+                inc hl
+                ld a,(hl)               ; cuantos sprites usa
+                ld hl,ac_n
+                add a,(hl)
+                ld (hl),a
+                ld hl,(ac_ent)
+                ld de,4
+                add hl,de
+                ld de,(ac_stamp)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                ret
+acc_miss:       ld a,(ac_n)
+                ld (ac_n0),a
+                call ac_draw
+                ld hl,(ac_ent)
+                ld de,(ac_sg)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                inc hl
+                ld a,(ac_n0)
+                ld (hl),a
+                inc hl
+                ld c,a
+                ld a,(ac_n)
+                sub c
+                ld (hl),a
+                inc hl
+                ld de,(ac_stamp)
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                ret
+
+; DE = firma del actor IX: lo que ac_draw lee de el, de la camara y de quien habla
+ac_hash:        ld hl,(ac_cam)
+                ld a,(ix+1)
+                call ach
+                ld a,(ix+2)
+                call ach
+                ld a,(ix+3)
+                call ach
+                ld a,(ix+4)
+                call ach
+                ld a,(ix+5)
+                call ach
+                ld a,(ix+6)
+                call ach
+                ld a,(ix+7)
+                call ach
+                ld a,(ix+9)
+                call ach
+                ld a,(ix+10)
+                call ach
+                ld a,(ix+16)
+                call ach
+                ld a,(ix+17)
+                call ach
+                ld a,(ix+45)
+                srl a
+                srl a
+                srl a
+                call ach
+                ld a,(HAVEMSG)
+                call ach
+                ld a,(VAR_TALK_ACTOR)
+                call ach
+                ex de,hl
+                ret
+ach:            ld d,h                  ; HL = HL * 31 + A
+                ld e,l
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                or a
+                sbc hl,de
+                add a,l
+                ld l,a
+                ret nc
+                inc h
+                ret
+
+; HL = angulo (0, 90, 180, 270) -> A = direccion de v2: 0 izquierda, 1 derecha, 2 de frente, 3 de espaldas
+ac_olddir:      ld a,h
+                or a
+                jr nz,aod_hi
+                ld a,l
+                cp 45
+                jr c,aod_up
+                cp 135
+                jr c,aod_r
+                cp 225
+                jr c,aod_dn
+                xor a
+                ret
+aod_hi:         ld a,l
+                cp 59                   ; 315 - 256
+                jr nc,aod_up
+                xor a
+                ret
+aod_up:         ld a,3
+                ret
+aod_r:          ld a,1
+                ret
+aod_dn:         ld a,2
+                ret
+
+; IX = actor: sus sprites segun los fotogramas de su traje (TOOLS/costume2.py)
+ac_draw:        xor a                   ; mascara de profundidad: solo si la sala la tiene y la caja del personaje tiene mascara
+                ld (ac_mk),a
+                ld a,(CURROOM)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld de,ROOMDIR+13
+                add hl,de
+                ld a,(hl)
+                or a
+                jr z,acd_nomk
+                ld (ac_mpg),a
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld (ac_mbl),de
+                ld a,(ix+16)
+                ld hl,NBOXES
+                cp (hl)
+                jr nc,acd_nomk
+                call box_rec
+                jr c,acd_nomk
+                ld de,6
+                add hl,de
+                ld a,(hl)
+                or a
+                jr z,acd_nomk
+                ld a,1
+                ld (ac_mk),a
+acd_nomk:       ld a,(ix+5)             ; traje
+                or a
+                ret z
+                cp 64
+                ret nc
+                ld e,a
+                ld d,0
+                ld hl,COSTDIR
+                add hl,de
+                add hl,de
+                add hl,de
+                ld a,(hl)
+                or a
+                ret z                   ; sin datos: no se dibuja
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld (ac_blob),de
+                ld (ac_cpage),a
+                call map_page
+                ld l,(ix+6)
+                ld h,(ix+7)
+                call ac_olddir
+                ld c,a                  ; C = direccion
+                ld a,(HAVEMSG)          ; hablando: la animacion 4 + direccion (la boca), si el traje la tiene
+                or a
+                jr z,acd_nt
+                ld a,(ac_id)
+                ld b,a
+                ld a,(VAR_TALK_ACTOR)          ; VAR_TALK_ACTOR
+                cp b
+                jr nz,acd_nt
+                ld a,c
+                add a,4
+                ld c,a
+                ld hl,(ac_blob)
+                cp (hl)
+                jr nc,acd_tno
+                inc hl
+                inc hl
+                inc hl                  ; tras el numero de animaciones y el offset del fondo de celdas
+                ld e,c
+                ld d,0
+                add hl,de
+                add hl,de
+                ld a,(hl)
+                inc hl
+                or (hl)
+                jr z,acd_tno
+                inc (ix+45)             ; la animacion de hablar tiene dos poses (boca abierta y cerrada): cambian cada 8 fotogramas
+                jr acd_anim
+acd_tno:        ld a,c
+                sub 4
+                ld c,a
+acd_nt:         ld a,(ix+10)            ; fotograma: 0 caminar; el resto, quieto
+                or a
+                jr z,acd_walk
+                xor a                   ; quieto: la primera pose de caminar
+                ld (ix+45),a
+                jr acd_anim
+acd_walk:       inc (ix+45)             ; contador de fotogramas de caminata
+acd_anim:       ld hl,(ac_blob)
+                ld a,c
+                cp (hl)                 ; numero de animaciones
+                ret nc
+                inc hl
+                inc hl
+                inc hl
+                ld e,c
+                ld d,0
+                add hl,de
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld a,d
+                or e
+                ret z
+                ld hl,(ac_blob)
+                add hl,de               ; HL = lista de la animacion: pasos y offsets de fotograma
+                ld b,(hl)
+                inc hl
+                ld a,b
+                or a
+                ret z
+                ld a,(ix+45)            ; pose = (contador / 8) mod pasos
+                srl a
+                srl a
+                srl a
+acd_mod:        cp b
+                jr c,acd_md
+                sub b
+                jr acd_mod
+acd_md:         add a,a
+                ld e,a
+                ld d,0
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld a,d
+                and e
+                inc a
+                ret z                   ; $FFFF: sin imagen
+                ld hl,(ac_blob)
+                add hl,de
+                push hl
+                pop iy                  ; IY = fotograma: dx, dy, cw, ch, n, celdas
+                ld l,(ix+1)             ; x * 8 - camara + dx
+                ld h,(ix+2)
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld de,(ac_cam)
+                or a
+                sbc hl,de
+                ld e,(iy+0)
+                ld d,0
+                bit 7,e
+                jr z,acd_dx
+                dec d
+acd_dx:         add hl,de
+                ld (ac_x),hl
+                ld l,(ix+3)             ; y * 2 + dy
+                ld h,(ix+4)
+                add hl,hl
+                ld a,(ix+17)            ; elevacion (con signo): el personaje se dibuja elevacion lineas mas arriba
+                ld e,a
+                rla
+                sbc a,a
+                ld d,a
+                ex de,hl
+                add hl,hl
+                ex de,hl
+                or a
+                sbc hl,de
+                ld e,(iy+1)
+                ld d,0
+                bit 7,e
+                jr z,acd_dy
+                dec d
+acd_dy:         add hl,de
+                ld (ac_y),hl
+                ld b,(iy+4)
+                ld a,(ac_n)             ; si no caben todos sus sprites (63 como mucho; el 63 es el cursor) no se dibuja a medias
+                add a,b
+                cp 64
+                ret nc
+                ld a,(ac_mk)
+                or a
+                jr z,acd_nd
+                push bc
+                call ac_mkdec           ; la mascara de la sala bajo el personaje (puede quitar ac_mk)
+                pop bc
+acd_nd:         push iy
+                pop hl
+                ld de,5
+                add hl,de
+acd_cell:       ld a,b
+                or a
+                ret z
+                ld a,(hl)               ; referencia: cx | cy << 4 y el indice de la celda en el fondo de celdas del traje (TOOLS/costume2.py)
+                ld (ac_pos),a
+                inc hl
+                ld a,(hl)
+                inc hl
+                ld (ac_nx),hl           ; la siguiente referencia
+                ld l,a
+                ld h,0
+                add hl,hl
+                ex de,hl                ; DE = 2 * indice
+                ld hl,(ac_blob)
+                inc hl
+                ld a,(hl)
+                inc hl
+                ld h,(hl)
+                ld l,a                  ; HL = offset de la tabla de celdas
+                add hl,de
+                ld de,(ac_blob)
+                add hl,de
+                ld a,(hl)
+                inc hl
+                ld h,(hl)
+                ld l,a                  ; HL = offset de la celda (banderas, forma, mascara, color)
+                add hl,de
+                dec hl                  ; el codigo de abajo cuenta con un byte antes de las banderas
+                ld (ac_cp),hl
+                inc hl
+                ld a,(hl)               ; banderas: bit 0 mascara completa, bit 1 color uniforme
+                ld (ac_fl),a
+                push bc
+                ld a,(ac_pos)
+                ld c,a
+                and $0F
+                add a,a
+                add a,a
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,(ac_x)
+                add hl,de
+                ld de,32
+                add hl,de
+                bit 7,h
+                jp nz,acd_skip
+                ld (ac_cx),hl
+                ld de,319
+                or a
+                sbc hl,de
+                jp nc,acd_skip
+                ld a,c
+                srl a
+                srl a
+                srl a
+                srl a
+                add a,a
+                add a,a
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,(ac_y)
+                add hl,de
+                ld de,32
+                add hl,de
+                bit 7,h
+                jp nz,acd_skip
+                ld a,h
+                or a
+                jp nz,acd_skip
+                ld a,l
+                ld (ac_cy),a
+                ld a,(ac_n)
+                cp 63                   ; el 63 es el cursor
+                jp nc,acd_skip
+                ld (2100),a
+                inc a
+                ld (ac_n),a
+                ld hl,(ac_cx)
+                ld (2102),hl
+                ld a,(ac_cy)
+                ld (2104),a
+                ld a,1
+                ld (2101),a
+                ld hl,(ac_cp)
+                inc hl
+                inc hl
+                ld de,2113              ; forma
+                ld bc,8
+                ldir
+                ld a,(ac_fl)
+                bit 0,a
+                jr z,acd_m1
+                push hl                 ; mascara completa
+                ld hl,ac_mt
+                ld b,8
+acd_m0:         ld (hl),$FF
+                inc hl
+                djnz acd_m0
+                pop hl
+                call acd_mput
+                jr acd_c0
+acd_m1:         ld de,ac_mt
+                ld bc,8
+                ldir
+                call acd_mput
+acd_c0:         ld a,(ac_fl)
+                bit 1,a
+                jr z,acd_c1
+                ld a,(hl)               ; color uniforme
+                ld hl,2105
+                ld b,8
+acd_c2:         ld (hl),a
+                inc hl
+                djnz acd_c2
+                jp acd_skip
+acd_c1:         ld de,2105
+                ld bc,8
+                ldir
+acd_skip:       ld hl,(ac_nx)
+                pop bc
+                dec b
+                jp acd_cell
+
+                include "mask_px.inc"
