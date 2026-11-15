@@ -82,7 +82,7 @@ disp_table:
         defw sp_R_W1, h_o5_move   ; 1A o5_move
         defw sp_w_B1_B2, h_o2_setBitVar   ; 1B o2_setBitVar
         defw sp_B1, h_o5_startSound   ; 1C o5_startSound
-        defw sp_W1_B2_J, h_host   ; 1D o2_ifClassOfIs
+        defw sp_W1_B2_J, h_o2_ifClassOfIs   ; 1D o2_ifClassOfIs
         defw sp_B1_B2_B3, h_o2_walkActorTo   ; 1E o2_walkActorTo
         defw sp_W1_J, h_o2_ifStateTouchable   ; 1F o2_ifStateTouchable
         defw sp_none, h_o5_stopMusic   ; 20 o5_stopMusic
@@ -146,7 +146,7 @@ disp_table:
         defw sp_R_W1, h_o2_add   ; 5A o2_add
         defw sp_w_B1_B2, h_o2_setBitVar   ; 5B o2_setBitVar
         defw sp_none, h_host   ; 5C o2_dummy
-        defw sp_W1_B2_J, h_host   ; 5D o2_ifClassOfIs
+        defw sp_W1_B2_J, h_o2_ifClassOfIs   ; 5D o2_ifClassOfIs
         defw sp_B1_B2_B3, h_o2_walkActorTo   ; 5E o2_walkActorTo
         defw sp_W1_J, h_o2_ifStateUntouchable   ; 5F o2_ifStateUntouchable
         defw sp_W1, h_o2_cursorCommand   ; 60 o2_cursorCommand
@@ -210,7 +210,7 @@ disp_table:
         defw sp_R_W1, h_o5_move   ; 9A o5_move
         defw sp_w_B1_B2, h_o2_setBitVar   ; 9B o2_setBitVar
         defw sp_B1, h_o5_startSound   ; 9C o5_startSound
-        defw sp_W1_B2_J, h_host   ; 9D o2_ifClassOfIs
+        defw sp_W1_B2_J, h_o2_ifClassOfIs   ; 9D o2_ifClassOfIs
         defw sp_B1_B2_B3, h_o2_walkActorTo   ; 9E o2_walkActorTo
         defw sp_W1_J, h_o2_ifStateTouchable   ; 9F o2_ifStateTouchable
         defw sp_none, h_o5_stopObjectCode   ; A0 o5_stopObjectCode
@@ -274,7 +274,7 @@ disp_table:
         defw sp_R_W1, h_o2_add   ; DA o2_add
         defw sp_w_B1_B2, h_o2_setBitVar   ; DB o2_setBitVar
         defw sp_none, h_host   ; DC o2_dummy
-        defw sp_W1_B2_J, h_host   ; DD o2_ifClassOfIs
+        defw sp_W1_B2_J, h_o2_ifClassOfIs   ; DD o2_ifClassOfIs
         defw sp_B1_B2_B3, h_o2_walkActorTo   ; DE o2_walkActorTo
         defw sp_W1_J, h_o2_ifStateUntouchable   ; DF o2_ifStateUntouchable
         defw sp_W1, h_o2_cursorCommand   ; E0 o2_cursorCommand

@@ -150,13 +150,14 @@ class GameMixin:
         'o2_doSentence': 'g_doSentence', 'o2_findObject': 'g_findObject', 'o2_actorFromPos': 'g_actorFromPos',
         'o2_drawObject': 'g_drawObject', 'o5_actorFollowCamera': 'g_actorFollowCamera',
         'o2_loadRoomWithEgo': 'g_loadRoomWithEgo',
-        'o5_getDist': 'g_getDist', 'o5_getClosestObjActor': 'g_getClosestObjActor', 'o3_setBoxFlags': 'g_setBoxFlags', 'o2_lights': 'g_lights', 'o2_getObjPreposition': 'g_getObjPreposition', 'o5_getRandomNr': 'g_getRandomNr', 'o2_cutscene': 'g_cutscene', 'o2_cursorCommand': 'g_cursorCommand', 'o2_endCutscene': 'g_endCutscene', 'o2_beginOverride': 'g_beginOverride',
+        'o5_getDist': 'g_getDist', 'o5_getClosestObjActor': 'g_getClosestObjActor', 'o3_setBoxFlags': 'g_setBoxFlags', 'o2_lights': 'g_lights', 'o2_getObjPreposition': 'g_getObjPreposition', 'o2_ifClassOfIs': 'g_ifClassOfIs','o5_getRandomNr': 'g_getRandomNr', 'o2_cutscene': 'g_cutscene', 'o2_cursorCommand': 'g_cursorCommand', 'o2_endCutscene': 'g_endCutscene', 'o2_beginOverride': 'g_beginOverride',
         'o5_getObjectOwner': 'g_getObjectOwner', 'o2_setOwnerOf': 'g_setOwnerOf', 'o2_pickupObject': 'g_pickupObject',
     }
 
     def game_reset(self):
         self.actors = [Actor(i) for i in range(NUM_ACTORS)]
         self.cur_room = 0
+        self.pseudo = {}                              # salas pseudo (>= 128) -> sala real (pseudoRoom: _resourceMapper)
         self.have_msg = 0
         self.keep_text = 0
         self.use_talk_anims = 0
@@ -1191,6 +1192,14 @@ class GameMixin:
         block = self.object_block(obj) if self.where_is_object(obj) is not None else None
         self.write_var(r, (block[12] >> 5) if block else 0)
 
+    def g_ifClassOfIs(self):
+        """o2_ifClassOfIs(objeto, mascara, salto): en v2 la clase es el byte 6 del bloque OBCD del objeto (no hay setClass en v2: es un dato
+        fijo). Sigue si (clase & mascara) == mascara; salta si no, y tambien si el objeto no esta en la sala ni en un inventario."""
+        obj = self.get_var_or_direct_word(0x80)
+        clsop = self.get_var_or_direct_byte(0x40)
+        block = self.object_block(obj) if self.where_is_object(obj) is not None else None
+        self.jump_relative(block is not None and (block[6] & clsop) == clsop)
+
     def g_getRandomNr(self):
         """getRandomNr(max): 0..max; generador congruencial de 16 bits (x = x * 5 + 1) y su byte alto escalado, igual que el Z80."""
         r = self.fetch_byte()
@@ -1320,7 +1329,8 @@ class GameMixin:
             self.start_slot(WIO_ROOM, number, code, 0)
 
     def start_scene(self, room):
-        if room and room not in self.w.rooms:
+        real = self.pseudo.get(room, 0) if room >= 128 else room          # una sala pseudo carga los datos de la real, pero la sala actual sigue siendo la pseudo
+        if room and real not in self.w.rooms:
             raise VMError(E_BADROOM)
         self.stop_talk()
         if self.cur != 0xFF:
@@ -1335,12 +1345,12 @@ class GameMixin:
             self.hide_actor(self.actors[i])
         self.vars[VAR_ROOM] = room
         self.cur_room = room
-        self.vars[VAR_ROOM_RESOURCE] = room
+        self.vars[VAR_ROOM_RESOURCE] = real
         if room == 0:
             self.encd = self.excd = None
             self.boxes, self.matrix, self.roomobjs, self.objlist = [], b'', {}, []
             return
-        r = self.w.rooms[room]
+        r = self.w.rooms[real]
         self.encd = r.entry_script() if r.encd_off else None
         self.excd = r.exit_script() if r.excd_off else None
         self.boxes = list(r.boxes)
@@ -1348,7 +1358,7 @@ class GameMixin:
         self.roomobjs = {o.id: (o.walk_x // 8, o.walk_y // 2, o.actordir) for o in r.objects}
         self.objlist = [(o.id, o.walk_x // 8, o.walk_y // 2, o.actordir, o.x // 8, o.y // 8, o.width // 8, o.height // 8,
                          o.parent, o.parentstate * 8) for o in r.objects]
-        self.ev(EV_ROOM_LOAD, [room])                 # cuando ya estan las cajas y los objetos de la sala (el programa los necesita)
+        self.ev(EV_ROOM_LOAD, [real])                 # cuando ya estan las cajas y los objetos de la sala (el programa los necesita)
         self.vars[VAR_CAMERA_MIN_X] = SCREEN_WIDTH // 2
         self.vars[VAR_CAMERA_MAX_X] = (r.width - SCREEN_WIDTH // 2) & 0xFFFF
         for i in range(1, NUM_ACTORS):                # showActors

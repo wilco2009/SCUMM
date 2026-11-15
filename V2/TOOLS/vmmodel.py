@@ -606,6 +606,10 @@ class VM(GameMixin):
                 else:
                     raise ValueError('operando %s en el anfitrion' % tok)
         res, _ = self.host_log(op, args)
+        if name == 'o5_pseudoRoom':                  # _resourceMapper[j & 0x7F] = sala: la tabla del Z80 (MAPTAB) llega hasta PSEUDO_N salas
+            for j in args[1:]:
+                if 128 <= j < 128 + PSEUDO_N:
+                    self.pseudo[j] = args[0]
         if has_r:
             self.write_var(args[0], res)
 
@@ -871,6 +875,24 @@ def make_scenarios(world, seeds=2):
                 continue                  # los sinteticos tienen sus propios escenarios
             ln = init(rng) + ['SCRIPT %d' % sid, 'FRAMES 3 25']
             sc.append(('scr%03d.s%d' % (sid, seed), ln))
+    for sid in sorted(world.scripts):      # salas pseudo: un script que haga pseudoRoom y, despues, cargar salas pseudo (y alguna que da error)
+        ins, _ = scummdis.disassemble(world.scripts[sid], partial=True)
+        pseudo = set()
+        for i in ins:
+            if i.name == 'o5_pseudoRoom':
+                pseudo |= {b for b in world.scripts[sid][i.off + 2:i.off + i.length] if 128 <= b < 128 + PSEUDO_N}
+        if not pseudo:
+            continue
+        pseudo = sorted(pseudo)
+        pick = pseudo[:3] + pseudo[-2:]
+        rng = random.Random(77)
+        for k, rooms in enumerate((pick, pick[::-1])):
+            ln = init(rng) + ['SCRIPT %d' % sid, 'FRAMES 3 5']
+            for r in rooms:
+                ln += ['LOADROOM %d' % r, 'FRAMES 4 12']
+            sc.append(('pseudo%03d.k%d' % (sid, k), ln + ['LOADROOM 0', 'FRAMES 4 4']))
+        for k, r in enumerate((127, 128 + PSEUDO_N - 1, 255)):      # sala real inexistente, pseudo sin definir, fuera de la tabla
+            sc.append(('pseudo%03d.e%d' % (sid, k), init(rng) + ['SCRIPT %d' % sid, 'FRAMES 3 5', 'LOADROOM %d' % r]))
     sc += vmsynth.synth_scenarios()
     sc += walk_scenarios(world, seeds)
     sc += input_scenarios(world, seeds)

@@ -13,3 +13,4 @@ OVL_DARK        equ 27
 OVL_HRUI        equ 30
 OVL_DKMASK      equ 33
 OVL_MOUSE       equ 36                  ; raton Bluetooth (mouse.asm): A = bit 4 boton izquierdo, bit 5 derecho (0 si no hay raton)
+OVL_ERR        equ 39                  ; error fatal (ov_err): se escribe y espera una tecla

@@ -268,7 +268,7 @@ aod_dn:         ld a,2
 ; IX = actor: sus sprites segun los fotogramas de su traje (TOOLS/costume2.py)
 ac_draw:        xor a                   ; mascara de profundidad: solo si la sala la tiene y la caja del personaje tiene mascara
                 ld (ac_mk),a
-                ld a,(CURROOM)
+                ld a,(SS_REAL)          ; los datos de la sala cargada (la real si la actual es pseudo)
                 ld l,a
                 ld h,0
                 add hl,hl

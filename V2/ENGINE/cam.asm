@@ -28,8 +28,34 @@ host_ops:       ld c,a
                 cp $24
                 jr z,ho_ego
                 ld a,c
+                cp $CC                  ; pseudoRoom
+                jr z,ho_pseudo
+                ld a,c
                 cp $AC                  ; drawSentence
                 jp z,ui_sentence
+                ret
+; pseudoRoom(real, sala, sala, ..., 0): _resourceMapper[sala & $7F] = real para las salas >= 128 (MAPTAB, game.asm); ARGS = real y las salas (palabras)
+ho_pseudo:      ld a,(ARGN)
+                dec a
+                ret z
+                ld b,a
+                ld hl,ARGS+2
+hps_l:           ld a,(hl)
+                inc hl
+                inc hl
+                sub 128
+                jr c,hps_n
+                cp PSEUDO_N
+                jr nc,hps_n
+                ld e,a
+                ld d,0
+                push hl
+                ld hl,MAPTAB+128
+                add hl,de
+                ld a,(ARGS)
+                ld (hl),a
+                pop hl
+hps_n:           djnz hps_l
                 ret
 ho_lights:      ld a,(ARGS+4)           ; lights(a, b, c): c = 1 -> linterna de a x b celdas; en los dos casos se vuelve a pintar la sala
                 cp 1

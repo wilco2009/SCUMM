@@ -1277,6 +1277,7 @@ h_o2_getBitVar:                         ; ARGS: resultado, variable (palabra), B
                 ld hl,(ARGS+2)
                 ld de,(ARGS+4)
                 add hl,de
+                jp c,bv_bad             ; la suma no se trunca a 16 bits (ScummVM usa int): es un desbordamiento
                 ld a,l
                 and 15
                 ld b,a
@@ -1315,6 +1316,7 @@ h_o2_setBitVar:                         ; ARGS: variable (palabra), B1, B2
                 ld hl,(ARGS)
                 ld de,(ARGS+2)
                 add hl,de
+                jp c,bv_bad             ; la suma no se trunca a 16 bits (ScummVM usa int): es un desbordamiento
                 ld a,l
                 and 15
                 ld b,a

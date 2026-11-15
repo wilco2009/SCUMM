@@ -45,6 +45,9 @@ PA_X            equ $EB5D       ; palabra
 PA_Y            equ $EB5F       ; palabra
 PA_ROOM         equ $EB61
 SS_ROOM         equ $EB62
+SS_REAL         equ $EB95       ; sala cuyos datos estan cargados: la actual, o la real si es una sala pseudo (>= 128)
+MAPTAB          equ $EB96-128   ; pseudoRoom: sala real de cada sala pseudo 128..128+PSEUDO_N-1 (0 = sin definir); acaba en $EBFF, antes de SCRDIR
+PSEUDO_N        equ 106
 CUREXC_P        equ $EB63       ; codigo de salida de la sala actual: pagina (0 = no hay) y direccion
 CUREXC_A        equ $EB64
 CURENC_P        equ $EB66
@@ -900,26 +903,40 @@ start_scene:
                 or a
                 jr nz,ss_bad
                 ld a,l
+                ld (SS_ROOM),a
+                cp 128
+                jr c,ss_n
+                sub 128                 ; sala pseudo: carga los datos de su sala real (pseudoRoom), pero la sala actual sigue siendo la pseudo
+                cp PSEUDO_N
+                jr nc,ss_bad
+                ld e,a
+                ld d,0
+                ld hl,MAPTAB+128
+                add hl,de
+                ld a,(hl)
+                or a
+                jr z,ss_bad             ; sin definir
+ss_n:           ld c,a                  ; C = sala real
                 or a
                 jr z,ss_ok
                 cp 64
                 jr nc,ss_bad
-                push hl
+                ld l,a
+                ld h,0
                 call room_entry         ; HL = ROOMDIR + sala * 16
                 ld de,6
                 add hl,de
                 ld a,(hl)
                 inc hl
                 or (hl)
-                pop hl
                 jr nz,ss_ok             ; el ancho no es 0: la sala existe
 ss_bad:
                 ld a,E_BADROOM
                 ld (ERR),a
                 ret
 ss_ok:
-                ld a,l
-                ld (SS_ROOM),a
+                ld a,c
+                ld (SS_REAL),a
                 call stop_talk
                 ld a,(ERR)
                 or a
@@ -962,15 +979,20 @@ ss_hide:
                 ld l,a
                 ld h,0
                 ld (VAR_ROOM),hl          ; VAR_ROOM
-                ld (VAR_ROOM_RESOURCE),hl         ; VAR_ROOM_RESOURCE
+                ld a,(SS_REAL)
+                ld l,a
+                ld (VAR_ROOM_RESOURCE),hl         ; VAR_ROOM_RESOURCE: la sala real
+                ld a,(SS_ROOM)
                 ld (CURROOM),a
                 or a
                 jr nz,ss_load
                 ld (CUREXC_P),a         ; sala 0: no hay scripts
                 ld (CURENC_P),a
+                ld (NBOXES),a           ; ni cajas ni objetos (el modelo los vacia)
+                ld (NOBJS),a
                 ret
 ss_load:
-                ld a,(SS_ROOM)
+                ld a,(SS_REAL)
                 ld l,a
                 ld h,0
                 call room_entry         ; HL = entrada de la sala
@@ -987,7 +1009,7 @@ ss_load:
                 ld h,(iy+5)
                 ld (CUREXC_A),hl
                 call load_blob          ; cajas de caminar, matriz de rutas y objetos de la sala
-                ld a,(SS_ROOM)
+                ld a,(SS_REAL)
                 ld l,a
                 ld h,0
                 ld (EVARGS),hl

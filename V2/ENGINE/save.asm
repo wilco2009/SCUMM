@@ -174,7 +174,7 @@ sll_c:          ld a,(de)
                 xor a
                 ld (sdx_cur),a
                 ld (sdx_next),a
-                ld a,(CURROOM)
+                ld a,(SS_REAL)
                 ld (EVARGS),a
                 call gf_load_room       ; la imagen de la sala restaurada
                 ld a,(CUR)

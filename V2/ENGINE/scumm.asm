@@ -245,54 +245,7 @@ ml_nd:          call vm_frame
                 jp scumm_main
 rs_flag:        defb 0
 ml_acc:         defb 0
-sm_err:         call sc_hide_sprites
-                xor a
-                ld (tx_on),a
-                ld a,(ERR)
-                ld l,a
-                ld h,0
-                ld de,ERRPOS
-                ld b,2
-                push hl
-                ld hl,tx_err
-                call put_str
-                pop hl
-                call put_num
-                ld a,' '                ; que fallo: A = primer operando, O = opcode (decimal), S = script de la ranura en curso
-                call put_chr
-                ld a,'A'
-                call put_chr
-                ld hl,(ARGS)
-                ld b,3
-                call put_num
-                ld a,' '
-                call put_chr
-                ld a,'O'
-                call put_chr
-                ld a,(OPC)
-                ld l,a
-                ld h,0
-                ld b,3
-                call put_num
-                ld a,(CUR)
-                cp $FF
-                jr z,sme_k
-                push af
-                ld a,' '
-                call put_chr
-                ld a,'S'
-                call put_chr
-                pop af
-                call slot_addr
-                inc hl
-                inc hl
-                ld a,(hl)
-                inc hl
-                ld h,(hl)
-                ld l,a
-                ld b,3
-                call put_num
-sme_k:          call sc_wait_key
+sm_err:         call OVL_ERR            ; el mensaje de error esta en el overlay (ov_err, overlay.asm): deja sitio al residente
 
 sc_quit:        call dp_close           ; el DATA.BIN se cierra
                 ld a,CMD_STOPVGM        ; el sonido que suene se para

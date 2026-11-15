@@ -108,6 +108,9 @@ static void host_trap(int op) {
   int n = rd(ARGN);
   std::vector<uint16_t> args;
   for (int i = 0; i < n; i++) args.push_back(rd16(ARGS + 2 * i));
+  if (op == 0xCC) {   // pseudoRoom: lo que hace host_ops en el overlay (cam.asm, ho_pseudo): MAPTAB = $EB96-128, 106 salas
+    for (int i = 1; i < n; i++) if (args[i] >= 128 && args[i] < 128 + 106) wr(0xEB96 + args[i] - 128, args[0] & 0xFF);
+  }
   uint32_t s = mock_hash(op, args);
   wr16(HRES, s & 0xFF);
   wr(HFLAG, (s >> 8) & 1);

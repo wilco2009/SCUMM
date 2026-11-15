@@ -1214,44 +1214,72 @@ h_o2_lights:
                 ld (VAR_CURRENT_LIGHTS),hl
 li_h:           jp h_host
 
-; getObjPreposition (R, W1): la preposicion del objeto (bits 5-7 del byte 12 de su bloque); 0 si no esta en la sala ni en un inventario
-h_o2_getObjPreposition:
-                ld de,(ARGS+2)
-                ld l,e
-                ld h,d
+; objbyte: HL = objeto, C = desplazamiento dentro de su bloque OBCD -> A = ese byte y NC; CF si el objeto no esta en la sala ni en un inventario
+objbyte:
+                push hl
+                push bc
                 call where_is_object
+                pop bc
+                pop hl
                 or a
-                jr z,gp_0
-                ld de,(ARGS+2)
-                ld l,e
-                ld h,d
+                jr z,ob_no
+                ld e,l
+                ld d,h
                 add hl,hl
                 add hl,de
                 ld de,ODIRBUF
                 add hl,de
                 ld a,(hl)
                 or a
-                jr z,gp_0
+                jr z,ob_no
                 inc hl
                 ld e,(hl)
                 inc hl
                 ld d,(hl)
+                push bc
                 push de
                 call map_page
                 pop hl
-                ld de,12
-                add hl,de
-                ld a,(hl)
+                pop bc
+                ld b,0
+                add hl,bc
+                ld c,(hl)
+                push bc
+                call restore_win
+                pop bc
+                ld a,c
+                or a
+                ret
+ob_no:          scf
+                ret
+
+; getObjPreposition (R, W1): la preposicion del objeto (bits 5-7 del byte 12 de su bloque); 0 si no esta en la sala ni en un inventario
+h_o2_getObjPreposition:
+                ld hl,(ARGS+2)
+                ld c,12
+                call objbyte
+                ld c,0
+                jr c,gp_w
                 rlca
                 rlca
                 rlca
                 and 7
                 ld c,a
-                ld b,0
-                push bc
-                call restore_win
-                pop bc
-                jr gp_w
-gp_0:           ld bc,0
-gp_w:           ld a,(ARGS)
+gp_w:           ld b,0
+                ld a,(ARGS)
                 jp write_var
+
+; ifClassOfIs (W1, B2, J): la clase es el byte 6 del bloque OBCD (en v2 es un dato fijo: no hay setClass). Sigue si (clase & mascara) == mascara;
+; salta si no, y tambien si el objeto no esta en la sala ni en un inventario
+h_o2_ifClassOfIs:
+                ld hl,(ARGS)
+                ld c,6
+                call objbyte
+                jr c,ic_jump
+                ld hl,ARGS+2
+                and (hl)
+                cp (hl)
+                ret z
+ic_jump:        ld hl,(ARGS+4)
+                ld (SPTR),hl
+                ret

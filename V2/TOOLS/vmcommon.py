@@ -7,6 +7,7 @@ SS_DEAD, SS_PAUSED, SS_RUNNING = 0, 1, 2
 NUM_SLOT = 24                # el Z80 usa 24 (ScummVM 80); se mide cuantas hacen falta
 MAX_NEST = 15
 NUM_VARS = 256
+PSEUDO_N = 106           # salas pseudo (>= 128) que caben en la tabla del Z80 (ENGINE/game.asm, MAPTAB): 128..233
 NUM_OBJECTS = 780
 NUM_ACTORS = 25              # Maniac Mansion
 SCRIPT_NUM_EXCD, SCRIPT_NUM_ENCD = 10001, 10002
