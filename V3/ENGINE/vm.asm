@@ -9,10 +9,26 @@ OVLA_PG         equ 0                   ; lo que hay en el bloque 0 fuera del ov
 OVB_EXPR        equ 0                   ; entradas del overlay B (ovlb.asm)
 OVB_OP          equ 3
 OVB_DD          equ 6                   ; displayDialog
-OVC_OP          equ 0                   ; entrada del overlay C (ovlc.asm)
+OVB_STOPTALK    equ 9                   ; fase 5: entradas de B para C (ovlb.asm)
+OVB_HIDE        equ 12
+OVB_SHOWACT     equ 15
+OVB_FOLLOW      equ 18
+OVB_PUTACT      equ 21
+OVB_VNAME       equ 24                  ; fase 7
+OVC_OP          equ 0                   ; entradas del overlay C (ovlc.asm)
+OVC_SENT        equ 3                   ; checkAndRunSentenceScript
+OVC_START       equ 6                   ; startScene (C = sala)
+OVC_ROOM        equ 9                   ; load_room_state (C = sala, B = 1: con cajas)
+OVC_SENTADD     equ 12                  ; doSentence desde fuera (APIVERB, APIN, APIA)
+OVC_MOVECAM     equ 15                  ; moveCamera (fase 5b)
+OVD_WALK        equ 0                   ; entradas del overlay D (ovld.asm; fase 6): walkActors
+OVD_ADJUST      equ 3                   ; adjustXYToBeInBox(IX; WKX, WKY) -> WKX, WKY, WKBOX
+OVD_STARTWALK   equ 6                   ; startWalkActor(IX; WKX, WKY, WKDIR)
+OVD_CALCMF      equ 9                   ; calcMovementFactor(_walkdata.next)
 
                 org $4200
                 include "vm_core.asm"
+snd_tick:       ret                     ; el modelo en modo nucleo ("mock") no mueve VAR_MUSIC_TIMER; el programa (scumm.asm) lo simula
 map_page_x:     add a,128               ; arnes: la pagina de datos v esta en la pagina fisica 128 + v (en la placa: dp_cache.inc)
                 jp map_phys
 code_end:

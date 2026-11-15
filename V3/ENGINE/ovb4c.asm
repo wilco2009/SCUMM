@@ -4,8 +4,7 @@
 ;  Semantica: ScummVM tal como la transcribe V3/TOOLS/vmgame3.py (convert_message_to_string, actor_talk, display_dialog, print_string) y
 ;  vmmodel3.py (decode_parse_string); los limites del Z80 son los del modelo (vmcommon3.py: MSG_MAX, MSG_DEPTH).
 ;  displayDialog corre cada fotograma: el residente (talk_frame, vm_core.asm) solo salta aqui (OVB_DD) cuando hay mensaje y no queda espera.
-;  FASE5: el nombre de un objeto (FF 6 con un objeto que no es actor ni tiene nombre nuevo) sale de su OBCD (inventario o sala): sin objetos
-;  de sala todavia, sale vacio (CoreVM.get_obj_or_actor_name hace lo mismo).
+;  Fase 5: el nombre de un objeto (FF 6 con un objeto que no es actor ni tiene nombre nuevo) sale de su OBCD (ODIR; inventario o sala).
 ; =====================================================================
 
 ; temporales (SC+n; no sobreviven a un script, y aqui no se arranca ninguno)
@@ -198,12 +197,27 @@ emit_a:         push hl
                 jp nc,err_range
 ea_ok:          ld a,(CM_MODE)
                 or a
-                jr nz,ea_sum
+                jr nz,ea_m1
                 ld a,e
                 ld de,MSGBUF-1
                 add hl,de
                 ld (hl),a
                 pop de
+                pop hl
+                ret
+ea_m1:          cp 2
+                jr nz,ea_sum
+                ld a,h                  ; modo 2 (fase 7): a UIBUF (48 bytes; el resto se cuenta pero no se guarda)
+                or a
+                jr nz,ea_ux
+                ld a,l
+                cp 49
+                jr nc,ea_ux
+                ld a,e
+                ld de,UIBUF-1
+                add hl,de
+                ld (hl),a
+ea_ux:          pop de
                 pop hl
                 ret
 ea_sum:         ld hl,(CM_SUM)
@@ -340,7 +354,7 @@ cm_name:        bit 7,b                 ; BC = objeto o actor; negativo (< NACT 
                 ld bc,ACTNAMES
                 add hl,bc
                 jr cn_go
-cn_obj:         push hl                 ; un objeto con nombre nuevo (setObjectName): NEWNAMES. FASE5: el de su OBCD
+cn_obj:         push hl                 ; un objeto con nombre nuevo (setObjectName): NEWNAMES; si no, el de su OBCD
                 ld hl,NEWNAMES
                 ld d,NNAMES
 cn_l:           ld a,(hl)
@@ -353,8 +367,41 @@ cn_l:           ld a,(hl)
 cn_n:           inc hl
                 dec d
                 jr nz,cn_l
+                ld h,b                  ; sin nombre nuevo: el del OBCD (inventario o sala; obcd_of del modelo)
+                ld l,c
+                ld de,NOBJ
+                or a
+                sbc hl,de
+                jr nc,cn_e
+                ld a,b
+                or c
+                jr z,cn_e
+                call inv_find
+                jr z,cn_have
+                ld hl,OBJOWN
+                add hl,bc
+                ld a,(hl)
+                cp OWNER_ROOM
+                jr nz,cn_e
+                call obj_index
+                jr nz,cn_e
+cn_have:        call odir               ; A = pagina de su OBCD (0: no tiene) y HL = direccion
+                or a
+                jr z,cn_e
+                push af
+                call map_page           ; (conserva HL y DE)
+                push hl
+                ld de,16
+                add hl,de
+                ld e,(hl)               ; el desplazamiento del nombre desde el principio del OBCD
+                ld d,0
                 pop hl
-                jp cm_run
+                add hl,de
+                pop af
+                ld e,a
+                ld bc,$FFFF
+                call cm_nest            ; (devuelve la ventana a la pagina del script en curso)
+                jr cn_e
 cn_f:           ld a,NNAMES
                 sub d
                 ld e,a
@@ -683,13 +730,24 @@ dg_rd:          ld hl,(MSGPTR)          ; A = el siguiente byte del bufer (0 mas
                 ld a,(de)
                 ret
 
-dg_sum:         ld hl,(DD_SUM)          ; A = un caracter escrito: suma y longitud
+dg_sum:         ld hl,(DD_SUM)          ; A = un caracter escrito: suma y longitud (y, fase 7, el caracter va a PGBUF, 96 como mucho, para que el programa lo pinte)
                 ld e,a
                 ld d,0
                 add hl,de
                 ld (DD_SUM),hl
                 ld hl,(DD_LEN)
-                inc hl
+                ld a,h
+                or a
+                jr nz,ds_n
+                ld a,l
+                cp 96
+                jr nc,ds_n
+                push hl
+                ld bc,PGBUF
+                add hl,bc
+                ld (hl),e
+                pop hl
+ds_n:           inc hl
                 ld (DD_LEN),hl
                 ret
 

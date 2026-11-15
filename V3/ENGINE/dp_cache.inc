@@ -5,10 +5,12 @@
 ;  (un bit de uso por pagina). Asi el juego puede ser mayor que la RAM y el arranque no lee el fichero entero.
 ; ---------------------------------------------------------------------------------------------------------------------------
 DP_PHYS0        equ 16                  ; primera pagina fisica de la cache
-DP_OVLIDX       equ OVL_PAGE-DP_PHYS0   ; el indice de la pagina del overlay: no se usa
-DP_NIDX         equ 47                  ; indices 0-46: paginas fisicas 16-62
+DP_SKIP0        equ 46                  ; v3: las paginas fisicas 46-50 no son de la cache (46 overlay D, 47 OBJCLS, 48 overlay C, 49 overlay B, 50 overlay A)
+DP_NSKIP        equ 5                   ; los indices que llegan a la 46 saltan cinco paginas
+DP_NIDX         equ 42                  ; indices 0-41: paginas fisicas 16-45 y 51-62 (la 63 es del depurador)
 CMD_FSEEK       equ 54
 
+dp_tab:         defw 0                  ; v3: tamano de la zona de tablas del fichero (cabecera +13): las paginas empiezan ahi
 dp_first:       defb 0
 dp_n:           defb 0                  ; 0: aun no hay DATA.BIN: map_page es la pagina fisica tal cual
 dp_h:           defb 0
@@ -30,8 +32,12 @@ dp_close:       ld a,(dp_on)            ; cierra el DATA.BIN abierto (restart y 
                 ld a,(dp_h)
                 jp f_close
 
-; A = pagina de datos -> la ventana de datos; conserva HL y DE
-map_page_x:     push hl
+; A = pagina de datos -> la ventana de datos; conserva BC, DE y HL (v3: el nucleo y los overlays cuentan con BC: en el arnes de pruebas map_page_x solo cambia la pagina)
+map_page_x:     push bc
+                call map_page_x0
+                pop bc
+                ret
+map_page_x0:    push hl
                 push de
                 ld e,a                  ; E = pagina virtual
                 ld a,(dp_n)
@@ -53,7 +59,10 @@ map_page_x:     push hl
                 jr z,mpx_miss
                 ld c,a                  ; esta: se marca como usada y se mapea
                 sub DP_PHYS0
-                ld e,a
+                cp DP_SKIP0-DP_PHYS0
+                jr c,mpx_i
+                sub DP_NSKIP            ; (indice = pagina fisica - 16, y cinco menos desde la 51)
+mpx_i:          ld e,a
                 ld hl,PREF
                 add hl,de
                 ld (hl),1
@@ -69,10 +78,7 @@ mpx_raw:        ld a,e
 mpx_miss:       ld a,e
                 ld (dp_v),a
 mpx_ck:         ld a,(dp_hand)          ; el reloj: la primera pagina sin bit de uso (a las usadas se les quita)
-                cp DP_OVLIDX
-                jr nz,mpx_c1
-                inc a
-mpx_c1:         cp DP_NIDX
+                cp DP_NIDX
                 jr c,mpx_c2
                 xor a
 mpx_c2:         ld c,a                  ; C = indice
@@ -105,9 +111,9 @@ mpx_free:       ld a,(dp_v)
                 ld (hl),a
                 ld a,c
                 add a,DP_PHYS0
-                cp OVL_PAGE
+                cp DP_SKIP0
                 jr c,mpx_ph
-                inc a                   ; despues de la 50 los indices se desplazan una pagina
+                add a,DP_NSKIP          ; v3: despues de la 45 los indices se desplazan cinco paginas (la 46 pasa a la 51)
 mpx_ph:         ld c,a                  ; C = pagina fisica
                 ld hl,PMAP
                 add hl,de
@@ -136,7 +142,7 @@ mpx_sh:         srl h
                 ex de,hl                ; DE = parte alta, H = D de antes
                 ld l,0                  ; HL = parte baja
                 push de
-                ld de,LD_TABLES
+                ld de,(dp_tab)
                 add hl,de
                 pop de
                 jr nc,mpx_nc

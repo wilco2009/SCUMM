@@ -11,6 +11,12 @@
                 jp ovb_expr             ; OVB_EXPR (+0)
                 jp ovb_op               ; OVB_OP (+3): el manejador de OPC en la tabla ovb_lo/ovb_hi (ovbtab.inc, generada)
                 jp ovb_dd               ; OVB_DD (+6): displayDialog (cada fotograma, desde talk_frame)
+                jp ovb_stoptalk         ; OVB_STOPTALK (+9)   fase 5: entradas para el overlay C
+                jp ovb_hide             ; OVB_HIDE (+12)      IX = actor
+                jp ovb_showact          ; OVB_SHOWACT (+15)   showActors
+                jp ovb_follow           ; OVB_FOLLOW (+18)    IX = actor: setCameraFollows
+                jp ovb_putact           ; OVB_PUTACT (+21)    IX = actor, C = sala, x en SC+0, y en SC+2
+                jp ovb_vname            ; OVB_VNAME (+24)     fase 7: IX = verbo -> UIBUF = su nombre, A = bytes
 
 ; Despacho por opcode de los manejadores de B (TOOLS/gen_vmtables3.py: OVB_HANDLERS). Entra con DE = puntero tras el opcode, como un
 ; manejador nativo del residente; el ret del manejador vuelve a call_ovb.
@@ -160,6 +166,7 @@ ex_pop:         ld a,(ESP)              ; pila -> (HL) (4 bytes; conserva DE); v
                 include "ovb4.asm"
                 include "ovb4b.asm"
                 include "ovb4c.asm"
+ovb_code_end:
                 include "ovbtab.inc"
 ovb_end:
                 IF $ > $2000

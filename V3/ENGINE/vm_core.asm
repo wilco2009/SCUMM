@@ -45,8 +45,12 @@ EV_SOUND_STOP   equ 2
 EV_SOUND_STOPALL equ 3
 EV_SOUND_QUERY  equ 4
 EV_TEXT         equ 5
+EV_ROOM_LOAD    equ 6
 EV_OBJSTATE     equ 8
+EV_DRAWOBJ      equ 9
+EV_CAMERA       equ 10
 EV_VERB         equ 11
+E_BADROOM       equ 6
 CAM_NORMAL      equ 1           ; CameraMode
 CAM_FOLLOW      equ 2
 CAM_PANNING     equ 3
@@ -62,6 +66,7 @@ WINHI           equ $18         ; paginas de 6 KB: un puntero valido tiene (alto
 BIGHI           equ $10         ; D5: en una pagina de un script grande que no es la ultima, solo empiezan instrucciones en 4 KB
 OVB_PAGE        equ 49          ; overlay B (D4): manejadores con subopcodes, expression, stringOps y la frase
 OVC_PAGE        equ 48          ; overlay C (fase 4b-2: B se llena): sala, recursos y sistema, y lo de la fase 5
+OVD_PAGE        equ 46          ; overlay D (fase 6): geometria de las cajas y caminata
 TABPG           equ 15          ; pagina fisica con las tablas frias de DATA.BIN (ROOMDIR, ODIR, OBJROOM, COSTDIR, COSTDIR2)
 HOSTPORT        equ $F1
 MAP_PORT        equ $E7
@@ -94,7 +99,52 @@ NEWNAMES        equ $8E40       ; setObjectName: NNAMES palabras (objeto) y NNAM
 VARS            equ $E000       ; 256 x u16. Tiene que estar en $E000: rd_var hace ld h,$70 / add hl,hl
 OBJST           equ $E200       ; 1000: estado de cada objeto
 OBJOWN          equ $E5E8       ; 1000: dueno
-OBJCLS          equ $E9D0       ; 1000 x 3: clases (24 bits)
+; (OBJCLS, 3.000 B, ya no esta en el bloque 7: desde la fase 5 vive en la pagina fria CLS_PG; ver abajo, "fase 5: objetos y clases")
+; fase 5: el blob de la sala en uso (cajas, matriz y objetos, tal cual lo empaqueta pack_data3.room_blob), la cola de frases y el mapa de
+; pseudosalas ocupan el sitio que dejo OBJCLS: $E9D0-$F07B; hasta SCRDIR ($F588) quedan 1.282 B libres ($F086-$F587)
+RBLOB           equ $E9D0       ; copia del blob de la sala (hasta RB_MAX bytes); la fase 5 lo pone con load_room_state (C)
+RB_MAX          equ 1536        ; el mayor de Indy3 mide 1.496
+SENTN           equ RBLOB+RB_MAX ; cola de frases: cuantas hay (0-6) y, desde SENTQ, NSENT x SSZ: verbo (1), a (2), b (2), preposicion (1), congelada (1)
+SENTQ           equ SENTN+1
+NSENT           equ 6           ; vmcommon3.NUM_SENTENCE
+SSZ             equ 7
+SQ_VERB         equ 0
+SQ_A            equ 1
+SQ_B            equ 3
+SQ_PREP         equ 5
+SQ_FRZ          equ 6
+RESMAP          equ SENTQ+NSENT*SSZ ; 128 bytes: _resourceMapper (pseudoRoom): sala de cada clave 0x80-0xFF (0 = sin asignar)
+RMV             equ RESMAP+128  ; variables de la sala
+OBJP            equ RMV+0       ; palabra: primer registro de objeto de RBLOB
+OBJEND          equ RMV+2       ; palabra: el que sigue al ultimo
+NROBJ           equ RMV+4       ; objetos de la sala (0-199)
+MATP            equ RMV+5       ; palabra: la matriz de cajas (su tamano u16 y los bytes), para la fase 6
+CLSSV           equ RMV+7       ; pagina que habia en la ventana mientras se mira OBJCLS
+ODTMP           equ RMV+8       ; 3 bytes: una entrada de ODIR
+RMV_END         equ RMV+11
+; fase 6 (caminata, overlay D): argumentos de sus entradas, el recurso de la sala cargada, walkdata.point3.y de cada actor (no cabe en su
+; registro) y las variables de trabajo de geom.asm y walk.asm (GW; ninguna sobrevive a otra entrada en D)
+WKX             equ RMV_END+0   ; palabra con signo: x (adjust_xy y start_walk: entrada y salida)
+WKY             equ RMV_END+2
+WKDIR           equ RMV_END+4   ; palabra: direccion final de startWalkActor (-1: ninguna)
+WKBOX           equ RMV_END+6   ; caja (salida de adjust_xy)
+ROOMRES         equ RMV_END+7   ; recurso de la sala cargada (0: ninguna): el WORKAROUND de getNextBox de la sala 46
+P3Y             equ RMV_END+8   ; NACT palabras
+GW              equ P3Y+2*NACT  ; 260 B (geom.asm, walk.asm)
+GW_END          equ GW+260
+CLS_PG          equ 47          ; pagina fisica fria con OBJCLS (3 bytes por objeto desde el principio); la fase 9 la saca de la cache de paginas
+OB_SZ           equ 14          ; registro de un objeto de la sala (blob): id (2), x/8, y/8, ancho/8, alto/8, padre, estado del padre, x e y de acercamiento
+OB_ID           equ 0           ;   (s16), direccion del actor (0-7), banderas (bit 0: imagen propia)
+OB_X            equ 2
+OB_Y            equ 3
+OB_W            equ 4
+OB_H            equ 5
+OB_PAR          equ 6
+OB_PST          equ 7
+OB_WX           equ 8
+OB_WY           equ 10
+OB_DIR          equ 12
+OB_FL           equ 13
 SCRDIR          equ $F588       ; 200 x 3: pagina (0 = no hay; 255 = grande: la direccion es el indice en BIGDIR), direccion
 BIGDIR          equ $F7E0       ; 4 x 8: id, paginas, primera pagina, 0, direccion, longitud
 SLOTS           equ $F800       ; NSLOT x 16
@@ -166,7 +216,7 @@ USETALK         equ VMV+125
 TALKDLY         equ VMV+126     ; palabra
 LASTSND         equ VMV+128     ; palabra: last_sound (con signo)
 EGOPOS          equ VMV+130     ; _egoPositioned
-NBOXES          equ VMV+131     ; cajas de la sala en uso (0 hasta la fase 5: sin cajas)
+NBOXES          equ VMV+131     ; cajas cargadas de la sala en uso (load_room_state; 0 con ROOM n sin el 1 del arnes)
 INVSL           equ VMV+132     ; NINV palabras: el objeto de cada ranura de inventario (0: libre)
 VMV_END         equ INVSL+2*NINV ; $FF04
 SC              equ VMV_END     ; 24 B de variables temporales de los manejadores de B (no sobreviven a un script anidado)
@@ -204,7 +254,7 @@ W_OVH           equ 10
 ; bloque 4 (hueco de ODIRBUF): nombres de actor, verbos y monton de cadenas
 ACTNAMES        equ NEWNAMES+NNAMES*5   ; $8F3A: NACT x 3: pagina y direccion de la cadena de actorOps 13 (pagina 0: sin nombre)
 VERBS           equ ACTNAMES+3*NACT     ; NVERB x VSZ
-VSZ             equ 18
+VSZ             equ 19
 V_ID            equ 0
 V_COL           equ 1
 V_HI            equ 2
@@ -219,7 +269,11 @@ V_LEFT          equ 11          ; palabra
 V_TOP           equ 13          ; palabra
 V_NPG           equ 15          ; nombre: pagina (0 = sin nombre) y direccion (palabra) de la cadena en el script
 V_NAD           equ 16
+V_LEN           equ 18          ; fase 7: columnas del texto la ultima vez que se dibujo (vd_draw, overlay B): el rectangulo es [left, left + 8 * V_LEN)
 STRHEAP         equ VERBS+NVERB*VSZ     ; STRMAX bytes
+UIBUF           equ $9A40       ; fase 7: el nombre convertido de un verbo (ovb_vname, 48 bytes) para dibujarlo (programa: ui3.asm)
+FAKESL          equ $9AB0       ; fase 7: una ranura falsa (16 bytes) para convertir el nombre de un verbo fuera de un script: solo importa SL_PAGE (ovb_vname)
+PGBUF           equ $9AC0       ; fase 7: el texto de la pagina de mensaje que escribe displayDialog (96 bytes; el programa lo pinta arriba)
 HOLE_END        equ STRHEAP+STRMAX      ; hasta $9484 (donde acababa ODIRBUF)
 
                 include "vars_v3.inc"
@@ -234,6 +288,9 @@ HOLE_END        equ STRHEAP+STRMAX      ; hasta $9484 (donde acababa ODIRBUF)
                 jp vm_set_room          ; +15  APIN = sala
                 jp vm_abort             ; +18  abortCutscene
                 jp ENTRY_POINT          ; +21
+                jp vm_load_room         ; +24  APIN = sala: loadRoom desde fuera de un script (startScene)
+                jp vm_sentence          ; +27  APIVERB, APIN = a, APIA = b: doSentence desde fuera de un script
+                jp vm_inpscr            ; +30  APIVERB = zona, APIN = valor, APIA = modo: runInputScript (fase 7)
 
 vm_init:        ld (TOPSP),sp
                 ld hl,VARS
@@ -266,9 +323,16 @@ vm_init:        ld (TOPSP),sp
                 ld (CAMDEST),hl
                 ld hl,ev_null
                 ld (EVVEC),hl
-                ld hl,OBJCLS
-                ld de,OBJCLS+1
+                call cls_open           ; sin clases de actor (OBJCLS esta en la pagina fria CLS_PG)
+                ld hl,WINDOW
+                ld de,WINDOW+1
                 ld bc,3*NACT-1
+                ld (hl),0
+                ldir
+                call cls_close
+                ld hl,SENTN             ; fase 5: sin frases, sin pseudosalas, sin sala cargada
+                ld de,SENTN+1
+                ld bc,GW-SENTN-1        ; (y, fase 6, los argumentos de la caminata, ROOMRES y P3Y)
                 ld (hl),0
                 ldir
                 ld hl,ACTORS            ; Actor::initActor(-1) de los NACT actores
@@ -293,6 +357,11 @@ vi_act:         ex de,hl
                 ld hl,ACTNAMES
                 ld de,ACTNAMES+1
                 ld bc,3*NACT+NVERB*VSZ-1
+                ld (hl),0
+                ldir
+                ld hl,INEV              ; fase 7: sin suceso de entrada, el raton en (0, 0)
+                ld de,INEV+1
+                ld bc,IN_END-INEV-1
                 ld (hl),0
                 ldir
                 ld hl,16                ; main_top, main_h (vmgame3.game_reset)
@@ -382,22 +451,38 @@ vro_f:          inc hl
                 ld a,(RNTMP)
                 jp start_slot_at
 
-vm_set_room:    ld (TOPSP),sp           ; la sala en uso (sus scripts locales): copia su entrada de ROOMDIR
+; la sala en uso (ROOM del arnes): scripts locales (CURRD), objetos y, si APIFL <> 0, cajas y matriz (load_room_state, overlay C); sin startScene
+vm_set_room:    ld (TOPSP),sp
                 ld a,(APIN)
                 ld (CURROOM),a
-                cp 100
-                jr c,vsr_ok
-                xor a
-vsr_ok:         ld l,a
-                ld h,0
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                ld de,CURRD
-                ld bc,32
-                jp cold_rd
+                ld c,a                  ; C = sala
+                ld a,(APIFL)
+                ld b,a                  ; B = 1: con cajas (ROOM n 1 del arnes)
+                ld hl,OVC_ROOM
+                jp call_ovc             ; ret a quien llamo a la API
+
+; loadRoom desde fuera de un script: APIN = sala. Si no es la que esta en uso, startScene
+vm_load_room:   ld (TOPSP),sp
+                ld a,$FF
+                ld (CUR),a
+                ld a,(APIN)
+                ld hl,CURROOM
+                cp (hl)
+                ret z
+                ld c,a                  ; C = sala
+                ld hl,OVC_START
+                jp call_ovc
+
+; doSentence desde fuera de un script: verbo en APIVERB, a en APIN, b en APIA
+vm_sentence:    ld (TOPSP),sp
+                ld hl,OVC_SENTADD
+                jp call_ovc
+
+vm_inpscr:      ld (TOPSP),sp
+                ld a,(APIVERB)
+                ld hl,(APIN)
+                ld de,(APIA)
+                jp rin
 
 vm_abort:       ld (TOPSP),sp
                 jp abort_cutscene
@@ -430,11 +515,57 @@ vf_ok:          push af
                 call decrease_delay
                 pop af
                 call talk_frame         ; talk_delay -= delta y displayDialog
+                call vm_input           ; fase 7: processInput (INEV)
 vf_tk:
                 ld hl,(HAVEMSG)         ; update_scumm_vars: VAR_HAVE_MSG
                 ld h,0
                 ld (VAR_HAVE_MSG),hl
-                jp run_all
+                ld hl,(CAMCUR)          ; fase 5b: update_scumm_vars: VAR_CAMERA_POS_X
+                ld (VAR_CAMERA_POS_X),hl
+                call in_vars            ; fase 7: VAR_VIRT_MOUSE_X/Y y VAR_MOUSE_X/Y
+                call snd_tick           ; fase 5b: Sound::updateMusicTimer (programa: scumm.asm; arnes: vm.asm, no hace nada)
+                call run_all
+                call check_exec_verbs   ; fase 7: checkExecVerbs (VAR_VERB_SCRIPT)
+                ld a,(SENTN)            ; fase 5: checkAndRunSentenceScript (overlay C) si hay alguna frase
+                or a
+                jr z,vf_w
+                ld hl,OVC_SENT
+                call call_ovc
+vf_w:           call walk_frame
+                ld a,(CURROOM)          ; fase 5b: moveCamera (overlay C) tras walkActors, con la sala en uso
+                or a
+                ret z
+                ld hl,OVC_MOVECAM
+                jp call_ovc
+; fase 6, cada fotograma: walkActors (overlay D) si algun actor de la sala en uso se esta moviendo (si no, ~1.000 T)
+walk_frame:     ld a,(CURROOM)
+                or a
+                ret z
+                ld c,a
+                ld hl,ACTORS+ASIZE
+                ld b,NACT-1
+wfr_l:          ld a,(hl)               ; A_ROOM
+                cp c
+                jr nz,wfr_n
+                push hl
+                ld a,A_MOVING
+                add a,l
+                ld l,a
+                jr nc,wfr_1
+                inc h
+wfr_1:          ld a,(hl)
+                pop hl
+                or a
+                jr nz,wfr_go
+wfr_n:          ld a,ASIZE
+                add a,l
+                ld l,a
+                jr nc,wfr_2
+                inc h
+wfr_2:          djnz wfr_l
+                ret
+wfr_go:         ld hl,OVD_WALK
+                jp call_ovd
 ; fase 4b-2, cada fotograma: A = delta (<= 15). talk_delay = max(0, talk_delay - delta) (palabra con signo) y, si hay mensaje y no
 ; queda espera, displayDialog en el overlay B (la salida rapida, sin mensaje, cuesta ~100 T)
 talk_frame:     ld e,a
@@ -978,6 +1109,48 @@ call_ovc:       ld a,(OVLCUR)
                 pop af
                 jp map_blk0
 
+; llama a HL en el overlay D (fase 6: caminata). Los argumentos y los resultados van en memoria (WKX, WKY, WKDIR, WKBOX) y en IX
+call_ovd:       ld a,(OVLCUR)
+                push af
+                ld a,OVD_PAGE
+                call map_blk0
+                call jp_hl
+                pop af
+                jp map_blk0
+
+; box_addr: BC = caja -> C si no hay cajas o la caja es $FF; si no NC y HL = su registro (RBLOB + 1 + 18 * caja). Una caja igual al numero de
+; cajas cuenta como la ultima; mas alla (o >= 256): E_RANGE. Destruye A, DE (lo usan los overlays B, C y D; antes estaba en C)
+box_addr:       ld a,(NBOXES)
+                or a
+                jr z,bx_none
+                ld a,b
+                or a
+                jp nz,err_range
+                ld a,c
+                cp $FF
+                jr z,bx_none
+                ld hl,NBOXES
+                cp (hl)
+                jr c,bx_ok
+                jp nz,err_range
+                dec c
+bx_ok:          ld l,c
+                ld h,0
+                ld e,l
+                ld d,h
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,de
+                add hl,de
+                ld de,RBLOB+1
+                add hl,de
+                or a
+                ret
+bx_none:        scf
+                ret
+
 ; lee BC bytes de la pagina fria TABPG (desplazamiento HL) en DE, por el bloque 0
 cold_rd:        ld a,(OVLCUR)
                 push af
@@ -986,6 +1159,187 @@ cold_rd:        ld a,(OVLCUR)
                 ldir
                 pop af
                 jp map_blk0
+
+; ============================================================================================ fase 5: objetos y clases
+; OBJCLS esta en la pagina fria CLS_PG (3 bytes por objeto desde su principio) y se mira por el bloque 1, que hay que devolver a la pagina del
+; script: cls_open ... cls_close. Entre las dos no se puede leer el script (DE, SPTR) ni mapear otra pagina de datos; si se puede llamar a un
+; overlay (solo mueve el bloque 0).
+cls_open:       ld a,(WINPG)
+                ld (CLSSV),a
+                ld a,CLS_PG
+                jp map_phys
+cls_close:      ld a,(CLSSV)
+                jp map_phys
+cls_ptr:        ld e,l                  ; HL = objeto -> HL = direccion de sus 3 bytes de clases en la ventana ($2000 + 3 * objeto). Destruye DE
+                ld d,h
+                add hl,hl
+                add hl,de
+                ld de,WINDOW
+                add hl,de
+                ret
+
+; getObjectIndex: BC = objeto -> Z si esta en la sala, con HL = su registro (RBLOB) y A = su indice (1..; el mas alto si hubiera dos). Conserva BC y DE
+obj_index:      ld a,(NROBJ)
+                or a
+                jr z,oi_no
+                push de
+                ld d,a
+                ld hl,(OBJEND)
+oi_l:           ld a,l
+                sub OB_SZ
+                ld l,a
+                jr nc,oi_c
+                dec h
+oi_c:           ld a,(hl)
+                cp c
+                jr nz,oi_n
+                inc hl
+                ld a,(hl)
+                dec hl
+                cp b
+                jr z,oi_y
+oi_n:           dec d
+                jr nz,oi_l
+                pop de
+oi_no:          ld a,1
+                or a
+                ret
+oi_y:           ld a,d
+                pop de
+                cp a
+                ret
+
+; inv_find: BC = objeto -> Z si esta en INVSL (el inventario), si no NZ. Conserva BC y DE
+inv_find:       ld hl,INVSL
+                ld d,NINV
+if_l:           ld a,(hl)
+                inc hl
+                cp c
+                jr nz,if_n
+                ld a,(hl)
+                cp b
+                jr z,if_y
+if_n:           inc hl
+                dec d
+                jr nz,if_l
+                ld a,1
+                or a
+                ret
+if_y:           xor a
+                ret
+
+; whereIsObject: BC = objeto -> A = $FF no esta, 0 inventario, 1 sala (conserva BC)
+wio:            ld h,b
+                ld l,c
+                ld de,NOBJ
+                or a
+                sbc hl,de
+                jr nc,wio_nf
+                ld a,b
+                or c
+                jr z,wio_nf
+                ld hl,OBJOWN
+                add hl,bc
+                ld a,(hl)
+                cp OWNER_ROOM
+                jr z,wio_room
+                call inv_find
+                jr nz,wio_nf
+                xor a
+                ret
+wio_room:       call obj_index
+                jr nz,wio_nf
+                ld a,1
+                ret
+wio_nf:         ld a,$FF
+                ret
+
+; odir: BC = objeto (0..NOBJ-1) -> A = pagina de datos de su OBCD (0: no tiene) y HL = su direccion en la ventana. Conserva BC y DE
+odir:           push bc
+                push de
+                ld h,b
+                ld l,c
+                add hl,hl
+                add hl,bc
+                ld de,COLD_ODIR
+                add hl,de
+                ld de,ODTMP
+                ld bc,3
+                call cold_rd
+                ld a,(ODTMP)
+                ld hl,(ODTMP+1)
+                pop de
+                pop bc
+                ret
+
+; runInventoryScript(i): C = i (run_inv0: i = 0). Arranca VAR_INVENTORY_SCRIPT con i como primer local
+run_inv0:       ld c,0
+run_inv:        ld hl,(VAR_INVENTORY_SCRIPT)
+                ld a,h
+                or l
+                ret z
+                ld a,c
+                ld (VARARG),a
+                xor a
+                ld (VARARG+1),a
+                inc a
+                ld (VACNT),a
+                xor a
+                jp run_script
+
+; restore_win: la ventana de datos vuelve a la pagina del script en curso (si hay)
+restore_win:    ld a,(CUR)
+                inc a
+                ret z
+                ld ix,(CURSLOT)
+                ld a,(ix+SL_PAGE)
+                jp map_page
+
+; ---- actores (los usan los overlays B y C; antes estaban en B)
+actor_ix:       ld h,a                  ; A = actor (0..NACT-1) -> IX = su registro (usa HL, BC)
+                ld l,0
+                srl h
+                rr l
+                srl h
+                rr l
+                ld bc,ACTORS
+                add hl,bc
+                push hl
+                pop ix
+                ret
+
+chk_actor:      ld a,b                  ; derefActor: BC = valor de script -> IX; E_BADACTOR si no esta en 0..NACT-1
+                or a
+                jp nz,err_badactor
+                ld a,c
+                cp NACT
+                jp nc,err_badactor
+                jr actor_ix
+
+actor_num:      push ix                 ; IX = actor -> A = su numero (usa HL, BC)
+                pop hl
+                ld bc,-ACTORS
+                add hl,bc
+                add hl,hl
+                add hl,hl
+                ld a,h
+                ret
+
+in_room:        ld a,(CURROOM)          ; Z si el actor IX esta en la sala en uso
+                cp (ix+A_ROOM)
+                ret
+
+is_act13:       ld a,b                  ; A = 1 si BC es un numero de actor valido (0..NACT-1), si no 0
+                or a
+                jr nz,ia_n
+                ld a,c
+                cp NACT
+                jr nc,ia_n
+                ld a,1
+                ret
+ia_n:           xor a
+                ret
+
 
 ; ============================================================================================ ranuras
 slot_addr:      ld l,a                  ; A = ranura -> HL (conserva DE)
@@ -1534,7 +1888,16 @@ fz_n:           ld de,16
                 add ix,de
                 inc c
                 djnz fz_l
-                ld a,(CUTIDX)           ; (la cola de frases la congela la fase 5)
+                ld a,(SENTN)            ; las frases en cola: freeze += 1
+                or a
+                jr z,fz_nos
+                ld b,a
+                ld hl,SENTQ+SQ_FRZ
+                ld de,SSZ
+fz_sl:          inc (hl)
+                add hl,de
+                djnz fz_sl
+fz_nos:         ld a,(CUTIDX)
                 cp $FF
                 ret z
                 call slot_addr
@@ -1555,6 +1918,18 @@ uf_l:           bit 7,(ix+SL_STAT)
                 res 7,(ix+SL_STAT)
 uf_n:           add ix,de
                 djnz uf_l
+                ld a,(SENTN)            ; las frases en cola: si freeze > 0, freeze -= 1
+                or a
+                ret z
+                ld b,a
+                ld hl,SENTQ+SQ_FRZ
+                ld de,SSZ
+uf_sl:          ld a,(hl)
+                or a
+                jr z,uf_sn
+                dec (hl)
+uf_sn:          add hl,de
+                djnz uf_sl
                 ret
 
 ; abortCutscene
@@ -1899,4 +2274,5 @@ h_host_j:       call decode
 
                 include "arith32.asm"
                 include "vm_ops.asm"
+                include "vm_input.asm"
 MSGBUF:         defs MSG_MAX            ; fase 4b-2: charset_buf (el mensaje convertido, con su 0 final)

@@ -70,14 +70,14 @@ cx_lo:          cp 25                   ; los 24 bits de OBJCLS (el modelo da E_
                 ret c
                 jp err_range
 
-; cls_addr: HL = objeto, A = clase 1..24 -> HL = el byte de OBJCLS, A = la mascara del bit (destruye BC, DE)
+; cls_addr: HL = objeto, A = clase 1..24 -> HL = el byte de OBJCLS EN LA VENTANA (con CLS_PG mapeada: cls_open), A = la mascara del bit (destruye BC, DE)
 cls_addr:       dec a
                 ld c,a
                 ld e,l
                 ld d,h
                 add hl,hl
                 add hl,de
-                ld de,OBJCLS
+                ld de,WINDOW
                 add hl,de
                 ld a,c
                 rrca
@@ -109,16 +109,19 @@ put_class:      push de
                 ld a,(SC+2)
                 call cls_addr
                 ld b,a
+                call cls_open
                 ld a,(SC+3)
                 or a
                 ld a,b
                 jr z,pc_off
                 or (hl)
                 ld (hl),a
+                call cls_close
                 jr pc_act
 pc_off:         cpl
                 and (hl)
                 ld (hl),a
+                call cls_close
 pc_act:         pop hl                  ; Actor::classChanged: 1 <= objeto < NACT y la clase 22 (ignorar cajas)
                 ld a,(SC+2)
                 cp 22
@@ -146,7 +149,14 @@ get_class:      push de
                 call chk_obj_hl
                 call cls_xlat
                 call cls_addr
+                ld b,a
+                call cls_open
+                ld a,b
                 and (hl)
+                ld b,a
+                call cls_close
+                ld a,b
+                or a                    ; Z si el bit estaba a 0
                 pop de
                 ret
 
@@ -171,14 +181,16 @@ sc_zero:        ld hl,(SC+0)            ; clase 0: se borran las clases del obje
                 ld d,h
                 add hl,hl
                 add hl,de
-                ld de,OBJCLS
+                ld de,WINDOW
                 add hl,de
+                call cls_open
                 xor a
                 ld (hl),a
                 inc hl
                 ld (hl),a
                 inc hl
                 ld (hl),a
+                call cls_close
                 ld hl,(SC+0)
                 ld a,h
                 or a
@@ -772,11 +784,17 @@ cc_12:          ld hl,(ARGS+2)          ; SO_CURSOR_SET: 0..3
 ; del script (pagina y direccion), no una copia.
 
 ; verb_ix: A = ranura -> IX = su registro (destruye HL, BC; conserva DE)
-verb_ix:        ld l,a
+verb_ix:        ld l,a                  ; VERBS + 19 * ranura (VSZ = 19 = 16 + 3)
                 ld h,0
-                add hl,hl
                 ld b,h
                 ld c,l
+                add hl,hl
+                add hl,bc
+                ld b,h
+                ld c,l                  ; BC = 3 * ranura
+                ld l,a
+                ld h,0
+                add hl,hl
                 add hl,hl
                 add hl,hl
                 add hl,hl
@@ -811,6 +829,79 @@ vf_y:           ld a,h
                 ret
 
 ; kill_verb: A = ranura (0: nada): verbid, curmode, saveid y nombre a 0; suceso E 11 [ranura, 0]. Conserva DE
+; vd_draw (fase 7): ScummEngine::drawVerb en lo que mira la entrada. IX = el verbo: si es visible (id <> 0, curmode <> 0, saveid = 0 y de texto) V_LEN = columnas de su nombre
+; ya convertido (convertMessageToString: los codigos $FF cuentan como sus bytes), con tope de 40. Conserva IX y DE. El nombre es un puntero (pagina y direccion) al texto del script
+vd_draw:        ld a,(ix+V_ID)
+                or a
+                ret z
+                ld a,(ix+V_MODE)
+                or a
+                ret z
+                ld a,(ix+V_SAVE)
+                or a
+                ret nz
+                bit 1,(ix+V_FLG)
+                ret nz                  ; con imagen: sin rectangulo
+                push de
+                ld a,1                  ; modo 1: solo cuenta
+                call vd_conv
+                ld hl,(CM_LEN)
+                ld a,h
+                or a
+                ld a,40
+                jr nz,vd_s
+                ld a,l
+                cp 41
+                jr c,vd_s
+                ld a,40
+vd_s:           ld (ix+V_LEN),a
+                pop de
+                ret
+
+; vd_conv: IX = verbo, A = modo (1 solo cuenta, 2 a UIBUF): convierte su nombre (CM_LEN = bytes). Conserva IX
+vd_conv:        push ix
+                ld (CM_MODE),a
+                ld hl,0
+                ld (CM_LEN),hl
+                ld (CM_SUM),hl
+                xor a
+                ld (CM_DEP),a
+                ld a,(ix+V_NPG)
+                or a
+                jr z,vc_e
+                ld l,(ix+V_NAD)
+                ld h,(ix+V_NAD+1)
+                ld de,$FFFF
+                ld (CM_REM),de
+                call map_page           ; (conserva HL y DE)
+                call cm_run
+                ld ix,(CURSLOT)         ; la ventana vuelve a la pagina del script en curso
+                ld a,(ix+SL_PAGE)
+                call map_page
+vc_e:           pop ix
+                ret
+
+; ovb_vname (entrada +24 de B; fase 7): IX = verbo -> UIBUF = su nombre convertido (los codigos $FF incluidos), HL = cuantos bytes (tope 48). Para dibujar el verbo
+ovb_vname:      ld hl,(CURSLOT)         ; fuera de un script no hay ranura en curso: una falsa cuya pagina es la del nombre (cm_nest devuelve la ventana a la de CURSLOT)
+                push hl
+                ld a,(ix+V_NPG)
+                ld (FAKESL+SL_PAGE),a
+                ld hl,FAKESL
+                ld (CURSLOT),hl
+                ld a,2
+                call vd_conv
+                pop hl
+                ld (CURSLOT),hl
+                ld hl,(CM_LEN)
+                ld a,h
+                or a
+                jr nz,vn_cap            ; (HL = bytes: A no sirve, call_ovb lo pisa)
+                ld a,l
+                cp 49
+                ret c
+vn_cap:         ld hl,48
+                ret
+
 kill_verb:      or a
                 ret z
                 push de
@@ -991,7 +1082,11 @@ vn_have:        ld (SC+1),a
                 jp vo_l
 vo_end:         ld (SPTR),de
                 ld a,(SC+1)
+                or a
+                push af
                 call verb_ix
+                pop af
+                call nz,vd_draw         ; fase 7: drawVerb (solo el rectangulo; la ranura 0 no se dibuja)
                 ld l,(ix+V_ID)
                 ld h,0
                 ld (EVARGS),hl
@@ -1005,7 +1100,7 @@ b_saveRestoreVerbs:
                 ld a,(de)
                 inc de
                 ld (OPC),a
-                ld (SC+7),a
+                ld (SC+18),a
                 call rd_vb1
                 ld (SC+0),bc
                 call rd_vb2
@@ -1013,7 +1108,7 @@ b_saveRestoreVerbs:
                 call rd_vb3
                 ld (SC+4),bc
                 ld (SPTR),de
-                ld a,(SC+7)
+                ld a,(SC+18)
                 or a
                 jp z,err_badsub
                 cp 4
@@ -1029,7 +1124,7 @@ sr_loop:        ld a,(SC+0)
                 cp (hl)
                 jr z,sr_do
                 jr nc,sr_done           ; a > b
-sr_do:          ld a,(SC+7)
+sr_do:          ld a,(SC+18)
                 cp 2
                 jr z,sr_rest
                 jr nc,sr_del
@@ -1062,6 +1157,7 @@ sr_rest:        ld a,(SC+0)             ; 2: restaurar: el actual (saveid 0) se 
                 call verb_find
                 call verb_ix
                 ld (ix+V_SAVE),0
+                call vd_draw            ; fase 7: drawVerb
                 jr sr_next
 sr_del:         ld a,(SC+4)             ; 3: borrar el guardado
                 ld c,a
@@ -1208,7 +1304,11 @@ k2_ch:          ld (ix+A_SPEEDX),l
                 ld (ix+A_SPEEDY),c
                 ld a,(ix+A_MOVING)
                 or a
-                jp nz,err_badop         ; FASE6
+                jp z,ao_l
+                push de                 ; el puntero del script
+                ld hl,OVD_CALCMF        ; calcMovementFactor(_walkdata.next) (overlay D)
+                call call_ovd
+                pop de
                 jp ao_l
 
 ao_k8:          xor a                   ; initActor(0)
@@ -1243,14 +1343,16 @@ ao_k8:          xor a                   ; initActor(0)
                 ld b,h
                 add hl,hl
                 add hl,bc
-                ld bc,OBJCLS
+                ld bc,WINDOW
                 add hl,bc
+                call cls_open
                 xor a
                 ld (hl),a
                 inc hl
                 ld (hl),a
                 inc hl
                 ld (hl),a
+                call cls_close
                 jp ao_l
 
 ao_k9:          call rd_vw1             ; elevacion

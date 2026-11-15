@@ -55,6 +55,7 @@ Uso:
 El mundo del arnes del Z80 es DATA.BIN de V3/TOOLS/pack_data3.py (formato definitivo; ya no hay world3.bin).
 """
 import os
+import re
 import random
 import struct
 import sys
@@ -66,7 +67,7 @@ import scumm3dis as DIS        # noqa: E402
 from vmsynth3 import SYNTH_SCRIPT  # noqa: E402
 
 from vmcommon3 import *        # noqa: E402,F401
-from vmgame3 import GameMixin, MBS_LEFT_CLICK  # noqa: E402
+from vmgame3 import GameMixin, MBS_LEFT_CLICK, ObjData  # noqa: E402
 
 P1, P2, P3 = 0x80, 0x40, 0x20
 
@@ -1500,6 +1501,7 @@ class VM(GameMixin):
                 vs.bkcolor = self.vb(P1) & 0xFF
             else:
                 raise VMError(E_BADSUB, 'verbOps %d' % k)
+        self.draw_verb(slot)
         self.ev(EV_VERB, [vs.verbid, vs.curmode])
 
     def o_saveRestoreVerbs(self):
@@ -1525,6 +1527,7 @@ class VM(GameMixin):
                         self.kill_verb(slot2)
                     slot = self.get_verb_slot(a, c)
                     self.verbs[slot].saveid = 0
+                    self.draw_verb(slot)
                 a += 1
         elif sub == 3:
             while a <= b:
@@ -1822,9 +1825,13 @@ def make_scenarios(world, seeds=1, rooms=None, limit_objs=None, scripts=True):
 # Fotograma: VAR_TIMER y temporizadores, decreaseScriptDelay(min(delta, 15)) y runAllScripts; nada mas.
 # Resumen: D f=.. V=crc(256 variables) L=crc(locales de las NUM_SLOT ranuras) K=cut_sp,crc(datos y ranuras de la pila de
 # cutscenes) S=ranuras vivas (como VM.digest, con los offsets desde el inicio del bloque de codigo).
-# Ordenes de escenario: INIT, OPT (se ignora), SETVAR v n, ROOM n (sala en uso para los scripts locales, sin startScene),
+# Ordenes de escenario: INIT, OPT (se ignora), SETVAR v n, ROOM n [1] (sala en uso con sus objetos y, con el 1, sus cajas: sin startScene),
 # SCRIPT n [args], ENTRY n / EXIT n, OBJ obj verbo (runObjectScript sin buscar el objeto en la sala: el OBCD del indice),
-# ABORT (abortCutscene) y FRAMES delta n.
+# ABORT (abortCutscene), FRAMES delta n y, desde la fase 5, LOADROOM n (loadRoom desde fuera de un script), SENTENCE verbo a b (doSentence),
+# PSEUDO clave sala (pseudoRoom) y ACTORSET n sala x y traje visible [ignoreBoxes].
+# Fase 6 (caminata): el fotograma acaba con walkActors (si hay sala en uso) y el resumen lleva G= con cada actor de la sala en uso
+# (n:x,y,caja,moving separados por ';', o '-'): la traza de posiciones fotograma a fotograma. Los "clics" de los escenarios cwlk son
+# walkActorTo del ego (lo que hace el script de verbos con un clic en la sala; la entrada de verdad es de la fase 7).
 CORE_OPS = {
     'stopObjectCode', 'breakHere', 'endCutscene', 'cutscene', 'beginOverride', 'wait', 'delay', 'delayVariable',
     'jumpRelative', 'equalZero', 'notEqualZero', 'isEqual', 'isNotEqual', 'isGreater', 'isGreaterEqual', 'isLess',
@@ -1849,6 +1856,11 @@ CORE_OPS = {
     'roomOps', 'resourceRoutines', 'lights', 'oldRoomEffect', 'drawBox', 'systemOps', 'saveLoadVars', 'saveLoadGame',
     # fase 4b-2: mensajes
     'print', 'printEgo',
+    # fase 5: salas, objetos y frases
+    'loadRoom', 'loadRoomWithEgo', 'pseudoRoom', 'startObject', 'getVerbEntrypoint', 'drawObject', 'pickupObject', 'findObject',
+    'isActorInBox', 'setBoxFlags', 'doSentence', 'waitForSentence',
+    # fase 6: caminata
+    'walkActorTo', 'walkActorToObject', 'walkActorToActor', 'waitForActor',
 }
 
 
@@ -1910,18 +1922,132 @@ class CoreVM(VM):
         if jump is not None and not (s >> 8) & 1:
             self.ptr += jump
 
-    def o_actorFollowCamera(self):
-        # fase 4a: mientras el Z80 no tenga startScene (fase 5), un actor que no esta en la sala sale al anfitrion como H oo [actor]
-        act = self.vb(P1)
-        a = self.deref_actor(act)
-        if not a.in_room():
-            self.trace.append('H %02X [%d]' % (self.op_byte, act & 0xFFFF))
-            return
-        self.actor_follow_camera(act)
+    # ---- fase 5: lo que el Z80 hace distinto (V3/FASE3.md, "Fase 5"). La caminata (fase 6) ya es la de GameMixin
+    def obcd_of(self, obj):
+        """(codigo, offset) del OBCD del objeto: el del indice de DATA.BIN (ODIR), tanto del inventario como de la sala (en Indy3 ningun
+        objeto esta en dos salas: pack_data3 lo comprueba). El Z80 no copia el OBCD al inventario."""
+        if obj in self.inventory or (self.get_object_index(obj) >= 0 and self.owner[obj] == OWNER_ROOM):
+            e = self.w.objects.get(obj)
+            if e is not None:
+                return e[1].block, 0
+        return None
 
-    def calc_movement_factor(self, a, nxt):
-        # fase 4b-1: actorOps 2 con el actor en movimiento recalcula la caminata (calcMovementFactor): es de la fase 6, el Z80 da E_BADOP
-        raise VMError(E_BADOP, 'calcMovementFactor: caminata (fase 6)')
+    def get_obcd_offs(self, obj):
+        return 0
+
+    def add_object_to_inventory(self, obj, room):
+        for slot in range(NUM_INVENTORY):
+            if self.inventory[slot] == 0:
+                self.inventory[slot] = obj
+                return
+        raise VMError(E_RANGE, 'inventario lleno')
+
+    def find_object(self, x, y):
+        """findObject (v3). El estado de un padre se lee vivo (OBJST), no la copia de objs[].state que ScummVM refresca en cada fotograma:
+        el Z80 no tiene esa copia. Solo difiere si se cambia el estado y se llama a findObject en el mismo fotograma."""
+        for i in range(1, NUM_LOCAL_OBJECTS):
+            o = self.objs[i]
+            if o.obj_nr < 1 or self.get_class(o.obj_nr, CLASS_UNTOUCHABLE):
+                continue
+            b = i
+            while True:
+                a = self.objs[b].parentstate
+                b = self.objs[b].parent
+                if b == 0:
+                    if o.x <= x < o.x + o.width and o.y <= y < o.y + o.height:
+                        return o.obj_nr
+                    break
+                if b >= NUM_LOCAL_OBJECTS:
+                    break
+                po = self.objs[b]
+                if ((self.gstate[po.obj_nr] if po.obj_nr else 0) & 0xF) != a:
+                    break
+        return 0
+
+    def o_findObject(self):
+        self.get_result_pos()
+        x = self.vb(P1)
+        y = self.vb(P2)
+        self.set_result(self.find_object(x, y))
+
+    def o_drawObject(self):
+        obj = self.vw(P1)
+        xpos = self.vw(P2)
+        ypos = self.vw(P3)
+        idx = self.get_object_index(obj)
+        if idx == -1:
+            return
+        od = self.objs[idx]
+        if xpos != 0xFF:
+            if not (0 <= xpos <= 255 and 0 <= ypos <= 255):         # el Z80 guarda x/8 e y/8 en un byte
+                raise VMError(E_RANGE, 'drawObject en %d, %d' % (xpos, ypos))
+            od.walk_x = s16(od.walk_x + xpos * 8 - od.x)
+            od.x = xpos * 8
+            od.walk_y = s16(od.walk_y + ypos * 8 - od.y)
+            od.y = ypos * 8
+        for i in range(NUM_LOCAL_OBJECTS - 1, 0, -1):
+            o = self.objs[i]
+            if o.obj_nr and o.x == od.x and o.y == od.y and o.width == od.width and o.height == od.height:
+                self.put_state(o.obj_nr, 0)
+        self.put_state(obj, 1)
+        self.ev(EV_DRAWOBJ, [obj, od.x, od.y, 1])
+
+    def o_loadRoom(self):
+        room = self.vb(P1)
+        if not 0 <= room <= 255:                                     # el Z80 trabaja con la sala en un byte
+            raise VMError(E_RANGE, 'loadRoom %d' % room)
+        if room != self.cur_room:
+            self.start_scene(room)
+
+    def o_loadRoomWithEgo(self):
+        obj = self.vw(P1)
+        room = self.vb(P2)
+        if not 0 <= room <= 255:
+            raise VMError(E_RANGE, 'loadRoomWithEgo %d' % room)
+        a = self.deref_actor(self.vars[VAR_EGO])
+        self.put_actor(a, a.x, a.y, room)
+        old_dir = a.facing
+        self.ego_positioned = False
+        x = self.fetch_word_signed()
+        y = self.fetch_word_signed()
+        self.vars[VAR_WALKTO_OBJ] = obj
+        self.start_scene(a.room)
+        self.vars[VAR_WALKTO_OBJ] = 0
+        if self.where_is_object(obj) != WIO_ROOM:
+            raise VMError(E_BADOBJ, 'loadRoomWithEgo: objeto %d no esta en la sala' % obj)
+        if not self.ego_positioned:
+            x2, y2, d = self.get_object_xy_pos(obj)
+            self.put_actor(a, x2, y2, self.cur_room)
+            if a.facing == old_dir:
+                self.set_direction(a, d + 180)
+        a.moving = 0
+        self.cam['cur'] = self.cam['dest'] = a.x
+        self.set_camera_follows(a)
+        if x != -1:
+            self.start_walk_actor(a, x, y, -1)
+
+    def o_doSentence(self):
+        verb = self.vb(P1)
+        if verb == 0xFE:
+            self.sentence = []
+            self.stop_script(self.vars[VAR_SENTENCE_SCRIPT])
+            return
+        if not 0 <= verb <= 255:                                     # el Z80 guarda el verbo en un byte
+            raise VMError(E_RANGE, 'doSentence verbo %d' % verb)
+        a = self.vw(P2)
+        b = self.vw(P3)
+        self.do_sentence(verb, a, b)
+
+    def o_pseudoRoom(self):
+        i = self.fetch_byte()
+        while True:
+            j = self.fetch_byte()
+            if j == 0:
+                break
+            if j >= 0x80:
+                if i == 0:                                           # el Z80 usa 0 como "sin sala asignada"
+                    raise VMError(E_RANGE, 'pseudoRoom 0')
+                self.resource_mapper[j & 0x7F] = i
 
     def o_systemOps(self):
         sub = self.fetch_byte()
@@ -1981,23 +2107,26 @@ class CoreVM(VM):
         v[VAR_TIMER_TOTAL] = s16(v[VAR_TIMER_TOTAL] + delta)
         for i in (VAR_TMR_1, VAR_TMR_2, VAR_TMR_3) + VARS_INDY3_TIMERS:
             v[i] = s16(v[i] + delta)
+        real = delta
         if delta > 15:
             delta = 15
         self.decrease_script_delay(delta)
         self.talk_delay = max(0, self.talk_delay - delta)       # fase 4b-2: mensajes (como VM.step_frame)
         self.display_dialog()
-        self.vars[VAR_HAVE_MSG] = self.have_msg                 # (update_scumm_vars: de lo demas, solo esta)
+        self.process_input()                                    # fase 7: un suceso de entrada por fotograma (INEV del Z80)
+        self.vars[VAR_CAMERA_POS_X] = s16(self.cam['cur'])      # (update_scumm_vars: de lo demas, solo estas y el raton)
+        self.vars[VAR_HAVE_MSG] = self.have_msg
+        self.vars[VAR_VIRT_MOUSE_X] = s16(self.vmouse[0])
+        self.vars[VAR_VIRT_MOUSE_Y] = s16(self.vmouse[1])
+        self.vars[VAR_MOUSE_X] = s16(self.mouse[0])
+        self.vars[VAR_MOUSE_Y] = s16(self.mouse[1])
+        self.update_music_timer(real)                           # fase 5b: solo en el modo de sonido "timed" (BOOT); en "mock" no hace nada
         self.run_all_scripts()
-
-    def get_obj_or_actor_name(self, obj):
-        """FASE5: el nombre de un objeto sale de su OBCD (inventario o sala), que el nucleo aun no tiene: sin nombre. Los actores y los
-        nombres nuevos de setObjectName si."""
-        if self.obj_is_actor(obj):
-            return self.deref_actor(obj).name
-        for i in range(NUM_NEW_NAMES):
-            if self.new_names[i] == obj:
-                return self.new_name_str[i]
-        return None
+        self.check_exec_verbs()                                 # fase 7: checkExecVerbs (VAR_VERB_SCRIPT)
+        self.check_and_run_sentence_script()                    # fase 5
+        if self.cur_room != 0:                                  # fase 6: walkActors; fase 5b: moveCamera (updateObjectStates no esta en el nucleo: el Z80 mira OBJST vivo)
+            self.walk_actors()
+            self.move_camera()
 
     def digest(self):
         v = crc16(b''.join(struct.pack('<H', x & 0xFFFF) for x in self.vars))
@@ -2022,12 +2151,42 @@ class CoreVM(VM):
         inv = crc16(b''.join(struct.pack('<H', x) for x in self.inventory))
         nn = crc16(b''.join(struct.pack('<H', x & 0xFFFF) for x in self.new_names))
         cam = self.cam
-        return ('D f=%d V=%04X L=%04X K=%d,%04X A=%04X O=%04X I=%04X N=%04X M=%d,%d,%d,%d,%d X=%d,%d,%d,%d,%04X,%04X C=%d,%d,%d,%d,%d U=%d,%d,%d,%d W=%04X T=%04X P=%04X S=%s' % (
+        return ('D f=%d V=%04X L=%04X K=%d,%04X A=%04X O=%04X I=%04X N=%04X M=%d,%d,%d,%d,%d X=%d,%d,%d,%d,%04X,%04X C=%d,%d,%d,%d,%d U=%d,%d,%d,%d W=%04X T=%04X P=%04X Q=%d,%04X R=%d,%d,%04X,%d,%04X G=%s S=%s' % (
             self.frame, v, lc, self.cut_sp, k, a, o, inv, nn, self.have_msg, self.talk_delay, int(self.keep_text), self.cur_room,
             s16(self.last_sound), int(self.use_talk_anims), self.msg_count, self.charset_pos, self.charset_color,
             crc16(self.charset_buf), self.slots_crc(), s16(cam['cur']), s16(cam['dest']), cam['mode'], cam['follows'], int(cam['moving_to_actor']),
             s16(self.user_put), s16(self.cursor_state), s16(self.main_top), s16(self.main_h), self.verbs_crc(), self.strings_crc(),
-            self.actor_names_crc(), ' '.join(sl)))
+            self.actor_names_crc(), len(self.sentence), self.sentence_crc(), len(self.boxes), self.room_nobj(), self.room_crc(),
+            int(self.ego_positioned), self.resmap_crc(), self.walk_trace(), ' '.join(sl)))
+
+    def walk_trace(self):
+        """fase 6: posicion de cada actor de la sala en uso (n:x,y,caja,moving), para seguir la caminata fotograma a fotograma."""
+        if self.cur_room == 0:
+            return '-'
+        t = ['%d:%d,%d,%d,%d' % (a.num, a.x, a.y, a.walkbox, a.moving) for a in self.actors[1:] if a.in_room()]
+        return ';'.join(t) or '-'
+
+    # fase 5: cola de frases, objetos y cajas de la sala (el Z80 los tiene en RBLOB), mapa de pseudosalas
+    def sentence_crc(self):
+        return crc16(b''.join(struct.pack('<BHHBB', st['verb'] & 0xFF, st['a'] & 0xFFFF, st['b'] & 0xFFFF, st['prep'], min(st['freeze'], 255))
+                              for st in self.sentence))
+
+    def room_nobj(self):
+        return len(self.room.objects) if self.room else 0
+
+    def room_crc(self):
+        """Los registros de los objetos de la sala (13 bytes de los 14 del blob: sin la bandera de imagen propia) y las cajas (18 bytes)."""
+        b = bytearray()
+        for i in range(1, self.room_nobj() + 1):
+            o = self.objs[i]
+            b += struct.pack('<HBBBBBBhhB', o.obj_nr, o.x // 8, o.y // 8, o.width // 8, o.height // 8, o.parent, o.parentstate,
+                             o.walk_x, o.walk_y, o.actordir)
+        for bx in self.boxes:
+            b += struct.pack('<8hBB', *bx)
+        return crc16(b)
+
+    def resmap_crc(self):
+        return crc16(bytes(self.resource_mapper.get(k, 0) & 0xFF for k in range(128)))
 
     def slots_crc(self):
         """fase 4b-2: los valores por omision de las 4 ranuras de texto de print (el Z80 guarda esos y una copia de trabajo): xpos, ypos,
@@ -2044,7 +2203,7 @@ class CoreVM(VM):
         b = bytearray()
         for vs in self.verbs:
             b += bytes([vs.verbid & 255, vs.color & 255, vs.hicolor & 255, vs.dimcolor & 255, vs.bkcolor & 255, vs.curmode & 255,
-                        vs.saveid & 255, vs.key & 255, vs.center & 255, vs.type & 255])
+                        vs.saveid & 255, vs.key & 255, vs.center & 255, vs.type & 255, vs.length & 255])
             b += struct.pack('<HHHH', vs.imgindex & 0xFFFF, vs.left & 0xFFFF, vs.top & 0xFFFF, len(vs.name)) + vs.name
         return crc16(b)
 
@@ -2082,8 +2241,29 @@ class CoreVM(VM):
             self.start_slot(obj, WIO_ROOM, o.block, entry, None, slot=slot, base=0)
 
 
+def screen_to_scumm(px, py):
+    """Pixeles de la pantalla del ZX81 (256 x 192) -> coordenadas de SCUMM (como in_conv de ui3.asm): en la sala y arriba tal cual; en la interfaz (y >= 144) la columna
+    de 6 pixeles * 8 y la y + 8 (las filas de verbos e inventario de SCUMM, 152-199, van a las 144-191)."""
+    px = max(0, min(248, px))
+    py = max(0, min(184, py))
+    if py < 144:
+        return px, py
+    return min(px // 6, 39) * 8, py + 8
+
+
+def screen_event(kind, a):
+    """Un suceso de entrada de la pantalla (click px py, move px py, rclick, key k, esc) -> el de CoreVM.pending."""
+    if kind in ('click', 'move'):
+        x, y = screen_to_scumm(a[0], a[1])
+        return ('click' if kind == 'click' else 'mouse', x, y)
+    if kind == 'key':
+        return ('key', a[0])
+    return ('rclick',) if kind == 'rclick' else ('esc',)
+
+
 def run_scenario_core(world, lines):
     vm = CoreVM(world, seed=0)
+    vm.at_events = {}
     out = []
     for ln in lines:
         p = ln.split()
@@ -2091,13 +2271,41 @@ def run_scenario_core(world, lines):
         try:
             if cmd == 'INIT':
                 vm.reset()
-            elif cmd == 'OPT':
-                pass
+            elif cmd == 'OPT':                          # OPT sonido mock|timed, OPT proteccion 0|1 (solo las usa BOOT)
+                if p[1] == 'sonido':
+                    vm.sound_mode = p[2]
+                elif p[1] == 'proteccion':
+                    vm.protection = bool(int(p[2]))
             elif cmd == 'SETVAR':
                 vm.vars[int(p[1])] = s16(int(p[2]))
-            elif cmd == 'ROOM':
-                vm.cur_room = int(p[1])
-                vm.room = world.rooms.get(vm.cur_room)
+            elif cmd == 'AT':                           # AT fotograma tipo [a b] (fase 7): un suceso de entrada en ese fotograma de BOOT; a, b en pixeles de la pantalla del ZX81
+                vm.at_events.setdefault(int(p[1]), []).append((p[2], [int(x) for x in p[3:]]))
+            elif cmd == 'BOOT':                         # BOOT n: n fotogramas como el bucle principal del programa (scumm.asm): proteccion y delta = max(1, VAR_TIMER_NEXT)
+                for _ in range(int(p[1])):
+                    vm.frame += 1
+                    delta = max(1, vm.vars[VAR_TIMER_NEXT])     # (el programa lo lee antes de cargar una sala o arrancar un script de depuracion en este fotograma)
+                    for kind, a in vm.at_events.pop(vm.frame, []):
+                        if kind == 'script':                    # un script global en ese fotograma (el programa: DBG_START)
+                            vm.cur = 0xFF
+                            vm.run_script(a[0], False, False, [0] * NUM_LOCAL)
+                        elif kind == 'room':                    # cargar una sala (el programa: DBG_ROOM, vm_load_room)
+                            vm.cur = 0xFF
+                            vm.start_scene(a[0])
+                        else:
+                            vm.pending.append(screen_event(kind, a))
+                    protection_hook(vm)
+                    vm.step_frame(delta)
+                    vm.trace.append(vm.digest())
+            elif cmd == 'ROOM':                         # ROOM n [1]: sala en uso con sus objetos (y con las cajas si hay un 1), sin startScene
+                set_room_core(vm, int(p[1]), len(p) > 2 and p[2] == '1')
+            elif cmd == 'PSEUDO':
+                vm.resource_mapper[int(p[1])] = int(p[2])
+            elif cmd == 'LOADROOM':                     # como o_loadRoom desde fuera de un script
+                vm.cur = 0xFF
+                if int(p[1]) != vm.cur_room:
+                    vm.start_scene(int(p[1]))
+            elif cmd == 'SENTENCE':
+                vm.do_sentence(int(p[1]), s16(int(p[2])), s16(int(p[3])))
             elif cmd == 'OWNER':
                 vm.owner[int(p[1])] = int(p[2])
             elif cmd == 'STATE':
@@ -2109,6 +2317,8 @@ def run_scenario_core(world, lines):
             elif cmd == 'ACTORSET':                     # ACTORSET n sala x y traje visible: campos a mano, sin efectos
                 a = vm.actors[int(p[1])]
                 a.room, a.x, a.y, a.costume, a.visible = int(p[2]) & 0xFF, s16(int(p[3])), s16(int(p[4])), int(p[5]), bool(int(p[6]))
+                if len(p) > 7:                          # 7.o: ignoreBoxes
+                    a.ignore_boxes = bool(int(p[7]))
             elif cmd == 'SCRIPT':
                 vm.cur = 0xFF
                 vm.run_script(int(p[1]), False, False, [int(x) for x in p[2:]])
@@ -2124,6 +2334,15 @@ def run_scenario_core(world, lines):
                 vm.run_object_core(int(p[1]), int(p[2]))
             elif cmd == 'ABORT':
                 vm.abort_cutscene()
+            elif cmd == 'USERPUT':                      # USERPUT u c: _userPut y _cursor.state a mano (fase 7)
+                vm.user_put, vm.cursor_state = int(p[1]), int(p[2])
+            elif cmd == 'INPUT':                        # INPUT area valor modo: runInputScript tal cual (fase 7)
+                vm.cur = 0xFF
+                vm.run_input_script(int(p[1]), s16(int(p[2])), int(p[3]) if len(p) > 3 else 0)
+            elif cmd in ('CLICK', 'MOVE', 'RCLICK', 'KEY', 'ESC'):   # fase 7: un suceso de entrada para el siguiente fotograma (x, y en coordenadas de SCUMM)
+                vm.pending.append({'CLICK': ('click', int(p[1]) if len(p) > 1 else 0, int(p[2]) if len(p) > 2 else 0),
+                                   'MOVE': ('mouse', int(p[1]) if len(p) > 1 else 0, int(p[2]) if len(p) > 2 else 0),
+                                   'RCLICK': ('rclick',), 'KEY': ('key', int(p[1]) if len(p) > 1 else 0), 'ESC': ('esc',)}[cmd])
             elif cmd == 'CODE':                         # bytecode sintetico (vmsynth3.py) como un script global
                 vm.cur = 0xFF
                 vm.start_slot(SYNTH_SCRIPT, WIO_GLOBAL, bytes.fromhex(p[1]), 0)
@@ -2141,9 +2360,28 @@ def run_scenario_core(world, lines):
             return out, vm
         out += vm.trace
         vm.trace = []
-        if cmd in ('SCRIPT', 'ENTRY', 'EXIT', 'OBJ', 'ABORT', 'CODE'):
+        if cmd in ('SCRIPT', 'ENTRY', 'EXIT', 'OBJ', 'ABORT', 'CODE', 'LOADROOM', 'SENTENCE', 'INPUT'):
             out.append(vm.digest())
     return out, vm
+
+
+def set_room_core(vm, rn, boxes):
+    """La orden ROOM del modo nucleo: la sala en uso con sus objetos (objs[]), ENCD/EXCD y, si boxes, las cajas y la matriz; sin startScene
+    (ni scripts, ni actores, ni camara). El Z80 (vm_set_room) copia el blob de DATA.BIN a RBLOB."""
+    vm.cur_room = rn
+    vm.room = vm.w.rooms.get(rn)
+    vm.boxes, vm.matrix = [], b''
+    vm.encd = vm.excd = 0
+    for i in range(NUM_LOCAL_OBJECTS):
+        vm.objs[i] = ObjData()
+    r = vm.room
+    if r:
+        vm.encd, vm.excd = r.encd_off, r.excd_off
+        if boxes:
+            bx, mat = r.boxes()
+            vm.boxes = [list(b) for b in bx]
+            vm.matrix = bytes(mat)
+        vm.reset_room_objects()
 
 
 def make_synth_scenarios(world, seeds=1, per_seed=1200):
@@ -2151,37 +2389,55 @@ def make_synth_scenarios(world, seeds=1, per_seed=1200):
     import vmsynth3
     sc = []
     rooms = sorted(world.rooms) + [0, 0]
+    robjs = {rn: [o.id for o in r.objects] for rn, r in world.rooms.items()}
+    mapped = sorted({0x7F & k for k in range(0, 128, 9)}) or [0]
+    verbs = lambda o: [v for v, _ in world.objects[o][1].verbs] if o in world.objects else []
     for seed in range(seeds):
         rng = random.Random(9000 + seed)
         for i in range(per_seed):
             room = rng.choice(rooms)
-            lines = init_lines_core(rng, world, room or None) + ['ROOM %d' % room]
+            nbx = len(world.rooms[room].boxes()[0]) if room else 0
+            rects = [(o.x + o.width // 2, o.y + o.height // 2) for o in world.rooms[room].objects] if room else []
+            ctx = dict(rooms=sorted(world.rooms), room=room, robjs=robjs, verbs=verbs, nboxes=nbx, mapped=mapped, rects=rects,
+                       boxes=world.rooms[room].boxes()[0] if room else [], width=world.rooms[room].width if room else 320)
+            lines = init_lines_core(rng, world, room or None, rng.random() < 0.6 or None) + ['ROOM %d%s' % (room, ' 1' if rng.random() < 0.6 else '')]
+            ctx['inv'] = [int(ln.split()[2]) for ln in lines if ln.startswith('INV ')]
             for _ in range(rng.choice([1, 1, 2])):
-                lines.append('CODE ' + vmsynth3.make_code(rng).hex())
+                lines.append('CODE ' + vmsynth3.make_code(rng, ctx=ctx).hex())
             lines.append(rng.choice(['FRAMES 3 2', 'FRAMES 3 2', 'FRAMES 15 8', 'FRAMES 15 40', 'FRAMES 1 70', 'FRAMES 6 25']))
             sc.append(('syn%04d.s%d' % (i, seed), lines))
     return sc
 
 
-def init_lines_core(rng, world, room=None):
+def init_lines_core(rng, world, room=None, ign=None):
     """INIT + las variables de despues del arranque (boot_snapshot: solo SETVAR) + unas pocas cambiadas al azar, y desde la
     fase 4a unos actores puestos a mano (ACTORSET: en la sala en uso, en la 0 o en otra, con o sin traje, visibles o no),
     unos duenos de objeto (OWNER) y el inventario (INV) con esos objetos."""
-    lines = ['INIT'] + [ln for ln in boot_snapshot(world) if ln.startswith('SETVAR ')]
+    lines = ['INIT'] + [ln for ln in boot_snapshot(world) if ln.startswith(('SETVAR ', 'PSEUDO '))]
     for v in range(NUM_VARS):
         if v not in NO_RANDOM_VARS and rng.random() < 0.02:
             lines.append('SETVAR %d %d' % (v, rng.choice([0, 1, 1, 2, 3, 4, 5, 8, 10, 15, 255])))
     rooms = [room, room, room, 0, 5] if room else [0, 0, 1, 5]
     for n in range(NUM_ACTORS):
         if rng.random() < 0.3:
-            lines.append('ACTORSET %d %d %d %d %d %d' % (n, rng.choice(rooms), rng.randrange(0, 321), rng.randrange(0, 160),
-                                                          rng.choice([0, 1, 2, 3, 5]), rng.randrange(2)))
+            lines.append('ACTORSET %d %d %d %d %d %d %d' % (n, rng.choice(rooms), rng.randrange(0, 321), rng.randrange(0, 160),
+                                                             rng.choice([0, 1, 2, 3, 5]), rng.randrange(2),
+                                                             (rng.random() < 0.3) if ign is None else int(ign)))
     if rng.random() < 0.4:
         for k in range(rng.randrange(1, 5)):
             obj = rng.randrange(1, NUM_OBJECTS)
             lines.append('OWNER %d %d' % (obj, rng.randrange(1, NUM_ACTORS)))
             lines.append('INV %d %d' % (rng.randrange(NUM_INVENTORY), obj))
     return lines
+
+
+WALK_ROOMS = (1, 15, 20, 28)             # fase 6: pasillo, Venecia y castillo (mas escenarios de caminata)
+
+
+# fase 7: donde estan los verbos de Indy3 (script 96) y sus teclas, para los escenarios de entrada
+INPUT_VERB_X = [0, 48, 104, 176, 256, 152, 168]
+INPUT_VERB_Y = [144, 152, 160, 168, 176, 184, 192]
+INPUT_KEYS = [113, 97, 122, 119, 115, 120, 101, 100, 99, 114, 102, 118, 116, 103, 98, 121, 117, 104, 106, 110, 109, 111, 108, 13, 27, 46, 32]
 
 
 def make_scenarios_core(world, seeds=1, rooms=None, scripts=True, objects=True):
@@ -2193,23 +2449,159 @@ def make_scenarios_core(world, seeds=1, rooms=None, scripts=True, objects=True):
         rng = random.Random(5000 + seed)
         for rn in rlist:
             r = world.rooms[rn]
+            rb = lambda: 'ROOM %d%s' % (rn, ' 1' if rng.random() < 0.5 else '')      # con cajas o sin ellas
             sc.append(('croom%02d.s%d' % (rn, seed), init_lines_core(rng, world, rn) + [
-                'ROOM %d' % rn, 'ENTRY %d' % rn, 'FRAMES 4 30', 'FRAMES 40 2', 'ABORT', 'FRAMES 4 10', 'EXIT %d' % rn, 'FRAMES 4 10']))
+                rb(), 'ENTRY %d' % rn, 'FRAMES 4 30', 'FRAMES 40 2', 'ABORT', 'FRAMES 4 10', 'EXIT %d' % rn, 'FRAMES 4 10']))
+            nbx = len(r.boxes()[0])
+            if nbx:                                                # isActorInBox con cada caja de la sala y el actor 3 en varios puntos
+                import vmsynth3 as VS
+                bxs = r.boxes()[0]
+                for t in range(3):
+                    b0 = bxs[rng.randrange(nbx)]
+                    cx_, cy_ = sum(b0[0:8:2]) // 4, sum(b0[1:8:2]) // 4
+                    vk = rng.randrange(4)                              # un punto un poco dentro, cerca de un vertice
+                    ix_, iy_ = b0[2 * vk] + (cx_ - b0[2 * vk]) // 6, b0[2 * vk + 1] + (cy_ - b0[2 * vk + 1]) // 6
+                    px = rng.choice([cx_, b0[0] + 1, b0[2], b0[4] - 1, rng.randrange(0, r.width), ix_, ix_])
+                    py = rng.choice([cy_, b0[1], b0[3] + 1, b0[5] - 1, rng.randrange(0, 150), iy_, iy_])
+                    if rng.random() < 0.5:
+                        px, py = ix_, iy_
+                    code = bytearray()
+                    for k in range(nbx + 1):
+                        code += bytes([0x1F, 3, k, 5, 0, 0x1A, 224 + k % 32, 0, 1, 0])
+                    code.append(0)
+                    sc.append(('cbox%02d.%d.s%d' % (rn, t, seed), init_lines_core(rng, world, rn, True) + [
+                        'ACTORSET 3 %d %d %d 1 1 1' % (rn, px, py), 'ROOM %d 1' % rn, 'CODE ' + code.hex(), 'FRAMES 3 1']))
+            # fase 5: startScene (loadRoom desde otra sala: salida de la anterior, entrada de esta) y la cola de frases
+            frm = rng.choice(rlist)
+            sc.append(('clrm%02d.s%d' % (rn, seed), init_lines_core(rng, world, rn, True) + [
+                'ROOM %d 1' % frm, 'LOADROOM %d' % rn, 'FRAMES 4 30', 'LOADROOM %d' % rng.choice(rlist), 'FRAMES 4 10']))
+            if r.objects:
+                import vmsynth3 as VS
+                a = VS.Asm(rng, varprob=1.0)                       # findObject sobre el centro de cada objeto de la sala, con estados al azar (cadena de padres)
+                for o in rng.sample(r.objects, min(len(r.objects), 26)):
+                    a.begin()
+                    a.op('findObject', [('b', o.x + o.width // 2 + rng.choice([0, 0, 1])), ('b', o.y + o.height // 2)], pre=a.result())
+                a.out.append(0)
+                st = ['STATE %d %d' % (o.id, rng.randrange(2)) for o in r.objects if rng.random() < 0.5]
+                sc.append(('cfnd%02d.s%d' % (rn, seed), init_lines_core(rng, world, rn, True) + ['ROOM %d 1' % rn] + st + [
+                    'CODE ' + a.out.hex(), 'FRAMES 3 1']))
+                o1, o2 = rng.choice(r.objects), rng.choice(r.objects)
+                snt = [('SENTENCE %d %d %d' % (rng.choice([1, 2, 3, 4, 5, 7, 8, 9, 13, 14, 15]), (o1 if rng.random() < 0.8 else o2).id,
+                        o2.id if rng.random() < 0.4 else 0)) for _ in range(rng.choice([1, 1, 2, 3]))]
+                sc.append(('csnt%02d.s%d' % (rn, seed), init_lines_core(rng, world, rn, True) + [
+                    'ROOM %d 1' % rn] + snt + ['FRAMES 4 12', 'FRAMES 6 25']))
+            if nbx:                                                # fase 6: caminata (clics = walkActorTo del ego) y los demas opcodes que la tocan
+                import vmsynth3 as VS
+                wr_ = random.Random(7000 + 100 * seed + rn)        # (generador aparte: no cambia los escenarios de antes)
+                ctx = dict(rooms=rlist, room=rn, robjs={rn: [o.id for o in r.objects]}, boxes=bxs, width=r.width, nboxes=nbx)
+                ego = 1
+                for t in range(12 if rn in WALK_ROOMS else 3):
+                    lines = init_lines_core(wr_, world, rn, False) + ['SETVAR %d %d' % (VAR_EGO, ego)]
+                    for n in (1, 2, 3):                            # clases de actor que cambian la caminata: volteo en x (bit 18), en y (17), jugador (22)
+                        if wr_.random() < 0.25:
+                            lines.append('CLASS %d %X' % (n, wr_.choice([0x40000, 0x20000, 0x60000, 0x400000, 0x440000])))
+                    lines.append('ROOM %d 1' % rn)
+                    if t % 3 != 2:                                 # clics: el ego en la sala y de 3 a 7 clics, algunos antes de llegar
+                        x0, y0 = VS.walk_point(wr_, bxs, r.width, wild=0)
+                        lines.append('CODE ' + VS.make_walk_code(wr_, ctx, 0, [(ego, 1, x0, y0)]).hex())
+                        for c in range(wr_.randrange(3, 8)):
+                            code = VS.click_code(wr_, ctx, ego).hex()
+                            lines += ['CODE ' + code, 'FRAMES %d %d' % (wr_.choice([1, 4, 4, 6]), wr_.choice([2, 5, 10, 20, 40, 80, 80]))]
+                            if wr_.random() < 0.25:                # el mismo clic otra vez (startWalkActor con el mismo destino)
+                                lines += ['CODE ' + code, 'FRAMES 4 %d' % wr_.choice([1, 3, 12])]
+                            if wr_.random() < 0.25:                # cambio de velocidad andando (actorOps 2: calcMovementFactor)
+                                lines += ['CODE ' + VS.speed_code(wr_, ego).hex(), 'FRAMES 4 %d' % wr_.choice([2, 6, 20])]
+                        lines.append('FRAMES 4 150')
+                    else:                                          # mezcla: varios actores, velocidades, banderas de caja, clases y esperas
+                        setup = [(n, wr_.choice([1, 2, 3]), *VS.walk_point(wr_, bxs, r.width, wild=0)) for n in (1, 2, 3) if n == 1 or wr_.random() < 0.6]
+                        lines.append('CODE ' + VS.make_walk_code(wr_, ctx, 0, setup).hex())
+                        for c in range(wr_.randrange(3, 7)):
+                            lines += ['CODE ' + VS.make_walk_code(wr_, ctx).hex(),
+                                      'FRAMES %d %d' % (wr_.choice([1, 4, 6, 15]), wr_.choice([1, 3, 10, 25, 60]))]
+                        lines.append('FRAMES 4 100')
+                    sc.append(('cwlk%02d.%d.s%d' % (rn, t, seed), lines))
+            if nbx:                                                # fase 7: la entrada (clics, teclas, ESC, boton derecho) con los verbos de Indy3 puestos (script 96)
+                wi_ = random.Random(8000 + 100 * seed + rn)        # (generador aparte)
+                for t in range(6 if rn in WALK_ROOMS else 2):
+                    lines = init_lines_core(wi_, world, rn, False) + ['SETVAR %d 1' % VAR_EGO, 'ROOM %d 1' % rn, 'SCRIPT 96']
+                    lines.append('USERPUT %d %d' % wi_.choice([(1, 1), (1, 1), (1, 1), (1, 1), (0, 0), (-1, -1), (2, 3)]))
+                    lines.append('FRAMES 6 2')
+                    if r.encd_off and wi_.random() < 0.4:              # la entrada de la sala (con sus escenas cortadas: ESC y el boton derecho las abortan)
+                        lines += ['ENTRY %d' % rn, 'FRAMES 4 3']
+                    if wi_.random() < 0.3:                             # los verbos guardados (saveRestoreVerbs 1, 1..14, 1): sus teclas y clics ya no valen
+                        import vmsynth3 as VS
+                        asm = VS.Asm(wi_, varprob=0)
+                        asm.begin()
+                        asm.op('saveRestoreVerbs', [('b', 1), ('b', 14), ('b', 1)], pre=bytes([1]))
+                        asm.out.append(0)
+                        lines += ['CODE ' + asm.out.hex(), 'FRAMES 6 2']
+                    if wi_.random() < 0.5:                             # Intro con el raton sobre un verbo = un clic en el verbo
+                        lines += ['MOVE %d %d' % (wi_.choice(INPUT_VERB_X[:5]) + wi_.randrange(0, 20), wi_.choice(INPUT_VERB_Y[1:4]) + wi_.randrange(0, 8)),
+                                  'FRAMES 6 1', 'KEY 13', 'FRAMES 6 3']
+                    for _ in range(wi_.randrange(6, 15)):
+                        kind = wi_.random()
+                        if kind < 0.45:                            # clic: sobre un verbo, en la escena, en el inventario, arriba, o en cualquier sitio
+                            where = wi_.random()
+                            if where < 0.4:
+                                x, y = wi_.choice(INPUT_VERB_X) + wi_.randrange(0, 40), wi_.choice(INPUT_VERB_Y) + wi_.randrange(0, 8)
+                            elif where < 0.7:
+                                if r.objects and wi_.random() < 0.7:        # el centro de un objeto de la sala (y de la pantalla = y de SCUMM + 16)
+                                    o = wi_.choice(r.objects)
+                                    x, y = o.x + o.width // 2, o.y + o.height // 2 + 16
+                                else:
+                                    x, y = wi_.randrange(0, 320), wi_.randrange(16, 144)
+                            elif where < 0.8:
+                                x, y = wi_.randrange(0, 320), wi_.randrange(176, 200)
+                            elif where < 0.9:
+                                x, y = wi_.randrange(0, 320), wi_.randrange(0, 16)
+                            else:
+                                x, y = wi_.randrange(-20, 340), wi_.randrange(-20, 220)
+                            lines.append('CLICK %d %d' % (x, y))
+                        elif kind < 0.55:
+                            lines.append('MOVE %d %d' % (wi_.randrange(0, 320), wi_.randrange(0, 200)))
+                        elif kind < 0.8:
+                            lines.append('KEY %d' % wi_.choice(INPUT_KEYS + [wi_.randrange(32, 128)]))
+                        elif kind < 0.9:
+                            lines.append('RCLICK')
+                        else:
+                            lines.append('ESC')
+                        lines.append('FRAMES %d %d' % (wi_.choice([1, 4, 6, 6]), wi_.choice([1, 2, 4, 10, 25])))
+                    if wi_.random() < 0.3:
+                        lines.append('INPUT %d %d %d' % (wi_.choice([1, 2, 3, 4]), wi_.choice([0, 6, 10, 13, 97, 101]), wi_.choice([0, 1])))
+                    lines.append('FRAMES 6 30')
+                    sc.append(('cinp%02d.%d.s%d' % (rn, t, seed), lines))
             for sid, _ in r.local_scripts:
                 args = ' '.join(str(rng.choice([0, 1, 2, 3, 5, 10, 100])) for _ in range(rng.randrange(3)))
                 sc.append(('cloc%02d.%d.s%d' % (rn, sid, seed), init_lines_core(rng, world, rn) + [
-                    'ROOM %d' % rn, ('SCRIPT %d %s' % (sid, args)).strip(), 'FRAMES 3 25']))
+                    rb(), ('SCRIPT %d %s' % (sid, args)).strip(), 'FRAMES 3 25']))
             if objects:
                 for o in r.objects:
                     if world.objects.get(o.id, (None,))[0] != rn:
                         continue
                     for verb, _ in o.verbs:
                         sc.append(('cobj%03d.v%02X.s%d' % (o.id, verb, seed), init_lines_core(rng, world, rn) + [
-                            'ROOM %d' % rn, 'OBJ %d %d' % (o.id, verb), 'FRAMES 3 25']))
+                            rb(), 'OBJ %d %d' % (o.id, verb), 'FRAMES 3 25']))
         for sid in (sorted(world.scripts) if scripts else ()):
             args = ' '.join(str(rng.choice([0, 1, 2, 3, 5, 10, 100])) for _ in range(rng.randrange(4)))
-            sc.append(('cscr%03d.s%d' % (sid, seed), init_lines_core(rng, world) + [
+            sroom = rng.choice(rlist + [None])           # fase 5: una sala en uso (con o sin cajas) para los scripts globales
+            sc.append(('cscr%03d.s%d' % (sid, seed), init_lines_core(rng, world, sroom) + (
+                ['ROOM %d%s' % (sroom, ' 1' if rng.random() < 0.4 else '')] if sroom else []) + [
                 'SETVAR %d 7' % VAR_MUSIC_TIMER, ('SCRIPT %d %s' % (sid, args)).strip(), 'FRAMES 3 25', 'ABORT', 'FRAMES 3 5']))
+        # fase 7: escenarios fijos de la entrada (sin azar): ESC y el boton derecho en las escenas cortadas del arranque; un clic en el borde derecho de cada verbo
+        # de Indy3 (el rectangulo es [left, left + 8 * columnas)); '.' con un mensaje en pantalla (script 3: printEgo)
+        wf_ = random.Random(8500 + seed)
+        sc.append(('cinpboot.s%d' % seed, ['INIT', 'OPT proteccion 0', 'SCRIPT 1', 'FRAMES 6 30', 'ESC', 'FRAMES 6 12', 'FRAMES 6 150', 'KEY 27', 'FRAMES 6 20',
+                                           'RCLICK', 'FRAMES 6 40', 'FRAMES 6 100', 'ESC', 'FRAMES 6 30']))
+        if 1 in world.rooms and world.rooms[1].boxes()[0]:
+            vl = init_lines_core(wf_, world, 1, False) + ['SETVAR %d 1' % VAR_EGO, 'ROOM 1 1', 'SCRIPT 96', 'USERPUT 1 1', 'FRAMES 6 2']
+            for x in INPUT_VERB_X[:4]:
+                for y in INPUT_VERB_Y[1:4]:
+                    vl += ['CLICK %d %d' % (x + 28 + wf_.randrange(0, 4), y + wf_.randrange(0, 8)), 'FRAMES 6 2']
+            vl += ['CLICK 300 160', 'FRAMES 6 2', 'CLICK 200 151', 'FRAMES 6 2']
+            sc.append(('cinpverb.s%d' % seed, vl))
+            sc.append(('cinpdot.s%d' % seed, init_lines_core(wf_, world, 1, False) + ['SETVAR %d 1' % VAR_EGO, 'ROOM 1 1', 'SCRIPT 96', 'USERPUT 1 1', 'SCRIPT 3',
+                                                                                    'FRAMES 6 2', 'KEY 46', 'FRAMES 6 3', 'SCRIPT 3', 'FRAMES 6 1', 'KEY 46', 'FRAMES 6 1',
+                                                                                    'KEY 46', 'FRAMES 6 30']))
         # D5: los scripts de mas de una pagina (en Indy3, el 95: un dialogo que espera a la variable 114). Con 114 cambiando
         # en cada fotograma, el script recorre el arbol y cruza la frontera de 4 KB de sus paginas en los dos sentidos
         for sid in (sorted(s for s, c in world.scripts.items() if len(c) > 6144) if scripts else ()):
@@ -2297,6 +2689,24 @@ def main():
                 fs.write('SCENARIO %s' % name + chr(10) + chr(10).join(lines) + chr(10) + 'END' + chr(10))
                 fe.write('SCENARIO %s' % name + chr(10) + chr(10).join(trace) + chr(10) + 'END' + chr(10))
         print('%d escenarios del nucleo, %d acaban en error (%d sin presupuesto, descartados)' % (len(sc), errs, skipped))
+    elif cmd == 'boot-core':                            # fase 5b: el arranque (script 1) en modo nucleo con sonido "timed": solo las lineas D (el programa no saca sucesos)
+        n = int(args[3]) if len(args) > 3 else 1500
+        evl = []                                        # fase 7: sucesos de entrada (un fichero con lineas "fotograma tipo [a b]": click, move, rclick, key, esc; a, b en pixeles)
+        if len(args) > 4:
+            evl = ['AT ' + ln.strip() for ln in open(args[4]) if ln.strip() and not ln.startswith('#')]
+        trace, vm = run_scenario_core(world, ['INIT', 'OPT proteccion 0', 'OPT sonido timed', 'SCRIPT 1'] + evl + ['BOOT %d' % n])
+        with open(os.path.join(out, 'boot_expected.txt'), 'w') as fe:
+            for t in trace:
+                if t.startswith(('D ', 'ERR')):
+                    fe.write(t + chr(10))
+        firsts = {}
+        for t in trace:
+            if t.startswith('D '):
+                m = re.search(r' M=\d+,\d+,\d+,(\d+),', t)
+                f = int(t.split()[1][2:])
+                if m:
+                    firsts.setdefault(int(m.group(1)), f)
+        print('fotogramas %d, primer fotograma en cada sala: %s' % (vm.frame, ' '.join('%d@%d' % (r, f) for r, f in sorted(firsts.items(), key=lambda x: x[1]))))
     elif cmd == 'scenarios':
         seeds = int(args[3]) if len(args) > 3 else 1
         sc = make_scenarios(world, seeds)

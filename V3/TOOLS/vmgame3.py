@@ -6,10 +6,16 @@ room.cpp (startScene), camera.cpp, string.cpp (convertMessageToString, displayDi
 verbs.cpp, input.cpp y script.cpp (frases, scripts de salida y entrada). Lo que ScummVM hace con el dibujo, el sonido
 o la pantalla sale como sucesos "E" a la traza (ver vmmodel3.py); aqui solo queda lo que lee o escribe un script.
 
-CAMINATA: toda la caminata (startWalkActor, walkActor, calcMovementFactor, actorWalkStep, remapDirection,
-updateActorDirection, getNextBox, findPathTowardsOld, getGates y la geometria de cajas) esta transcrita de las
-funciones de ScummVM de v3 con sus mismos nombres. Se ha LEIDO de ScummVM, NO se ha comparado con una ejecucion real:
-la fase 6 del plan la verifica. Si hay que sustituirla, basta con cambiar esas funciones.
+CAMINATA (fase 6, 2026-11-14): startWalkActor, walkActor, calcMovementFactor, actorWalkStep, remapDirection,
+updateActorDirection, setDirection, getNextBox, findPathTowardsOld, getGates, adjustXYToBeInBox y la geometria de cajas
+(closestPtOnLine, getClosestPtOnBox, checkXYInBoxBounds, inBoxQuickReject, compareSlope) estan transcritas de las funciones
+de ScummVM de v3 (Actor_v3 en actor.cpp, boxes.cpp) con sus mismos nombres y revisadas una a una contra ese codigo, con
+los tipos de C: los puntos son Common::Point (int16), la aritmetica de closestPtOnLine y compareSlope es de int de 32 bits
+que desborda (m32, d32), sqrDist tiene el tope de 0x1000 por eje (0xFFFFFF), xfrac/yfrac/xAdd/yAdd son uint16 y
+_lastValidX/Y se reutilizan (v3-v4). No hay un ScummVM ejecutable con el que comparar posiciones: la comprobacion es la
+lectura del codigo y que el Z80 (V3/ENGINE/geom.asm y walk.asm) da las mismas trazas. Lo que ScummVM deja sin definir se
+fija asi (igual en el Z80): division por cero o velocidad 0 = E_RANGE; _stepX > 255 = E_RANGE; closest[] de getGates sin
+candidato = 0; la terna de la matriz de cajas no se lee mas alla de su final; _targetFacing fuera de 0..359 = E_RANGE.
 
 Lo que el modelo no tiene (es del anfitrion, no cambia lo que ve un script):
   - decodificacion de trajes: el fotograma del actor es el ultimo que se pidio (_frame); no hay _cost;
@@ -148,14 +154,29 @@ class Verb:
         self.imgindex = 0
         self.left = self.top = 0
         self.name = b''
+        self.length = 0                  # fase 7: columnas del texto la ultima vez que se dibujo el verbo (el rectangulo es [left, left + 8 * length))
+
+
+def m32(a, b):
+    """Producto de dos int de C (32 bits, desborda como en x86)."""
+    return wrap32(a * b)
+
+
+def d32(a, b):
+    """Division de dos int de C (se trunca hacia cero). Dividir por 0 cuelga ScummVM: aqui es E_RANGE."""
+    if b == 0:
+        raise VMError(E_RANGE, 'division por cero en la geometria de cajas')
+    return wrap32(cdiv(a, b))
 
 
 def compare_slope(p1, p2, p3):
-    return (p2[1] - p1[1]) * (p3[0] - p1[0]) <= (p3[1] - p1[1]) * (p2[0] - p1[0])
+    """compareSlope de boxes.cpp: productos de int de C (32 bits)."""
+    return m32(p2[1] - p1[1], p3[0] - p1[0]) <= m32(p3[1] - p1[1], p2[0] - p1[0])
 
 
 def closest_pt_on_line(s, e, p):
-    """closestPtOnLine de boxes.cpp (enteros de C, resultado en int16)."""
+    """closestPtOnLine de boxes.cpp: toda la aritmetica en int de C (32 bits); el resultado se guarda en un Common::Point (int16)
+    antes de recortarlo al segmento."""
     sx, sy = s
     ex, ey = e
     px, py = p
@@ -166,18 +187,18 @@ def closest_pt_on_line(s, e, p):
     elif ey == sy:
         rx, ry = px, sy
     else:
-        dist = lx * lx + ly * ly
+        dist = wrap32(m32(lx, lx) + m32(ly, ly))
         if abs(lx) > abs(ly):
-            a = cdiv(sx * ly, lx)
-            b = cdiv(px * lx, ly)
-            c = cdiv(wrap32(wrap32((a + b - sy + py) * ly) * lx), dist)
+            a = d32(m32(sx, ly), lx)
+            b = d32(m32(px, lx), ly)
+            c = d32(m32(m32(wrap32(wrap32(wrap32(a + b) - sy) + py), ly), lx), dist)
             rx = c
-            ry = cdiv(c * ly, lx) - a + sy
+            ry = wrap32(wrap32(d32(m32(c, ly), lx) - a) + sy)
         else:
-            a = cdiv(sy * lx, ly)
-            b = cdiv(py * ly, lx)
-            c = cdiv(wrap32(wrap32((a + b - sx + px) * ly) * lx), dist)
-            rx = cdiv(c * lx, ly) - a + sx
+            a = d32(m32(sy, lx), ly)
+            b = d32(m32(py, ly), lx)
+            c = d32(m32(m32(wrap32(wrap32(wrap32(a + b) - sx) + px), ly), lx), dist)
+            rx = wrap32(wrap32(d32(m32(c, lx), ly) - a) + sx)
             ry = c
     rx, ry = s16(rx), s16(ry)
     if abs(ly) < abs(lx):
@@ -205,14 +226,27 @@ def closest_pt_on_line(s, e, p):
     return rx, ry
 
 
+def sqr_dist(p, q):
+    """Common::Point::sqrDist: si una diferencia llega a 0x1000 devuelve 0xFFFFFF."""
+    dx = abs(p[0] - q[0])
+    if dx >= 0x1000:
+        return 0xFFFFFF
+    dy = abs(p[1] - q[1])
+    if dy >= 0x1000:
+        return 0xFFFFFF
+    return dx * dx + dy * dy
+
+
 def closest_pt_on_box(box, x, y):
-    """getClosestPtOnBox: (distancia al cuadrado, x, y). box = (ul, ur, lr, ll)."""
+    """getClosestPtOnBox: (distancia al cuadrado, x, y). box = (ul, ur, lr, ll). El punto es un Common::Point (int16). Si ninguna arista
+    da menos de 0xFFFFFF, outX/outY no se tocan: aqui (0, 0) (en adjustXYToBeInBox no se usan; en getGates son el Point() de C)."""
     ul, ur, lr, ll = box
+    p = (s16(x), s16(y))
     best = 0xFFFFFF
     out = (0, 0)
     for s, e in ((ul, ur), (ur, lr), (lr, ll), (ll, ul)):
-        t = closest_pt_on_line(s, e, (x, y))
-        d = (x - t[0]) ** 2 + (y - t[1]) ** 2
+        t = closest_pt_on_line(s, e, p)
+        d = sqr_dist(p, t)
         if d < best:
             best = d
             out = t
@@ -467,7 +501,7 @@ class GameMixin:
         m = self.matrix
         p = 1 if m and m[0] == 0xFF else 0
         end = len(m)
-        if self.cur_room == 46 and frm == 1 and to == 0:          # WORKAROUND de ScummVM (Indy3, sala 46)
+        if self.cur_room_resource() == 46 and frm == 1 and to == 0:   # WORKAROUND de ScummVM (Indy3, _roomResource 46)
             return 0
         i = 0
         while i < frm and p < end:
@@ -527,7 +561,15 @@ class GameMixin:
         a.moving = 0
 
     def set_direction(self, a, d):
-        a.facing = (d + 360) % 360
+        """Actor::setDirection (v3): sin trajes, solo queda marcar el redibujo si cambia, tiene traje y esta en la sala."""
+        d = d + 360
+        d = d - cdiv(d, 360) * 360                       # % de C
+        if a.facing == d:
+            return
+        a.facing = d & 0xFFFF                            # _facing es uint16
+        if a.costume == 0 or not a.in_room():
+            return
+        a.need_redraw = True
 
     def turn_to_direction(self, a, d):
         if d == -1 or a.ignore_turns:
@@ -637,12 +679,12 @@ class GameMixin:
 
     # ---- caminata (Actor_v3)
     def start_walk_actor(self, a, dest_x, dest_y, d):
-        """Actor::startWalkActor (version 3)."""
-        x, y, box = dest_x, dest_y, INVALID_BOX
+        """Actor::startWalkActor (version 3). abr.x/abr.y son int16."""
+        x, y, box = s16(dest_x), s16(dest_y), INVALID_BOX
         if not a.in_room():
             a.x, a.y = x, y
             if not a.ignore_turns and d != -1:
-                a.facing = d
+                a.facing = d & 0xFFFF                    # _facing es uint16
             return
         if a.ignore_boxes:
             box = INVALID_BOX
@@ -678,7 +720,9 @@ class GameMixin:
             self.start_anim_actor(a, a.stand_frame)
 
     def remap_direction(self, a, d, is_walking):
-        """Actor::remapDirection (version 3)."""
+        """Actor::remapDirection (version 3). _extraBoxFlags no se usa en v3 (o3_setBoxFlags pasa un byte)."""
+        if not 0 <= d <= 359:                    # (no pasa: _targetFacing sale siempre de oldDirToNewDir; el Z80 trabaja en 16 bits)
+            raise VMError(E_RANGE, 'remapDirection %d' % d)
         flags = self.get_box_flags(a.walkbox)
         flip_x = a.wd_dxf > 0
         flip_y = a.wd_dyf > 0
@@ -718,15 +762,19 @@ class GameMixin:
         diff_y = nxt[1] - a.y
         if not (a.moving & MF_LAST_LEG) and a.speedx > abs(diff_x) and a.speedy > abs(diff_y):
             return 0
+        if a.speedx == 0 or a.speedy == 0:               # ScummVM divide por cero
+            raise VMError(E_RANGE, 'velocidad 0 en calcMovementFactor')
         a.stepx = a.speedy + 1 if ((abs(diff_y) // a.speedy) >> 1) > (abs(diff_x) // a.speedx) else a.speedx
+        if a.stepx > 255:                                # el Z80 guarda _stepX en un byte (velocidad y 255)
+            raise VMError(E_RANGE, 'stepX %d' % a.stepx)
         a.step_threshold = max(abs(diff_y) // a.speedy, abs(diff_x) // a.stepx)
         dxf, dyf = a.stepx, a.speedy
         if diff_x < 0:
             dxf = -dxf
         if diff_y < 0:
             dyf = -dyf
-        a.wd_xfrac = a.wd_xadd = cdiv(diff_x, dxf) if dxf else 0
-        a.wd_yfrac = a.wd_yadd = cdiv(diff_y, dyf) if dyf else 0
+        a.wd_xfrac = a.wd_xadd = (cdiv(diff_x, dxf) if dxf else 0) & 0xFFFF     # xfrac y xAdd son uint16
+        a.wd_yfrac = a.wd_yadd = (cdiv(diff_y, dyf) if dyf else 0) & 0xFFFF
         a.wd_cur = (a.x, a.y)
         a.wd_next = nxt
         a.wd_dxf, a.wd_dyf = dxf, dyf
@@ -754,16 +802,16 @@ class GameMixin:
         if (a.x, a.y) == a.wd_next:
             a.moving &= ~MF_IN_LEG
             return 0
-        a.wd_xfrac += a.wd_xadd
+        a.wd_xfrac = (a.wd_xfrac + a.wd_xadd) & 0xFFFF   # uint16
         if a.wd_xfrac >= a.step_threshold:
             if a.x != nx:
-                a.x += a.wd_dxf
-            a.wd_xfrac -= a.step_threshold
-        a.wd_yfrac += a.wd_yadd
+                a.x = s16(a.x + a.wd_dxf)
+            a.wd_xfrac = (a.wd_xfrac - a.step_threshold) & 0xFFFF
+        a.wd_yfrac = (a.wd_yfrac + a.wd_yadd) & 0xFFFF
         if a.wd_yfrac >= a.step_threshold:
             if a.y != ny:
-                a.y += a.wd_dyf
-            a.wd_yfrac -= a.step_threshold
+                a.y = s16(a.y + a.wd_dyf)
+            a.wd_yfrac = (a.wd_yfrac - a.step_threshold) & 0xFFFF
         return 1
 
     def walk_actor(self, a):
@@ -1034,7 +1082,7 @@ class GameMixin:
             d.obj_nr, d.obcd, d.code = o.id, o.obcd, r.file
             d.x, d.y, d.width, d.height = o.x, o.y, o.width, o.height
             d.parent, d.parentstate = o.parent, o.parentstate
-            d.walk_x, d.walk_y, d.actordir = o.walk_x, o.walk_y, o.actordir
+            d.walk_x, d.walk_y, d.actordir = s16(o.walk_x), s16(o.walk_y), o.actordir        # ObjectData::walk_x/y son int16
 
     def obcd_of(self, obj):
         """(codigo, offset del OBCD) del objeto (getOBCDFromObject): el inventario manda sobre la sala."""
@@ -1179,19 +1227,29 @@ class GameMixin:
         vs.saveid = 0
         self.ev(EV_VERB, [slot, 0])
 
-    def verb_text_width(self, vs):
-        """Anchura supuesta del verbo (8 px por letra visible)."""
-        return FONT_W * len([c for c in vs.name if c != 0 and c != 0xFF])
+    def verb_text_len(self, vs):
+        """Columnas (de 8 px de SCUMM = una celda de 6 px de la pantalla) que ocupa el nombre del verbo ya convertido (convertMessageToString:
+        los codigos $FF cuentan como sus bytes), con tope de 40 (el ancho de la pantalla de interfaz)."""
+        return min(len(self.convert_message_to_string(vs.name)) - 1, 40)
+
+    def draw_verb(self, slot):
+        """ScummEngine::drawVerb (solo lo que ve la entrada): un verbo visible (activo o atenuado) fija el ancho de su rectangulo al dibujarse.
+        El rectangulo de un verbo con imagen no se modela (Indy3 no los usa)."""
+        if slot == 0:
+            return
+        vs = self.verbs[slot]
+        if vs.saveid == 0 and vs.curmode and vs.verbid and vs.type == 0:
+            vs.length = self.verb_text_len(vs)
 
     def find_verb_at_pos(self, x, y):
-        """findVerbAtPos con el rectangulo supuesto (left, top, left + anchura, top + 8)."""
+        """findVerbAtPos con el rectangulo [left, left + 8 * length) x [top, top + 8) del ultimo dibujo."""
         for i in range(NUM_VERBS - 1, 0, -1):
             vs = self.verbs[i]
             if vs.curmode != 1 or not vs.verbid or vs.saveid:
                 continue
             if y < vs.top or y >= vs.top + FONT_H:
                 continue
-            right = vs.left + self.verb_text_width(vs)
+            right = vs.left + FONT_W * vs.length
             if vs.center:
                 if x < -(right - 2 * vs.left) or x >= right:
                     continue
@@ -1620,7 +1678,7 @@ class GameMixin:
         my = max(0, min(199, my))
         self.mouse = (mx, my)
         vy = my - self.main_top
-        if vy < 0 or vy >= self.main_h:
+        if vy < 0 or vy >= self.main_h - self.main_top:          # initScreens(b, h): la pantalla principal mide h - b
             vy = -1
         self.vmouse = (mx + self.cam_xstart(), vy)
         if kind in ('esc', 'rclick') or (kind == 'key' and ev[1] == 27):
@@ -1633,6 +1691,8 @@ class GameMixin:
                 pass                                             # pausa: del anfitrion
             else:
                 self.mk_stat = k
+                if k == 13 and self.cursor_state > 0:            # Intro sustituye al clic izquierdo (processKeyboard)
+                    self.mk_stat = MBS_LEFT_CLICK
 
     def process_escape(self):
         """Tecla de salida de escena cortada: abortCutscene y, si el script la define, su codigo como tecla."""
@@ -1661,7 +1721,7 @@ class GameMixin:
             if over:
                 self.run_input_script(CLICK_VERB, self.verbs[over].verbid, 0)
             else:
-                in_main = self.main_top <= my < self.main_top + self.main_h
+                in_main = self.main_top <= my < self.main_h
                 self.run_input_script(CLICK_SCENE if in_main else CLICK_VERB, 0, 0)
 
     # ------------------------------------------------------------------------------------------ cambio de sala

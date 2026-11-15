@@ -1,6 +1,10 @@
-// Arnes de PC del programa completo (SCUMM/V2/ENGINE/scumm.asm): el Z80 de EightyOne con la memoria paginada de la
-// placa, un MCU simulado que sirve DATA.BIN y los ROOMnn.GFX de una carpeta, y los registros de sprites y la
+// Arnes de PC del programa completo (SCUMM/V3/ENGINE/scumm.asm, fase 5b; copia del de v2): el Z80 de EightyOne con la memoria paginada de la
+// placa, un MCU simulado que sirve DATA.BIN, los overlays (DATA/OVLB.BIN, OVLC.BIN y OVLD.BIN) y los ROOMnn.GFX de una carpeta, y los registros de sprites y la
 // "sombra" de video (tabla de caracteres, color y pantalla) para poder dibujar lo que veria la FPGA.
+//
+// V3 (variables de entorno): TS_DIGEST=fichero escribe el resumen "D f=..." de CoreVM.digest tras el script de arranque (f=0) y tras cada fotograma (digest_boot.inc,
+// generado de test_vm.cpp), para compararlo con el modelo (vmmodel3.py scenarios-boot); TS_MODELDELTA=1 pone en DELTA lo que usa el modelo (max(1, VAR_TIMER_NEXT)) en
+// vez de los vsyncs del arnes, para que las trazas sean comparables. Termina al llegar a sc_quit (X, error de la VM o falta de ficheros): imprime el codigo.
 //
 // Uso: test_scumm scumm.bin scumm.sym carpeta_de_la_SD fotogramas salida.bin [guion]
 //   Corre hasta que main_loop se ha ejecutado `fotogramas` veces y vuelca el estado en salida.bin:
@@ -15,6 +19,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <map>
 extern "C" {
 #include "z80.h"
 int tstates = 0;
@@ -29,6 +34,13 @@ static int blk[8] = {0, 1, 2, 3, 4, 5, 6, 7};
 static uint8_t shadow[65536];
 static inline uint8_t rd(int a) { a &= 0xFFFF; return ram[blk[a >> 13]][a & 0x1FFF]; }
 static inline uint16_t rd16(int a) { return rd(a) | (rd(a + 1) << 8); }
+static std::map<std::string, int> sym;
+static int S(const char* n) {
+  auto it = sym.find(n);
+  if (it == sym.end()) { printf("falta el simbolo %s%c", n, 10); exit(2); }
+  return it->second;
+}
+#include "digest_boot.inc"
 
 struct Spr { int on = 0, x = 0, y = 0; uint8_t col[8], pix[8], mask[8]; };
 static Spr spr[64];
@@ -77,7 +89,8 @@ static void motor_tick(bool frame_end) {
 static int g_fr = 0, w_lo = -1, w_hi = -1, w_from = 0;   // TS_WATCH=lo-hi[,desde fotograma]: imprime las escrituras
 static inline void wr(int a, uint8_t v) {
   a &= 0xFFFF;
-  if (a >= w_lo && a <= w_hi && g_fr >= w_from) printf("W f=%d pc=%04X [%04X]=%02X%c", g_fr, z80.pc.w, a, v, 10);
+  if (a >= w_lo && a <= w_hi && g_fr >= w_from) { printf("W f=%d pc=%04X b0=%d [%04X]=%02X%c", g_fr, z80.pc.w, blk[0], a, v, 10);
+    if (getenv("TS_WATCHBRK")) { printf("  af=%04X bc=%04X de=%04X hl=%04X ix=%04X sp=%04X; pila: %02X%02X %02X%02X %02X%02X %02X%02X%c", z80.af.w, z80.bc.w, z80.de.w, z80.hl.w, z80.ix.w, z80.sp.w, rd(z80.sp.w + 1), rd(z80.sp.w), rd(z80.sp.w + 3), rd(z80.sp.w + 2), rd(z80.sp.w + 5), rd(z80.sp.w + 4), rd(z80.sp.w + 7), rd(z80.sp.w + 6), 10); exit(0); } }
   if (a < 0x2000) {                                  // bloque 0: ROM; los puertos mapeados en memoria de la FPGA
     if (a == 2100) sel = v & 63;
     else if (a == 2101) spr[sel].on = v & 1;
@@ -323,7 +336,7 @@ int main(int argc, char** argv) {
   { FILE* s = fopen(argv[2], "r"); char line[256];
     while (s && fgets(line, sizeof line, s)) {
       char name[128]; unsigned v;
-      if (sscanf(line, "%127s EQU %xH", name, &v) == 2) { if (!strcmp(name, "main_loop")) main_loop_addr = v; if (!strcmp(name, "es_loop")) a_es_loop = v; if (!strcmp(name, "es_noerr")) a_es_noerr = v; if (!strcmp(name, "disp_table")) a_disp = v; if (!strcmp(name, "SPTR")) a_sptr = v; if (!strcmp(name, "wait_frame")) wait_frame_addr = v; if (v >= 0x4200 && v < 0x8000) syms.push_back({v, name}); }
+      if (sscanf(line, "%127s EQU %xH", name, &v) == 2) { sym[name] = (int)v; if (!strcmp(name, "main_loop")) main_loop_addr = v; if (!strcmp(name, "es_loop")) a_es_loop = v; if (!strcmp(name, "es_noerr")) a_es_noerr = v; if (!strcmp(name, "disp_table")) a_disp = v; if (!strcmp(name, "SPTR")) a_sptr = v; if (!strcmp(name, "wait_frame")) wait_frame_addr = v; if (v >= 0x4200 && v < 0x8000) syms.push_back({v, name}); }
     }
     if (s) fclose(s); }
   sd_dir = argv[3];
@@ -357,6 +370,22 @@ int main(int argc, char** argv) {
       mscript.push_back(mk); p = q + 1;
     }
   }
+  const char* ts_dig = getenv("TS_DIGEST");
+  FILE* dig = ts_dig ? fopen(ts_dig, "w") : nullptr;
+  if (ts_dig) {
+    init_digest_syms();
+    std::string dp = sd_dir + "/DATA/DATA.BIN";
+    FILE* df = fopen(dp.c_str(), "rb");
+    if (!df) { printf("no puedo leer %s%c", dp.c_str(), 10); return 2; }
+    fseek(df, 0, SEEK_END); long n = ftell(df); fseek(df, 0, SEEK_SET);
+    data.resize(n);
+    if (fread(data.data(), 1, n, df) != (size_t)n) return 2;
+    fclose(df);
+    d_npages = data[5]; d_first = data[6]; d_tables = d16(13);
+  }
+  const bool model_delta = getenv("TS_MODELDELTA") != 0;
+  const unsigned a_boot_done = sym.count("boot_done") ? sym["boot_done"] : 0, a_frame_done = sym.count("frame_done") ? sym["frame_done"] : 0,
+                 a_ml_dset = sym.count("ml_dset") ? sym["ml_dset"] : 0, a_quit = sym.count("quit_ret") ? sym["quit_ret"] : 0;
   ram[0][0x100] = 0x76;
   ram[0][0x2E7] = 0xC9; ram[0][0x207] = 0xC9;                // SET_FAST y SLOW_FAST de la ROM: RET
   for (int i = 8; i < 512; i++) ram[0][0x1E00 + i] = (uint8_t)(i * 37 + 11);   // juego de caracteres de la ROM (relleno)
@@ -368,7 +397,7 @@ int main(int argc, char** argv) {
   z80_init(); z80_reset();
   z80.sp.w = 0xCFF8;
   wr(0xCFF8, 0xE0); wr(0xCFF9, 0xFF);
-  z80.pc.w = 0x4212; z80.halted = 0; z80.iff1 = z80.iff2 = 0;
+  z80.pc.w = 0x4215; z80.halted = 0; z80.iff1 = z80.iff2 = 0;        // ENTRY_POINT de vm_core.asm (+21)
   if (const char* os = getenv("TS_OSYM")) { FILE* q = fopen(os, "r"); char line[256];
     while (q && fgets(line, sizeof line, q)) { char name[128]; unsigned v; if (sscanf(line, "%127s EQU %xH", name, &v) == 2 && v < 0x4200) syms.push_back({v, std::string("ovl:") + name}); }
     if (q) fclose(q); }
@@ -425,6 +454,14 @@ int main(int argc, char** argv) {
       for (int k = 0; k < atoi(getenv("TS_TRACE")); k++) { printf("%04X(%02X) ", z80.pc.w, rd(z80.pc.w)); z80_do_opcode(); }
       printf("%c", 10); break;
     }
+    if (sym.count("sm_ok1") && z80.pc.w == (unsigned)sym["sm_ok1"] && getenv("TS_OVCHK")) {     // TS_OVCHK=1: las paginas de los overlays tras cargar (primeros bytes y suma)
+      for (int pg : {46, 47, 48, 49, 15}) { unsigned sum = 0; for (int i = 0; i < 8192; i++) sum = sum * 31 + ram[pg][i]; printf("pagina %d: %02X %02X %02X %02X %02X %02X, suma %08X%c", pg, ram[pg][0], ram[pg][1], ram[pg][2], ram[pg][3], ram[pg][4], ram[pg][5], sum, 10); } }
+    if (getenv("TS_P15") && a_frame_done && z80.pc.w == a_frame_done && frames_done == 1) { FILE* q = fopen("build/p15.bin", "wb"); fwrite(ram[15], 1, 8192, q); fclose(q); }
+    if (getenv("TS_P15") && a_frame_done && z80.pc.w == a_frame_done) { static int lastv = -1; int v = ram[15][198] | (ram[15][199] << 8); if (v != lastv) { printf("f=%d: pagina 15, ancho de la sala 6 = %d%c", frames_done, v, 10); lastv = v; } }
+    if (a_boot_done && z80.pc.w == a_boot_done && dig) { frame = 0; fprintf(dig, "%s\n", digest().c_str()); }
+    if (a_frame_done && z80.pc.w == a_frame_done && dig) { frame++; fprintf(dig, "%s\n", digest().c_str()); }
+    if (a_ml_dset && z80.pc.w == a_ml_dset && model_delta) { int t = (int16_t)rd16(S("VARS") + 2 * 19); if (t < 1) t = 1; if (t > 255) t = 255; wr(S("DELTA"), t); }
+    if (a_quit && z80.pc.w == a_quit) { printf("el programa sale (sc_quit): sm_ov=%d ERR=%d sala=%d fotograma=%d%c", rd(S("sm_ov")), rd(S("ERR")), rd(S("CURROOM")), frames_done, 10); break; }
     hist[hi++ & 255] = z80.pc.w;
     int ts0 = tstates;
     unsigned vm_pc0 = z80.pc.w, vm_sp0 = z80.sp.w;
@@ -487,7 +524,8 @@ int main(int argc, char** argv) {
       printf("   %02X %-28s %8lld %8.1f %8.1f %10lld%c", op, sym_of(h), vm_ops[op].n, (double)vm_ops[op].excl / vm_ops[op].n, (double)vm_ops[op].incl / vm_ops[op].n, vm_ops[op].excl, 10);
     }
   }
-  printf("fotogramas: %d, instrucciones: %lld, ERR=%d, sala=%d%c", frames_done, steps, rd(0xEB0B), rd(0xEB40), 10);
+  printf("fotogramas: %d, instrucciones: %lld, ERR=%d, sala=%d, gf_room=%d%c", frames_done, steps, rd(S("ERR")), rd(S("CURROOM")), rd(S("gf_room")), 10);
+  if (dig) fclose(dig);
   dump(argv[5]);
   return 0;
 }

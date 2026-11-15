@@ -6,15 +6,15 @@ ovc_lo:
         defb 0 & 255   ; 02 startMusic
         defb 0 & 255   ; 03 getActorRoom
         defb 0 & 255   ; 04 isGreaterEqual
-        defb 0 & 255   ; 05 drawObject
+        defb b_drawObject & 255   ; 05 drawObject
         defb 0 & 255   ; 06 getActorElevation
         defb 0 & 255   ; 07 setState
         defb 0 & 255   ; 08 isNotEqual
         defb 0 & 255   ; 09 faceActor
         defb 0 & 255   ; 0A startScript
-        defb 0 & 255   ; 0B getVerbEntrypoint
+        defb b_getVerbEntrypoint & 255   ; 0B getVerbEntrypoint
         defb b_resourceRoutines & 255   ; 0C resourceRoutines
-        defb 0 & 255   ; 0D walkActorToActor
+        defb b_walkActorToActor & 255   ; 0D walkActorToActor
         defb 0 & 255   ; 0E putActorAtObject
         defb 0 & 255   ; 0F ifState
         defb 0 & 255   ; 10 getObjectOwner
@@ -26,19 +26,19 @@ ovc_lo:
         defb 0 & 255   ; 16 getRandomNr
         defb 0 & 255   ; 17 and
         defb 0 & 255   ; 18 jumpRelative
-        defb 0 & 255   ; 19 doSentence
+        defb b_doSentence & 255   ; 19 doSentence
         defb 0 & 255   ; 1A move
         defb 0 & 255   ; 1B multiply
         defb 0 & 255   ; 1C startSound
         defb 0 & 255   ; 1D ifClassOfIs
-        defb 0 & 255   ; 1E walkActorTo
-        defb 0 & 255   ; 1F isActorInBox
+        defb b_walkActorTo & 255   ; 1E walkActorTo
+        defb b_isActorInBox & 255   ; 1F isActorInBox
         defb 0 & 255   ; 20 stopMusic
         defb 0 & 255   ; 21 putActor
         defb b_saveLoadGame & 255   ; 22 saveLoadGame
         defb 0 & 255   ; 23 getActorY
-        defb 0 & 255   ; 24 loadRoomWithEgo
-        defb 0 & 255   ; 25 pickupObject
+        defb b_loadRoomWithEgo & 255   ; 24 loadRoomWithEgo
+        defb b_pickupObject & 255   ; 25 pickupObject
         defb 0 & 255   ; 26 setVarRange
         defb 0 & 255   ; 27 stringOps
         defb 0 & 255   ; 28 equalZero
@@ -49,39 +49,39 @@ ovc_lo:
         defb 0 & 255   ; 2D putActorInRoom
         defb 0 & 255   ; 2E delay
         defb 0 & 255   ; 2F ifNotState
-        defb 0 & 255   ; 30 setBoxFlags
+        defb b_setBoxFlags & 255   ; 30 setBoxFlags
         defb 0 & 255   ; 31 getInventoryCount
         defb 0 & 255   ; 32 setCameraAt
         defb b_roomOps & 255   ; 33 roomOps
         defb 0 & 255   ; 34 getDist
-        defb 0 & 255   ; 35 findObject
-        defb 0 & 255   ; 36 walkActorToObject
-        defb 0 & 255   ; 37 startObject
+        defb b_findObject & 255   ; 35 findObject
+        defb b_walkActorToObject & 255   ; 36 walkActorToObject
+        defb b_startObject & 255   ; 37 startObject
         defb 0 & 255   ; 38 isLessEqual
-        defb 0 & 255   ; 39 doSentence
+        defb b_doSentence & 255   ; 39 doSentence
         defb 0 & 255   ; 3A subtract
-        defb 0 & 255   ; 3B waitForActor
+        defb b_waitForActor & 255   ; 3B waitForActor
         defb 0 & 255   ; 3C stopSound
         defb 0 & 255   ; 3D findInventory
-        defb 0 & 255   ; 3E walkActorTo
+        defb b_walkActorTo & 255   ; 3E walkActorTo
         defb 0 & 255   ; 3F drawBox
         defb 0 & 255   ; 40 cutscene
         defb 0 & 255   ; 41 putActor
         defb 0 & 255   ; 42 chainScript
         defb 0 & 255   ; 43 getActorX
         defb 0 & 255   ; 44 isLess
-        defb 0 & 255   ; 45 drawObject
+        defb b_drawObject & 255   ; 45 drawObject
         defb 0 & 255   ; 46 increment
         defb 0 & 255   ; 47 setState
         defb 0 & 255   ; 48 isEqual
         defb 0 & 255   ; 49 faceActor
         defb 0 & 255   ; 4A startScript
-        defb 0 & 255   ; 4B getVerbEntrypoint
-        defb 0 & 255   ; 4C waitForSentence
-        defb 0 & 255   ; 4D walkActorToActor
+        defb b_getVerbEntrypoint & 255   ; 4B getVerbEntrypoint
+        defb b_waitForSentence & 255   ; 4C waitForSentence
+        defb b_walkActorToActor & 255   ; 4D walkActorToActor
         defb 0 & 255   ; 4E putActorAtObject
         defb 0 & 255   ; 4F ifState
-        defb 0 & 255   ; 50 pickupObject
+        defb b_pickupObject & 255   ; 50 pickupObject
         defb 0 & 255   ; 51 animateActor
         defb 0 & 255   ; 52 actorFollowCamera
         defb 0 & 255   ; 53 actorOps
@@ -90,19 +90,19 @@ ovc_lo:
         defb 0 & 255   ; 56 getActorMoving
         defb 0 & 255   ; 57 or
         defb 0 & 255   ; 58 beginOverride
-        defb 0 & 255   ; 59 doSentence
+        defb b_doSentence & 255   ; 59 doSentence
         defb 0 & 255   ; 5A add
         defb 0 & 255   ; 5B divide
         defb 0 & 255   ; 5C oldRoomEffect
         defb 0 & 255   ; 5D setClass
-        defb 0 & 255   ; 5E walkActorTo
-        defb 0 & 255   ; 5F isActorInBox
+        defb b_walkActorTo & 255   ; 5E walkActorTo
+        defb b_isActorInBox & 255   ; 5F isActorInBox
         defb 0 & 255   ; 60 freezeScripts
         defb 0 & 255   ; 61 putActor
         defb 0 & 255   ; 62 stopScript
         defb 0 & 255   ; 63 getActorFacing
-        defb 0 & 255   ; 64 loadRoomWithEgo
-        defb 0 & 255   ; 65 pickupObject
+        defb b_loadRoomWithEgo & 255   ; 64 loadRoomWithEgo
+        defb b_pickupObject & 255   ; 65 pickupObject
         defb 0 & 255   ; 66 getClosestObjActor
         defb 0 & 255   ; 67 getStringWidth
         defb 0 & 255   ; 68 isScriptRunning
@@ -115,34 +115,34 @@ ovc_lo:
         defb 0 & 255   ; 6F ifNotState
         defb b_lights & 255   ; 70 lights
         defb 0 & 255   ; 71 getActorCostume
-        defb 0 & 255   ; 72 loadRoom
+        defb b_loadRoom & 255   ; 72 loadRoom
         defb b_roomOps & 255   ; 73 roomOps
         defb 0 & 255   ; 74 getDist
-        defb 0 & 255   ; 75 findObject
-        defb 0 & 255   ; 76 walkActorToObject
-        defb 0 & 255   ; 77 startObject
+        defb b_findObject & 255   ; 75 findObject
+        defb b_walkActorToObject & 255   ; 76 walkActorToObject
+        defb b_startObject & 255   ; 77 startObject
         defb 0 & 255   ; 78 isGreater
-        defb 0 & 255   ; 79 doSentence
+        defb b_doSentence & 255   ; 79 doSentence
         defb 0 & 255   ; 7A verbOps
         defb 0 & 255   ; 7B getActorWalkBox
         defb 0 & 255   ; 7C isSoundRunning
         defb 0 & 255   ; 7D findInventory
-        defb 0 & 255   ; 7E walkActorTo
+        defb b_walkActorTo & 255   ; 7E walkActorTo
         defb 0 & 255   ; 7F drawBox
         defb 0 & 255   ; 80 breakHere
         defb 0 & 255   ; 81 putActor
         defb 0 & 255   ; 82 startMusic
         defb 0 & 255   ; 83 getActorRoom
         defb 0 & 255   ; 84 isGreaterEqual
-        defb 0 & 255   ; 85 drawObject
+        defb b_drawObject & 255   ; 85 drawObject
         defb 0 & 255   ; 86 getActorElevation
         defb 0 & 255   ; 87 setState
         defb 0 & 255   ; 88 isNotEqual
         defb 0 & 255   ; 89 faceActor
         defb 0 & 255   ; 8A startScript
-        defb 0 & 255   ; 8B getVerbEntrypoint
+        defb b_getVerbEntrypoint & 255   ; 8B getVerbEntrypoint
         defb b_resourceRoutines & 255   ; 8C resourceRoutines
-        defb 0 & 255   ; 8D walkActorToActor
+        defb b_walkActorToActor & 255   ; 8D walkActorToActor
         defb 0 & 255   ; 8E putActorAtObject
         defb 0 & 255   ; 8F ifState
         defb 0 & 255   ; 90 getObjectOwner
@@ -154,19 +154,19 @@ ovc_lo:
         defb 0 & 255   ; 96 getRandomNr
         defb 0 & 255   ; 97 and
         defb b_systemOps & 255   ; 98 systemOps
-        defb 0 & 255   ; 99 doSentence
+        defb b_doSentence & 255   ; 99 doSentence
         defb 0 & 255   ; 9A move
         defb 0 & 255   ; 9B multiply
         defb 0 & 255   ; 9C startSound
         defb 0 & 255   ; 9D ifClassOfIs
-        defb 0 & 255   ; 9E walkActorTo
-        defb 0 & 255   ; 9F isActorInBox
+        defb b_walkActorTo & 255   ; 9E walkActorTo
+        defb b_isActorInBox & 255   ; 9F isActorInBox
         defb 0 & 255   ; A0 stopObjectCode
         defb 0 & 255   ; A1 putActor
         defb b_saveLoadGame & 255   ; A2 saveLoadGame
         defb 0 & 255   ; A3 getActorY
-        defb 0 & 255   ; A4 loadRoomWithEgo
-        defb 0 & 255   ; A5 pickupObject
+        defb b_loadRoomWithEgo & 255   ; A4 loadRoomWithEgo
+        defb b_pickupObject & 255   ; A5 pickupObject
         defb 0 & 255   ; A6 setVarRange
         defb 0 & 255   ; A7 saveLoadVars
         defb 0 & 255   ; A8 notEqualZero
@@ -177,39 +177,39 @@ ovc_lo:
         defb 0 & 255   ; AD putActorInRoom
         defb 0 & 255   ; AE wait
         defb 0 & 255   ; AF ifNotState
-        defb 0 & 255   ; B0 setBoxFlags
+        defb b_setBoxFlags & 255   ; B0 setBoxFlags
         defb 0 & 255   ; B1 getInventoryCount
         defb 0 & 255   ; B2 setCameraAt
         defb b_roomOps & 255   ; B3 roomOps
         defb 0 & 255   ; B4 getDist
-        defb 0 & 255   ; B5 findObject
-        defb 0 & 255   ; B6 walkActorToObject
-        defb 0 & 255   ; B7 startObject
+        defb b_findObject & 255   ; B5 findObject
+        defb b_walkActorToObject & 255   ; B6 walkActorToObject
+        defb b_startObject & 255   ; B7 startObject
         defb 0 & 255   ; B8 isLessEqual
-        defb 0 & 255   ; B9 doSentence
+        defb b_doSentence & 255   ; B9 doSentence
         defb 0 & 255   ; BA subtract
-        defb 0 & 255   ; BB waitForActor
+        defb b_waitForActor & 255   ; BB waitForActor
         defb 0 & 255   ; BC stopSound
         defb 0 & 255   ; BD findInventory
-        defb 0 & 255   ; BE walkActorTo
+        defb b_walkActorTo & 255   ; BE walkActorTo
         defb 0 & 255   ; BF drawBox
         defb 0 & 255   ; C0 endCutscene
         defb 0 & 255   ; C1 putActor
         defb 0 & 255   ; C2 chainScript
         defb 0 & 255   ; C3 getActorX
         defb 0 & 255   ; C4 isLess
-        defb 0 & 255   ; C5 drawObject
+        defb b_drawObject & 255   ; C5 drawObject
         defb 0 & 255   ; C6 decrement
         defb 0 & 255   ; C7 setState
         defb 0 & 255   ; C8 isEqual
         defb 0 & 255   ; C9 faceActor
         defb 0 & 255   ; CA startScript
-        defb 0 & 255   ; CB getVerbEntrypoint
-        defb 0 & 255   ; CC pseudoRoom
-        defb 0 & 255   ; CD walkActorToActor
+        defb b_getVerbEntrypoint & 255   ; CB getVerbEntrypoint
+        defb b_pseudoRoom & 255   ; CC pseudoRoom
+        defb b_walkActorToActor & 255   ; CD walkActorToActor
         defb 0 & 255   ; CE putActorAtObject
         defb 0 & 255   ; CF ifState
-        defb 0 & 255   ; D0 pickupObject
+        defb b_pickupObject & 255   ; D0 pickupObject
         defb 0 & 255   ; D1 animateActor
         defb 0 & 255   ; D2 actorFollowCamera
         defb 0 & 255   ; D3 actorOps
@@ -218,19 +218,19 @@ ovc_lo:
         defb 0 & 255   ; D6 getActorMoving
         defb 0 & 255   ; D7 or
         defb 0 & 255   ; D8 printEgo
-        defb 0 & 255   ; D9 doSentence
+        defb b_doSentence & 255   ; D9 doSentence
         defb 0 & 255   ; DA add
         defb 0 & 255   ; DB divide
         defb 0 & 255   ; DC oldRoomEffect
         defb 0 & 255   ; DD setClass
-        defb 0 & 255   ; DE walkActorTo
-        defb 0 & 255   ; DF isActorInBox
+        defb b_walkActorTo & 255   ; DE walkActorTo
+        defb b_isActorInBox & 255   ; DF isActorInBox
         defb 0 & 255   ; E0 freezeScripts
         defb 0 & 255   ; E1 putActor
         defb 0 & 255   ; E2 stopScript
         defb 0 & 255   ; E3 getActorFacing
-        defb 0 & 255   ; E4 loadRoomWithEgo
-        defb 0 & 255   ; E5 pickupObject
+        defb b_loadRoomWithEgo & 255   ; E4 loadRoomWithEgo
+        defb b_pickupObject & 255   ; E5 pickupObject
         defb 0 & 255   ; E6 getClosestObjActor
         defb 0 & 255   ; E7 getStringWidth
         defb 0 & 255   ; E8 isScriptRunning
@@ -243,19 +243,19 @@ ovc_lo:
         defb 0 & 255   ; EF ifNotState
         defb b_lights & 255   ; F0 lights
         defb 0 & 255   ; F1 getActorCostume
-        defb 0 & 255   ; F2 loadRoom
+        defb b_loadRoom & 255   ; F2 loadRoom
         defb b_roomOps & 255   ; F3 roomOps
         defb 0 & 255   ; F4 getDist
-        defb 0 & 255   ; F5 findObject
-        defb 0 & 255   ; F6 walkActorToObject
-        defb 0 & 255   ; F7 startObject
+        defb b_findObject & 255   ; F5 findObject
+        defb b_walkActorToObject & 255   ; F6 walkActorToObject
+        defb b_startObject & 255   ; F7 startObject
         defb 0 & 255   ; F8 isGreater
-        defb 0 & 255   ; F9 doSentence
+        defb b_doSentence & 255   ; F9 doSentence
         defb 0 & 255   ; FA verbOps
         defb 0 & 255   ; FB getActorWalkBox
         defb 0 & 255   ; FC isSoundRunning
         defb 0 & 255   ; FD findInventory
-        defb 0 & 255   ; FE walkActorTo
+        defb b_walkActorTo & 255   ; FE walkActorTo
         defb 0 & 255   ; FF drawBox
 ovc_hi:
         defb 0 / 256
@@ -263,14 +263,15 @@ ovc_hi:
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
+        defb b_drawObject / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
+        defb b_getVerbEntrypoint / 256
         defb b_resourceRoutines / 256
+        defb b_walkActorToActor / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
@@ -282,18 +283,19 @@ ovc_hi:
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
+        defb b_doSentence / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
+        defb b_walkActorTo / 256
+        defb b_isActorInBox / 256
         defb 0 / 256
         defb 0 / 256
         defb b_saveLoadGame / 256
         defb 0 / 256
+        defb b_loadRoomWithEgo / 256
+        defb b_pickupObject / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
@@ -304,13 +306,39 @@ ovc_hi:
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
+        defb b_setBoxFlags / 256
         defb 0 / 256
         defb 0 / 256
         defb b_roomOps / 256
         defb 0 / 256
+        defb b_findObject / 256
+        defb b_walkActorToObject / 256
+        defb b_startObject / 256
+        defb 0 / 256
+        defb b_doSentence / 256
+        defb 0 / 256
+        defb b_waitForActor / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb b_walkActorTo / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb b_drawObject / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb b_getVerbEntrypoint / 256
+        defb b_waitForSentence / 256
+        defb b_walkActorToActor / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb b_pickupObject / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
@@ -319,47 +347,19 @@ ovc_hi:
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
+        defb b_doSentence / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
+        defb b_walkActorTo / 256
+        defb b_isActorInBox / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
+        defb b_loadRoomWithEgo / 256
+        defb b_pickupObject / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
@@ -372,34 +372,34 @@ ovc_hi:
         defb 0 / 256
         defb b_lights / 256
         defb 0 / 256
-        defb 0 / 256
+        defb b_loadRoom / 256
         defb b_roomOps / 256
         defb 0 / 256
+        defb b_findObject / 256
+        defb b_walkActorToObject / 256
+        defb b_startObject / 256
+        defb 0 / 256
+        defb b_doSentence / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb b_walkActorTo / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
+        defb b_drawObject / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
+        defb b_getVerbEntrypoint / 256
         defb b_resourceRoutines / 256
-        defb 0 / 256
+        defb b_walkActorToActor / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
@@ -411,17 +411,19 @@ ovc_hi:
         defb 0 / 256
         defb 0 / 256
         defb b_systemOps / 256
+        defb b_doSentence / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
+        defb b_walkActorTo / 256
+        defb b_isActorInBox / 256
         defb 0 / 256
         defb 0 / 256
         defb b_saveLoadGame / 256
         defb 0 / 256
+        defb b_loadRoomWithEgo / 256
+        defb b_pickupObject / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
@@ -432,13 +434,39 @@ ovc_hi:
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
+        defb b_setBoxFlags / 256
         defb 0 / 256
         defb 0 / 256
         defb b_roomOps / 256
         defb 0 / 256
+        defb b_findObject / 256
+        defb b_walkActorToObject / 256
+        defb b_startObject / 256
+        defb 0 / 256
+        defb b_doSentence / 256
+        defb 0 / 256
+        defb b_waitForActor / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb b_walkActorTo / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb b_drawObject / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb b_getVerbEntrypoint / 256
+        defb b_pseudoRoom / 256
+        defb b_walkActorToActor / 256
+        defb 0 / 256
+        defb 0 / 256
+        defb b_pickupObject / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
@@ -447,47 +475,19 @@ ovc_hi:
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
+        defb b_doSentence / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
+        defb b_walkActorTo / 256
+        defb b_isActorInBox / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
+        defb b_loadRoomWithEgo / 256
+        defb b_pickupObject / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
@@ -500,17 +500,17 @@ ovc_hi:
         defb 0 / 256
         defb b_lights / 256
         defb 0 / 256
-        defb 0 / 256
+        defb b_loadRoom / 256
         defb b_roomOps / 256
         defb 0 / 256
+        defb b_findObject / 256
+        defb b_walkActorToObject / 256
+        defb b_startObject / 256
+        defb 0 / 256
+        defb b_doSentence / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
         defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
-        defb 0 / 256
+        defb b_walkActorTo / 256
         defb 0 / 256

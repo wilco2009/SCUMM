@@ -48,7 +48,12 @@ OVB_HANDLERS = ['startSound', 'startMusic', 'stopSound', 'stopMusic', 'isSoundRu
                 # fase 4b-2 (ENGINE/ovb4c.asm): mensajes
                 'print', 'printEgo']
 # OVC_HANDLERS: los del overlay C (ENGINE/ovc1.asm, etiqueta b_<nombre>, despacho ovc_lo/ovc_hi); salieron de B cuando se lleno (fase 4b-2)
-OVC_HANDLERS = ['roomOps', 'resourceRoutines', 'lights', 'systemOps', 'saveLoadGame']
+OVC_HANDLERS = ['roomOps', 'resourceRoutines', 'lights', 'systemOps', 'saveLoadGame',
+                # fase 5 (ENGINE/ovc5.asm): salas, objetos y frases
+                'loadRoom', 'loadRoomWithEgo', 'pseudoRoom', 'startObject', 'getVerbEntrypoint', 'drawObject', 'pickupObject', 'findObject',
+                'isActorInBox', 'setBoxFlags', 'doSentence', 'waitForSentence',
+                # fase 6 (ENGINE/ovc6.asm): caminata (leen sus operandos en C y entran en el overlay D)
+                'walkActorTo', 'walkActorToObject', 'walkActorToActor', 'waitForActor']
 OVC = [n for n in OVC_HANDLERS if n in vmmodel3.CORE_OPS]
 OVB = [n for n in OVB_HANDLERS if n in vmmodel3.CORE_OPS and n not in OVC]
 # los del nucleo que no necesitan manejador propio: salen al anfitrion con la lectura generica y el modelo los trata igual (H oo [args])

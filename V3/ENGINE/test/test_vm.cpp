@@ -16,6 +16,8 @@
 #include <vector>
 #include <map>
 #include <algorithm>
+#include <array>
+#include <csignal>
 extern "C" {
 #include "z80.h"
 int tstates = 0;
@@ -55,11 +57,13 @@ static bool load_sym(const char* path) {
 static int VARS, OBJST, OBJOWN, OBJCLS, SCRDIR, BIGDIR, SLOTS, LOCALS, CUTDATA, CUTSCR, CUTSP, ARGS, ARGN, HRES, HFLAG, ERR,
     DELTA, APIW, APIN, APIP, APIA, APIVERB, APIBIG, VACNT, VARARG, HOSTVEC, TOPOP, OPC, SPTR, CUR;
 static int ACTORS, NEWNAMES, INVSL, EVARGS, EVVEC, CAMCUR, CAMDEST, CAMMODE, CAMFOL, CAMMOV, HAVEMSG, KEEPTXT, TALKDLY, LASTSND, CURROOM, ASIZE, NACT, NINV, NNAMES;
+static int API_INPUT, INEV;
 static int USERPUT, CURSTATE, MAINTOP, MAINH, STRLEN, STRPOS, STRHEAP, VERBS, VSZ, NVERB, NSTR, ACTNAMES;   // fase 4b-1
 static int USETALK, STRSL, MSGPTR, MSGCNT, MSGEND, CHARCOL, MSGBUF;                                       // fase 4b-2
 static int OVC_PAGE;
+static int APIFL, CLS_PG, RBLOB, SENTN, SENTQ, RESMAP, OBJP, NROBJ, NBOXES, CURRD;                               // fase 5
 static int NSLOT, NLOCAL, TABPG, OVB_PAGE, COLD_ROOMDIR, COLD_ODIR, COLD_OBJROOM, COLD_COSTDIR, COLD_COSTDIR2;
-static int API_INIT, API_RUN_EXT, API_RUN_OBJECT, API_RUN_SCRIPT, API_FRAME, API_SET_ROOM, API_ABORT;
+static int API_INIT, API_RUN_EXT, API_RUN_OBJECT, API_RUN_SCRIPT, API_FRAME, API_SET_ROOM, API_ABORT, API_LOAD_ROOM, API_SENTENCE;
 static int ES_GO, ES_LOOP;
 static const int TRAP = 0x7FFC, HOSTSTUB = 0x4100;   // (la pila del arnes baja desde $7FF0)
 
@@ -102,7 +106,8 @@ static bool load_data(const char* path) {
 static void init_world() {
   for (int i = 0; i < 600; i++) wr(SCRDIR + i, data[OFF_SCRDIR + i]);
   for (int i = 0; i < 1000; i++) { wr(OBJOWN + i, data[OFF_OBJOWN + i]); wr(OBJST + i, data[OFF_OBJST + i]); }
-  for (int i = 0; i < 3000; i++) wr(OBJCLS + i, data[OFF_OBJCLS + i]);
+  memset(ram[CLS_PG], 0, 8192);                                       // fase 5: OBJCLS en la pagina fria CLS_PG
+  for (int i = 0; i < 3000; i++) ram[CLS_PG][i] = data[OFF_OBJCLS + i];
   for (int i = 0; i < 32; i++) wr(BIGDIR + i, data[OFF_BIGDIR + i]);
   uint8_t* c = ram[TABPG];
   memset(c, 0, 8192);
@@ -187,6 +192,32 @@ void z80_writeport_wrapper(int port, int d, int*) {
 BYTE z80_readport_wrapper(int, int*) { return 0xFF; }
 }
 
+// fase 6, TS_VM=1: T de walk_frame (walkActors) por fotograma: [0] nadie se mueve, [1] un actor que da un paso dentro de su tramo,
+// [2] un actor que arranca, cambia de tramo (busqueda de camino), gira o llega, [3] varios actores en movimiento
+static FStat wkst[4];
+static int WK_IN = 0;
+static bool wk_on = false;
+static long long wk_t0 = 0;
+static int wk_n = 0, wk_a = 0, wk_mv = 0, wk_nx = 0, wk_ny = 0;
+static void wk_begin() {
+  wk_on = true; wk_t0 = tnow; wk_n = 0;
+  int room = rd(CURROOM);
+  for (int i = 1; i < NACT; i++) {
+    int a = ACTORS + ASIZE * i;
+    if (rd(a) == room && rd(a + 9)) { wk_n++; wk_a = a; wk_mv = rd(a + 9); wk_nx = rd16(a + 39); wk_ny = rd16(a + 41); }
+  }
+}
+static void wk_end() {
+  wk_on = false;
+  int k = 0;
+  if (wk_n > 1) k = 3;
+  else if (wk_n == 1) k = ((wk_mv & 3) == 2 && (rd(wk_a + 9) & 3) == 2 && rd16(wk_a + 39) == wk_nx && rd16(wk_a + 41) == wk_ny) ? 1 : 2;
+  wkst[k].n++; wkst[k].sum += tnow - wk_t0; wkst[k].mx = std::max(wkst[k].mx, tnow - wk_t0);
+}
+
+static bool pd_on = false;
+static int pd_page = 0;
+static long long pd_t[0x2000];
 static long call_limit = 60000000L;
 static bool tv_trace = false;
 static long tv_pc = 0;
@@ -217,6 +248,7 @@ static bool z80_call(int addr) {
       if (pc == TK_IN) { tk_t0 = tnow; tk_k = rd(HAVEMSG) == 0 ? (rd16(TALKDLY) ? 1 : 0) : (rd16(TALKDLY) ? 2 : 3); }
       else if (pc == TK_OUT) { tkst[tk_k].n++; tkst[tk_k].sum += tnow - tk_t0; tkst[tk_k].mx = std::max(tkst[tk_k].mx, tnow - tk_t0); }
     }
+    if (ts_vm && pc == WK_IN) wk_begin();
     if (pc == ES_GO) { vm_insns++; if (tv_trace) fprintf(stderr, "  op %02X ptr %04X cur=%d pg=%d a1: room %d cost %d frame %d%c", rd(rd16(SPTR)), rd16(SPTR), rd(CUR), blk[1], rd(ACTORS+ASIZE), rd16(ACTORS+ASIZE+5), rd(ACTORS+ASIZE+11), 10); }
     if (tv_ring) {                                  // TV_RING=1: los ultimos 40 PC antes de cada vm_err
       ring[ringn++ % 40] = pc;
@@ -226,9 +258,11 @@ static bool z80_call(int addr) {
     tstates = 0;
     z80_do_opcode();
     tnow += tstates;
+    if (pd_on && pc < 0x2000 && blk[0] == pd_page) pd_t[pc] += tstates;      // TS_PD=1: T por direccion dentro del overlay D
     instr_total++;
     if (++n > call_limit) return false;
   }
+  if (wk_on) wk_end();
   return true;
 }
 
@@ -241,11 +275,15 @@ static int slot_base_off(int st_where, int num, int page, int ptr) {
     if (pg == 255) { int e = OFF_BIGDIR + 8 * ad; return (page - d8(e + 2)) * 4096 + ptr - 0x2000; }
     return ptr - ad;
   }
-  if (st_where == 3) {
-    auto it = room_locals[cur_room].find(num);
-    return it == room_locals[cur_room].end() ? ptr : ptr - it->second.addr;
+  if (st_where == 3) {                                      // un script local de la sala en uso (CURRD: n x (id, pagina, direccion))
+    int n = rd(CURRD + 9), tp = rd(CURRD + 18), ta = rd16(CURRD + 19);
+    for (int k = 0; k < n; k++) {
+      const uint8_t* e = ram[128 + tp] + (ta - 0x2000) + 4 * k;
+      if (e[0] == num) return ptr - (e[2] | (e[3] << 8));
+    }
+    return ptr;
   }
-  if (num == 10002) return ptr - d16(OFF_ROOMDIR + 32 * entry_room + 1);
+  if (num == 10002) return ptr - rd16(CURRD + 1);                  // el ENCD de la sala en uso (ROOM, ENTRY o startScene)
   if (num == 10001) return ptr - d16(OFF_ROOMDIR + 32 * exit_room + 4);
   return ptr - d16(OFF_ODIR + 3 * num + 1);
 }
@@ -272,6 +310,7 @@ static uint16_t verbs_crc() {                    // vmmodel3.CoreVM.verbs_crc
     int a = VERBS + i * VSZ;
     for (int k = 0; k < 8; k++) b.push_back(rd(a + k));                 // verbid, color, hicolor, dimcolor, bkcolor, curmode, saveid, key
     b.push_back(rd(a + 8) & 1); b.push_back((rd(a + 8) >> 1) & 1);      // center, type
+    b.push_back(rd(a + 18));                                            // V_LEN (fase 7: columnas del ultimo dibujo)
     put16(b, rd16(a + 9)); put16(b, rd16(a + 11)); put16(b, rd16(a + 13));
     std::vector<uint8_t> n = raw_string(rd(a + 15), rd16(a + 16));
     put16(b, (int)n.size());
@@ -299,6 +338,18 @@ static uint16_t actor_names_crc() {              // CoreVM.actor_names_crc
   }
   return crc16(b.data(), b.size());
 }
+static std::string walk_trace() {               // CoreVM.walk_trace (fase 6): n:x,y,caja,moving de cada actor de la sala en uso
+  int room = rd(CURROOM);
+  std::string t;
+  if (room) for (int i = 1; i < NACT; i++) {
+    int a = ACTORS + ASIZE * i;
+    if (rd(a) != room) continue;
+    char b[64];
+    snprintf(b, sizeof b, "%s%d:%d,%d,%d,%d", t.empty() ? "" : ";", i, (int16_t)rd16(a + 1), (int16_t)rd16(a + 3), rd(a + 16), rd(a + 9));
+    t += b;
+  }
+  return t.empty() ? "-" : t;
+}
 static std::string digest() {
   std::vector<uint8_t> v(512), l(NSLOT * NLOCAL * 2), k;
   for (int i = 0; i < 512; i++) v[i] = rd(VARS + i);
@@ -309,19 +360,27 @@ static std::string digest() {
   for (size_t i = 0; i < a.size(); i++) a[i] = rd(ACTORS + (int)i);
   for (int i = 0; i < 1000; i++) o.push_back(rd(OBJST + i));
   for (int i = 0; i < 1000; i++) o.push_back(rd(OBJOWN + i));
-  for (int i = 0; i < 1000; i++) { o.push_back(rd(OBJCLS + 3 * i)); o.push_back(rd(OBJCLS + 3 * i + 1)); o.push_back(rd(OBJCLS + 3 * i + 2)); o.push_back(0); }
+  for (int i = 0; i < 1000; i++) { o.push_back(ram[CLS_PG][3 * i]); o.push_back(ram[CLS_PG][3 * i + 1]); o.push_back(ram[CLS_PG][3 * i + 2]); o.push_back(0); }
   for (size_t i = 0; i < inv.size(); i++) inv[i] = rd(INVSL + (int)i);
   for (size_t i = 0; i < nn.size(); i++) nn[i] = rd(NEWNAMES + (int)i);
   std::vector<uint8_t> mb, sl;                    // fase 4b-2: el bufer del mensaje (con su 0 final) y los valores por omision de las 4 ranuras de texto
   for (int p = MSGBUF; p <= rd16(MSGEND); p++) mb.push_back(rd(p));
   for (int i = 0; i < 44; i++) sl.push_back(rd(STRSL + i));
-  char b[460];
-  snprintf(b, sizeof b, "D f=%d V=%04X L=%04X K=%d,%04X A=%04X O=%04X I=%04X N=%04X M=%d,%d,%d,%d,%d X=%d,%d,%d,%d,%04X,%04X C=%d,%d,%d,%d,%d U=%d,%d,%d,%d W=%04X T=%04X P=%04X S=", frame,
+  std::vector<uint8_t> sq, rb;                    // fase 5: cola de frases (7 bytes cada una) y objetos (13 de los 14 bytes de cada registro) y cajas de la sala
+  int ns = rd(SENTN), nb = rd(NBOXES), no = rd(NROBJ), op = rd16(OBJP);
+  for (int i = 0; i < ns * 7; i++) sq.push_back(rd(SENTQ + i));
+  for (int i = 0; i < no; i++) for (int k = 0; k < 13; k++) rb.push_back(rd(op + 14 * i + k));
+  for (int i = 0; i < nb * 18; i++) rb.push_back(rd(RBLOB + 1 + i));
+  std::vector<uint8_t> rm;
+  for (int i = 0; i < 128; i++) rm.push_back(rd(RESMAP + i));
+  char b[1000];
+  snprintf(b, sizeof b, "D f=%d V=%04X L=%04X K=%d,%04X A=%04X O=%04X I=%04X N=%04X M=%d,%d,%d,%d,%d X=%d,%d,%d,%d,%04X,%04X C=%d,%d,%d,%d,%d U=%d,%d,%d,%d W=%04X T=%04X P=%04X Q=%d,%04X R=%d,%d,%04X,%d,%04X G=%s S=", frame,
            crc16(v.data(), v.size()), crc16(l.data(), l.size()), rd(CUTSP), crc16(k.data(), k.size()), crc16(a.data(), a.size()),
            crc16(o.data(), o.size()), crc16(inv.data(), inv.size()), crc16(nn.data(), nn.size()), rd(HAVEMSG), (int16_t)rd16(TALKDLY), rd(KEEPTXT),
            rd(CURROOM), (int16_t)rd16(LASTSND), rd(USETALK), rd16(MSGCNT), rd16(MSGPTR) - MSGBUF, rd(CHARCOL), crc16(mb.data(), mb.size()),
            crc16(sl.data(), sl.size()), (int16_t)rd16(CAMCUR), (int16_t)rd16(CAMDEST), rd(CAMMODE), rd(CAMFOL), rd(CAMMOV),
-           (int16_t)rd16(USERPUT), (int16_t)rd16(CURSTATE), (int16_t)rd16(MAINTOP), (int16_t)rd16(MAINH), verbs_crc(), strings_crc(), actor_names_crc());
+           (int16_t)rd16(USERPUT), (int16_t)rd16(CURSTATE), (int16_t)rd16(MAINTOP), (int16_t)rd16(MAINH), verbs_crc(), strings_crc(), actor_names_crc(),
+           ns, crc16(sq.data(), sq.size()), nb, no, crc16(rb.data(), rb.size()), rd(S("EGOPOS")), crc16(rm.data(), rm.size()), walk_trace().c_str());
   std::string s = b;
   bool first = true;
   for (int i = 0; i < NSLOT; i++) {
@@ -348,14 +407,16 @@ static bool run_call(int addr, FILE* out) {
   return true;
 }
 
+static void segv(int) { fprintf(stderr, "SIGSEGV en el Z80: pc=%04X sp=%04X hl=%04X de=%04X bc=%04X ix=%04X a=%02X\n", z80.pc.w, z80.sp.w, z80.hl.w, z80.de.w, z80.bc.w, z80.ix.w, z80.af.w >> 8); exit(3); }
 int main(int argc, char** argv) {
+  signal(SIGSEGV, segv);
   if (argc < 7) { printf("uso: test_vm vm.bin vm.sym ovlb.bin DATA.BIN scenarios.txt actual.txt\n"); return 2; }
   ts_vm = getenv("TS_VM") && atoi(getenv("TS_VM"));
   tv_trace = getenv("TV_TRACE") != nullptr;
   tv_ring = getenv("TV_RING") != nullptr;
   tv_pc = getenv("TV_PC") ? atol(getenv("TV_PC")) : 0;
   if (!load_sym(argv[2])) { printf("no puedo leer %s\n", argv[2]); return 2; }
-  VARS = S("VARS"); OBJST = S("OBJST"); OBJOWN = S("OBJOWN"); OBJCLS = S("OBJCLS"); SCRDIR = S("SCRDIR"); BIGDIR = S("BIGDIR");
+  VARS = S("VARS"); OBJST = S("OBJST"); OBJOWN = S("OBJOWN"); SCRDIR = S("SCRDIR"); BIGDIR = S("BIGDIR");
   SLOTS = S("SLOTS"); LOCALS = S("LOCALS"); CUTDATA = S("CUTDATA"); CUTSCR = S("CUTSCR"); CUTSP = S("CUTSP"); ARGS = S("ARGS");
   ARGN = S("ARGN"); HRES = S("HRES"); HFLAG = S("HFLAG"); ERR = S("ERR"); DELTA = S("DELTA"); APIW = S("APIW"); APIN = S("APIN");
   APIP = S("APIP"); APIA = S("APIA"); APIVERB = S("APIVERB"); APIBIG = S("APIBIG"); VACNT = S("VACNT"); VARARG = S("VARARG");
@@ -367,15 +428,18 @@ int main(int argc, char** argv) {
   USERPUT = S("USERPUT"); CURSTATE = S("CURSTATE"); MAINTOP = S("MAINTOP"); MAINH = S("MAINH"); STRLEN = S("STRLEN"); STRPOS = S("STRPOS");
   STRHEAP = S("STRHEAP"); VERBS = S("VERBS"); VSZ = S("VSZ"); NVERB = S("NVERB"); NSTR = S("NSTR"); ACTNAMES = S("ACTNAMES");
   USETALK = S("USETALK"); STRSL = S("STRSL"); MSGPTR = S("MSGPTR"); MSGCNT = S("MSGCNT"); MSGEND = S("MSGEND"); CHARCOL = S("CHARCOL");
-  MSGBUF = S("MSGBUF");
+  MSGBUF = S("MSGBUF"); INEV = S("INEV");
   OVC_PAGE = S("OVC_PAGE");
+  APIFL = S("APIFL"); CLS_PG = S("CLS_PG"); RBLOB = S("RBLOB"); SENTN = S("SENTN"); SENTQ = S("SENTQ"); RESMAP = S("RESMAP"); OBJP = S("OBJP"); NROBJ = S("NROBJ");
+  NBOXES = S("NBOXES"); CURRD = S("CURRD");
   NSLOT = S("NSLOT"); NLOCAL = S("NLOCAL"); TABPG = S("TABPG"); OVB_PAGE = S("OVB_PAGE");
   COLD_ROOMDIR = S("COLD_ROOMDIR"); COLD_ODIR = S("COLD_ODIR"); COLD_OBJROOM = S("COLD_OBJROOM"); COLD_COSTDIR = S("COLD_COSTDIR");
   COLD_COSTDIR2 = S("COLD_COSTDIR2");
   API_INIT = 0x4200; API_RUN_EXT = 0x4203; API_RUN_OBJECT = 0x4206; API_RUN_SCRIPT = 0x4209; API_FRAME = 0x420C;
-  API_SET_ROOM = 0x420F; API_ABORT = 0x4212;
+  API_SET_ROOM = 0x420F; API_ABORT = 0x4212; API_LOAD_ROOM = 0x4218; API_SENTENCE = 0x421B; API_INPUT = 0x421E;
   VM_ERR = S("vm_err");
-  TK_IN = S("talk_frame"); TK_OUT = S("vf_tk");
+  TK_IN = S("talk_frame"); TK_OUT = S("vf_tk"); WK_IN = S("walk_frame");
+  pd_on = getenv("TS_PD") && atoi(getenv("TS_PD")); pd_page = S("OVD_PAGE");
   ES_GO = S("es_go"); ES_LOOP = S("es_loop");
   FILE* f = fopen(argv[1], "rb");
   if (!f) { printf("no encuentro %s\n", argv[1]); return 2; }
@@ -392,6 +456,13 @@ int main(int argc, char** argv) {
     if (!f) { printf("no encuentro %s%c", argv[7], 10); return 2; }
     size_t szc = fread(ram[OVC_PAGE], 1, 8192, f); fclose(f);
     printf("ovlc.bin: %zu bytes en la pagina %d%c", szc, OVC_PAGE, 10);
+    std::string pd = argc > 8 ? argv[8] : argv[7];                 // overlay D (fase 6): 8.o argumento, o ovld.bin junto a ovlc.bin
+    if (argc <= 8) { size_t k = pd.rfind("ovlc"); if (k != std::string::npos) pd.replace(k, 4, "ovld"); else pd = ""; }
+    f = pd.empty() ? nullptr : fopen(pd.c_str(), "rb");
+    if (f) {
+      size_t szd = fread(ram[S("OVD_PAGE")], 1, 8192, f); fclose(f);
+      printf("ovld.bin: %zu bytes en la pagina %d%c", szd, S("OVD_PAGE"), 10);
+    } else if (argc > 8) { printf("no encuentro %s%c", argv[8], 10); return 2; }
   }
   if (!load_data(argv[4])) { printf("no puedo leer %s\n", argv[4]); return 2; }
   z80_init(); z80_reset();
@@ -404,11 +475,12 @@ int main(int argc, char** argv) {
   bool aborted = false;
   long frames_run = 0;
   int ncode = 0;
+  std::vector<std::array<int, 3>> pend_ev;                      // fase 7: sucesos de entrada pendientes (tipo, a, b)
   while (fgets(line, sizeof line, sc)) {
     line[strcspn(line, "\r\n")] = 0;
     if (!strncmp(line, "SCENARIO ", 9)) {
       fprintf(out, "%s\n", line);
-      trace.clear(); frame = 0; cur_room = entry_room = exit_room = 0; aborted = false; nsc++; ncode = 0;
+      trace.clear(); frame = 0; cur_room = entry_room = exit_room = 0; aborted = false; nsc++; ncode = 0; pend_ev.clear();
       for (int i = 0; i < 8; i++) blk[i] = i;
       continue;
     }
@@ -440,13 +512,24 @@ int main(int argc, char** argv) {
     } else if (!strcmp(cmd, "ACTORSET")) {                      // ACTORSET n sala x y traje visible: campos a mano, sin efectos
       int a = ACTORS + ASIZE * p[0];
       wr(a + 0, p[1]); wr16(a + 1, (uint16_t)p[2]); wr16(a + 3, (uint16_t)p[3]); wr16(a + 5, (uint16_t)p[4]); wr(a + 10, p[5] ? 1 : 0);
+      if (np > 6) wr(a + 22, p[6] ? 1 : 0);                      // 7.o: ignoreBoxes
     } else if (!strcmp(cmd, "CLASS")) {
       unsigned c = 0; sscanf(line, "%*s %*d %x", &c);
-      wr(OBJCLS + 3 * p[0], c & 255); wr(OBJCLS + 3 * p[0] + 1, (c >> 8) & 255); wr(OBJCLS + 3 * p[0] + 2, (c >> 16) & 255);
-    } else if (!strcmp(cmd, "ROOM")) {
+      ram[CLS_PG][3 * p[0]] = c & 255; ram[CLS_PG][3 * p[0] + 1] = (c >> 8) & 255; ram[CLS_PG][3 * p[0] + 2] = (c >> 16) & 255;
+    } else if (!strcmp(cmd, "ROOM")) {                          // ROOM n [1]: sala en uso con sus objetos y, con 1, cajas
       cur_room = p[0];
-      wr16(APIN, p[0]);
+      wr16(APIN, p[0]); wr(APIFL, np > 1 ? p[1] : 0);
       if (!run_call(API_SET_ROOM, out)) { aborted = true; continue; }
+    } else if (!strcmp(cmd, "PSEUDO")) {
+      wr(RESMAP + p[0], p[1]);
+    } else if (!strcmp(cmd, "LOADROOM")) {
+      wr16(APIN, p[0]);
+      if (!run_call(API_LOAD_ROOM, out)) { aborted = true; continue; }
+      dig = true;
+    } else if (!strcmp(cmd, "SENTENCE")) {
+      wr(APIVERB, p[0]); wr16(APIN, (uint16_t)p[1]); wr16(APIA, (uint16_t)p[2]);
+      if (!run_call(API_SENTENCE, out)) { aborted = true; continue; }
+      dig = true;
     } else if (!strcmp(cmd, "SCRIPT")) {
       int na = np - 1;
       for (int i = 0; i < na && i < NLOCAL; i++) wr16(VARARG + 2 * i, (uint16_t)p[1 + i]);
@@ -478,6 +561,15 @@ int main(int argc, char** argv) {
       wr(APIW, 2); wr16(APIN, 199); wr(APIP, pg); wr16(APIA, 0x2000); wr(APIBIG, 0);
       if (!run_call(API_RUN_EXT, out)) { aborted = true; continue; }
       dig = true;
+    } else if (!strcmp(cmd, "USERPUT")) {                       // USERPUT u c: _userPut y _cursor.state a mano
+      wr16(USERPUT, (uint16_t)p[0]); wr16(CURSTATE, (uint16_t)p[1]);
+    } else if (!strcmp(cmd, "INPUT")) {                         // INPUT zona valor [modo]: runInputScript (fase 7)
+      wr(APIVERB, p[0]); wr16(APIN, (uint16_t)p[1]); wr16(APIA, np > 2 ? p[2] : 0);
+      if (!run_call(API_INPUT, out)) { aborted = true; continue; }
+      dig = true;
+    } else if (!strcmp(cmd, "CLICK") || !strcmp(cmd, "MOVE") || !strcmp(cmd, "RCLICK") || !strcmp(cmd, "KEY") || !strcmp(cmd, "ESC")) {   // el suceso de entrada del siguiente fotograma (INEV); uno por fotograma: los siguientes esperan
+      int k = !strcmp(cmd, "CLICK") ? 1 : !strcmp(cmd, "RCLICK") ? 2 : !strcmp(cmd, "KEY") ? 3 : !strcmp(cmd, "ESC") ? 4 : 5;
+      pend_ev.push_back({k, np > 0 ? p[0] : 0, np > 1 ? p[1] : 0});
     } else if (!strcmp(cmd, "ABORT")) {
       if (!run_call(API_ABORT, out)) { aborted = true; continue; }
       dig = true;
@@ -485,6 +577,11 @@ int main(int argc, char** argv) {
       for (int i = 0; i < p[1]; i++) {
         frame++; frames_run++;
         wr(DELTA, p[0]);
+        if (!pend_ev.empty()) {                                  // un suceso de entrada por fotograma (el modelo: vm.pending.pop(0))
+          std::array<int, 3> e = pend_ev.front(); pend_ev.erase(pend_ev.begin());
+          wr(INEV, e[0]);
+          if (e[0] == 3) wr16(INEV + 5, (uint16_t)e[1]); else if (e[0] == 1 || e[0] == 5) { wr16(INEV + 1, (uint16_t)e[1]); wr16(INEV + 3, (uint16_t)e[2]); }
+        }
         int hm0 = rd(HAVEMSG), td0 = rd16(TALKDLY);
         long long t0 = tnow;
         if (!run_call(API_FRAME, out)) { aborted = true; break; }
@@ -502,9 +599,37 @@ int main(int argc, char** argv) {
   fclose(out); fclose(sc);
   printf("%d escenarios, %ld fotogramas; instrucciones del Z80: %ld; instrucciones de script: %ld (%.1f Z80 por instruccion)\n",
          nsc, frames_run, instr_total, vm_insns, vm_insns ? (double)instr_total / vm_insns : 0.0);
+  static const char* nm[4] = {"sin mensaje ni espera", "sin mensaje, con talk_delay", "con mensaje esperando", "con mensaje: displayDialog"};
   if (ts_vm) {
-    static const char* nm[4] = {"sin mensaje ni espera", "sin mensaje, con talk_delay", "con mensaje esperando", "con mensaje: displayDialog"};
+
     for (int k = 0; k < 4; k++) if (tkst[k].n) printf("talk_frame %-28s n %7ld  T medios %8.0f  max %lld%c", nm[k], tkst[k].n, (double)tkst[k].sum / tkst[k].n, tkst[k].mx, 10);
+    const char* wn[4] = {"nadie se mueve", "un actor, paso en su tramo", "un actor, arranca/cambia de tramo/llega", "varios actores"};
+    for (int k = 0; k < 4; k++) if (wkst[k].n) printf("walk_frame %-40s n %7ld  T medios %8.0f  max %lld%c", wn[k], wkst[k].n, (double)wkst[k].sum / wkst[k].n, wkst[k].mx, 10);
+  }
+  if (pd_on && argc > 8) {                          // perfil del overlay D por etiqueta (ovld.sym junto a ovld.bin)
+    std::string sp = argv[8]; size_t k = sp.rfind(".bin"); if (k != std::string::npos) sp.replace(k, 4, ".sym");
+    std::vector<std::pair<int, std::string>> lab;
+    FILE* fs = fopen(sp.c_str(), "r");
+    char ln[300];
+    while (fs && fgets(ln, sizeof ln, fs)) {
+      char nm[100]; unsigned v;
+      if (sscanf(ln, "%99s EQU 0%xH", nm, &v) == 2 && v < 0x2000 && strcmp(nm, "ovd_end") && !isupper((unsigned char)nm[0])) lab.push_back({(int)v, nm});
+    }
+    if (fs) fclose(fs);
+    std::sort(lab.begin(), lab.end());
+    std::vector<std::pair<long long, std::string>> tot;
+    long long all = 0;
+    for (size_t i = 0; i < lab.size(); i++) {
+      if (i && lab[i].first == lab[i - 1].first) continue;
+      int e = 0x2000; for (size_t q = i + 1; q < lab.size(); q++) if (lab[q].first > lab[i].first) { e = lab[q].first; break; }
+      long long t = 0; for (int a = lab[i].first; a < e; a++) t += pd_t[a];
+      all += t; if (t) tot.push_back({t, lab[i].second});
+    }
+    std::sort(tot.rbegin(), tot.rend());
+    printf("perfil del overlay D (T propios por etiqueta; sin las rutinas del residente): total %lld%c", all, 10);
+    for (size_t i = 0; i < tot.size() && i < 30; i++) printf("  %-14s %12lld  %5.1f %%%c", tot[i].second.c_str(), tot[i].first, 100.0 * tot[i].first / all, 10);
+  }
+  if (ts_vm) {
     for (int k = 0; k < 4; k++) if (fst[k].n) printf("fotograma %-28s n %7ld  T medios %8.0f  max %lld (incluye los scripts del fotograma)%c", nm[k], fst[k].n, (double)fst[k].sum / fst[k].n, fst[k].mx, 10);
   }
   if (ts_vm && !all_t.empty()) {

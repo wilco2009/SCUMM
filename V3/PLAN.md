@@ -9,7 +9,7 @@ Primer juego: **Indiana Jones and the Last Crusade EGA** (DOS, inglés; el caste
   No suponer reglas: si algo no está claro, se lee ScummVM.
 - **El código Z80 no puede pasar de `$8000`**. Al acabar cada fase, el montaje imprime el final del residente y el tamaño de cada overlay.
 - **Nombres de fichero de la SD sin "_"**.
-- **Sin regresiones en v2:** `V2/ENGINE/test/build_test.sh` (Maniac y Zak) tiene que seguir pasando. Si una fase toca un fichero compartido, lo comprueba.
+- **Sin regresiones en v2:** `V2/ENGINE/test/build_test.sh` (Maniac y Zak) tiene que seguir pasando. **Solo se pasa si la fase toca algo de `SCUMM/V2`** (o lo común en la fase 9): `V3/ENGINE` es una copia y no afecta a v2 (usuario, 2026-11-14).
 - **No hay commit** sin que lo pida el usuario. Se trabaja en `main` del repo `SCUMM`, sin worktrees.
 - **Primero el modelo de Python y luego el Z80**, como en v2: el Z80 se compara con el modelo por trazas en el arnés.
 - **Pruebas en la placa: las hace el usuario.** La sesión deja `compila_scumm.bat` listo y dice qué probar.
@@ -204,7 +204,7 @@ Como se prueba cada manejador nuevo (lo monto la fase 3; `V3/FASE3.md`):
         esperando 198, y `displayDialog` escribiendo una linea hasta ~4.000.
       - **Overlay B lleno (248 B libres) -> overlay C abierto el mismo dia** (pagina fisica 48; `ovlc.asm`, `ovc1.asm`, `call_ovc`; detalle en `FASE3.md`, "Overlay C"). Salieron de B a C `roomOps`, `resourceRoutines`, `lights`,
         `systemOps` y `saveLoadGame`: B 7.680 B (~680 libres), C 1.024 B; la fase 5 pone sus manejadores en C. La fase 9 tiene que quitar la pagina 48 de la cache de paginas.
-  - Con la fase 5 (necesitan la sala cargada o la cola de frases): `doSentence`, `startObject`, `getVerbEntrypoint`, `drawObject`, `pickupObject`, `findObject`,
+  - Con la fase 5 (necesitan la sala cargada o la cola de frases; **hechos, ver la fase 5**): `doSentence`, `startObject`, `getVerbEntrypoint`, `drawObject`, `pickupObject`, `findObject`,
     `isActorInBox`, `loadRoom`, `loadRoomWithEgo`, `pseudoRoom`, `setBoxFlags`, `waitForSentence`. Con la fase 6: `walkActorTo`, `walkActorToActor`, `walkActorToObject`,
     `waitForActor`.
 - Cada manejador se prueba con escenarios contra el modelo (receta de arriba).
@@ -219,6 +219,33 @@ Como se prueba cada manejador nuevo (lo monto la fase 3; `V3/FASE3.md`):
 - Frases (`doSentence`, `checkAndRunSentenceScript` con argumentos en locales) y `runInputScript` con `VAR_VERB_SCRIPT`.
 - Pantalla con el diseño D3: `hr.asm` con la sala de 128 líneas a partir de la fila 2.
 - **Hecho cuando:** en el arnés el juego arranca, pasa el logo y los créditos y llega al pasillo con la imagen correcta (`check_hr.py`), con las trazas iguales a las del modelo.
+  **La fase 5 no lo cumplio (el programa completo seguia siendo la copia de v2): lo cumple la fase 5b, abajo en la tabla Estado y en `FASE3.md`.**
+
+- **HECHA 2026-11-14** (Sonnet, sesión aparte; sin commit): `startScene`, los objetos de sala, los nombres de objeto, la cola de frases y los 12 opcodes del alcance (`loadRoom`,
+  `loadRoomWithEgo`, `pseudoRoom`, `startObject`, `getVerbEntrypoint`, `drawObject`, `pickupObject`, `findObject`, `isActorInBox`, `setBoxFlags`, `doSentence`, `waitForSentence`),
+  en el modelo (`CoreVM`) y en el Z80. Detalle, mapa de memoria y límites en `V3/FASE3.md` ("Fase 5"). Resumen:
+  - **Colocación (decisión):** `OBJCLS` (3.000 B) sale del bloque 7 a la **página fría 47** (se mira por el bloque 1 con `cls_open`/`cls_close`, sin leer el script entre las dos);
+    en su sitio van el blob de la sala (`RBLOB`, 1.536 B), la cola de frases (6 x 7 B), el mapa de pseudosalas (128 B) y unas variables de sala: **quedan 1.282 B libres** en el bloque 7.
+    El residente gana ~360 B (los helpers que comparten B y C: `obj_index`, `wio`, `odir`, `run_inv`, `chk_actor`...: salieron de B). Los manejadores van en el **overlay C**
+    (`ENGINE/ovc5.asm`, 3.840 B de 8.192: 4.352 libres); B queda con 512 libres y gana cinco puntos de entrada fijos para C (`OVB_STOPTALK/HIDE/SHOWACT/FOLLOW/PUTACT`).
+  - **Modelo:** `CoreVM` carga los objetos (y las cajas) de la sala con `ROOM n [1]` y `startScene`; nuevas órdenes de escenario `LOADROOM`, `SENTENCE`, `PSEUDO` y `ACTORSET ... ign`;
+    resumen nuevo `Q=` (cola de frases) y `R=` (objetos y cajas de la sala, `ego_positioned`, mapa de pseudosalas). El inventario ya no copia el OBCD: usa el de `ODIR`.
+    Escenarios nuevos: `clrm` (startScene entre dos salas), `csnt` (frases reales con el script de frases de Indy3), scripts globales con sala en uso y `vmsynth3.gen_room5` (los 12 opcodes al azar).
+  - **Límites que el modelo hace suyos** (`E_RANGE`): sala de `loadRoom`/`loadRoomWithEgo` fuera de 0..255, verbo de `doSentence` fuera de 0..255, `pseudoRoom` con sala 0, `drawObject` con x fuera de 0..254
+    o y fuera de 0..255 (el Z80 guarda x/8 e y/8 en un byte). `findObject` lee el estado de los padres **vivo** (`OBJST`), no la copia `objs[].state` que ScummVM refresca cada fotograma
+    (solo difiere si se cambia el estado y se llama a `findObject` en el mismo fotograma). La cola de frases cuenta `freeze` en un byte.
+  - **Lo que sigue en la fase 6** (E_BADOP en modelo y Z80, con trazas iguales hasta el error): `adjustXYToBeInBox` con cajas (afecta a `putActor`, `showActors` y `loadRoomWithEgo` en una sala con
+    cajas con un actor que no ignora cajas) y `startWalkActor` (`loadRoomWithEgo` con x <> -1). `isActorInBox` y `setBoxFlags` ya funcionan con cajas reales.
+  - **Lo que sigue en la fase 7:** `runInputScript`, `checkExecVerbs` y el ratón (clics y teclas): el gancho está en `vm_frame` (entre `run_all` y la comprobación de la cola de frases).
+  - **Trazas: 3.192/3.192 iguales** (88 salas, 1 semilla: 1.992 de las salas, locales, objetos, scripts globales, `clrm` (startScene), `csnt` (frases), `cfnd` (findObject), `cbox` (isActorInBox) y 1.200 sintéticos con
+    `gen_room5`; el modelo da ERR 8 en ~10 % de ellos: los límites de la fase 6). Aparte, 600 escenarios de `isActorInBox` con coordenadas extremas: iguales.
+  - **Mutaciones:** `mutaciones.py` +25 de la fase 5 (frases, cola congelada, `findObject`, `drawObject`, `pickupObject`, `startObject`, `getVerbEntrypoint`, `startScene`, pseudosalas, `loadRoomWithEgo`,
+    `isActorInBox`, `setBoxFlags`, nombre de objeto, `getObjectXYPos` y las clases en la página fría): **72 de 77 detectadas** con las salas 1, 15 y 20 (la 20 es la que tiene cadenas de padres; el argumento de salas de
+    `mutaciones.py` ahora conviene que sea `1,15,20`). Sin detectar: las 4 de siempre (índice `0x2000` > 7, `stopScript` de un anidado, `divide` con los dos negativos y `$FF 8` en cadenas) y "rechazo rápido de
+    `isActorInBox` con 3 esquinas" (equivalente con las cajas de Indy3: casi todas tienen pares de esquinas con la misma x). Se retiraron las 2 mutaciones del anfitrión con resultado y con salto
+    (`h_host_r`, `h_host_j`): tras esta fase ningún opcode usa esas rutas (solo `drawBox`, `oldRoomEffect` y los de caminata van por `h_host`; se pueden borrar en la fase 10).
+  - **v2 sin regresiones:** Maniac 2.912/2.912 (no se ha tocado nada de `V2/`; `V3/ENGINE` es una copia y V2 no incluye nada de V3, así que no puede verse afectado). Zak no se repitió: tarda ~50 min y `V2/ENGINE` tiene cambios sin commit de otras sesiones (3.732 escenarios en vez de 3.662).
+  - T (`TS_VM=1`, media exclusiva con despachador): ver `FASE3.md`.
 
 ### Fase 6 (Opus): caminata de v3
 - Primero en el modelo (`vmmodel3.py`), copiando ScummVM sin aproximar:
@@ -229,12 +256,34 @@ Como se prueba cada manejador nuevo (lo monto la fase 3; `V3/FASE3.md`):
 - Después en el Z80 (`walk.asm`/`geom.asm` de v3), comparando la traza de posiciones fotograma a fotograma con el modelo.
 - **Hecho cuando:** Indy cruza las salas con varias cajas (pasillo, 15 Venecia, 20 y 28 del castillo) igual que el modelo en escenarios de clics.
 
+- **HECHA 2026-11-14** (Opus/Fable, sin commit). Detalle en `V3/FASE3.md` ("Fase 6"). Resumen:
+  - **Modelo revisado contra ScummVM** funcion a funcion (`actor.cpp`, `boxes.cpp`, `script_v5.cpp`, `script_v3.cpp`, `common/rect.h`). Lo que estaba mal: la aritmetica de
+    `closestPtOnLine`/`compareSlope` (es de `int` de 32 bits que desborda), `Common::Point::sqrDist` (tope de 0x1000 por eje = 0xFFFFFF), los tipos de la caminata (`xfrac`/`xAdd`
+    uint16, posicion int16), `setDirection` (marca `_needRedraw` solo si cambia) y el WORKAROUND de la sala 46 (mira el recurso de la sala). Lo demas coincidia. **No hay un ScummVM
+    ejecutable para comparar posiciones**: la comprobacion es la lectura del codigo y que el Z80 da las mismas trazas (riesgo que queda para la placa).
+  - **Z80:** overlay nuevo **D** (pagina fisica **46**; `ovld.asm` = `geom.asm` + `walk.asm`, 4.392 B) con cuatro entradas fijas (`OVD_WALK`, `OVD_ADJUST`, `OVD_STARTWALK`,
+    `OVD_CALCMF`; argumentos en `WKX`, `WKY`, `WKDIR`, `WKBOX` e IX); los cuatro opcodes (`walkActorTo`, `walkActorToActor`, `walkActorToObject`, `waitForActor`) en el overlay C
+    (`ovc6.asm`); `walk_frame` en el residente (al final de `vm_frame`). Ya no queda ningun `E_BADOP` de la fase 5 (`adjust_xy`, `adjust_actor_pos` con cajas de direccion fija,
+    `actorOps` 2 en movimiento, `loadRoomWithEgo` con x <> -1). Los 96 opcodes estan en el nucleo salvo `oldRoomEffect` y `drawBox` (anfitrion generico).
+  - **Limites que el modelo hace suyos** (`E_RANGE`): division por cero en la geometria y velocidad 0 al andar (ScummVM se cuelga), `_stepX` > 255 (velocidad y 255), una caja que
+    no existe. `closest[]` de `getGates` sin candidato vale 0 y la matriz de cajas no se lee mas alla de su final (en ScummVM, sin definir).
+  - **Trazas: 3.492/3.492 iguales**; `wlk_test.py` (coordenadas extremas) 600/600. **Mutaciones: 120 de 126** (caminata: 48 de 49; sin detectar, las 5 de antes y el umbral 4 de
+    `getGates`). Residente `$421E-$5578` (**10.888 B libres**), overlay B 7.680 B (512 libres), C 4.096 B (4.096 libres), **D 4.392 B (3.800 libres)**, bloque 7 **987 B libres**.
+  - **T:** un paso de caminata **8.329 T** de media (max. 21.598); `walk_frame` sin nadie andando 942 T; un fotograma con cambio de tramo (puerta entre dos cajas) 134.670 T de media
+    y 1.467.429 de maximo: es lo primero que mirar en la fase 10 (ideas en `FASE3.md`).
+  - **Escenarios de clics:** `cwlk<sala>.<k>` (12 en las salas 1, 15, 20 y 28; 3 en las demas con cajas): un clic es `walkActorTo` del ego; el clic de verdad
+    (`runInputScript`, `checkExecVerbs`) es de la fase 7. `moveCamera` y `updateObjectStates` (van tras `walkActors` en ScummVM) siguen fuera del nucleo: la camara no sigue al
+    ego mientras anda hasta que alguien los lleve (5b o 7).
+
 ### Fase 7 (Sonnet): interfaz de Indy3
 - Verbos colocados por el script (`verbOps`: posición, nombre, colores y tecla), línea de la frase e inventario con flechas, en las 6 filas de D3.
 - Mensajes de 2 líneas arriba, con la fuente de 6 px y el color del actor.
 - Cursor y ratón: `mouse.asm` ya existe en v2.
 - Teclas: `VAR_CUTSCENEEXIT_KEY` (27), pausa y reinicio.
 - **Hecho cuando:** en el arnés se puede jugar la primera parte (Barnett College) con clics de escenario.
+- **HECHA 2026-11-15** (Sonnet, sin commit): ver la tabla Estado y `V3/FASE3.md` ("Fase 7"). Resumen: el nucleo recibe un suceso de entrada por fotograma (`INEV`; `vm_input.asm`) y el programa traduce teclado y raton a
+  coordenadas de SCUMM (`in_poll`, `in_conv`); el rectangulo de un verbo es `[left, left + 8 * V_LEN)` con `V_LEN` fijado al dibujarlo (`VSZ` = 19); la pantalla de texto `UIVB` (8 x 40 de 6 px) pone la frase en la fila 1
+  (**fila de arriba**: decision confirmada por el usuario) y los verbos e inventario en las 6 de abajo; los mensajes (`EV_TEXT`, `PGBUF`) en las 2 de arriba. Se corrigio el modelo: la pantalla principal mide `main_h - main_top`.
 
 ### Fase 8 (Sonnet): actores y sonido
 - Sprites de los actores con los blobs de la fase 2; caché de firma como en v2.
@@ -249,6 +298,7 @@ Como se prueba cada manejador nuevo (lo monto la fase 3; `V3/FASE3.md`):
 ### Fase 9 (Sonnet + usuario): montaje, SD y placa
 - `compila_scumm.bat` de v3. En la SD: `SCUMM\V3\SCUMM.BIN`, `SCUMM\V3\INDY3\INDY3.B81` y `SCUMM\V3\INDY3\DATA\`, sin "_".
 - Guardar y cargar (`save.asm` con el estado de v3: locales, clases, inventario v3).
+- Quitar de la caché de páginas la 46 (overlay D, fase 6), la 47 (OBJCLS, fase 5; lleva también la copia de la tabla de caracteres) y la 48 (overlay C) además de la 49 y la 50; cargar `ovld.bin` en la 46 y repetir los `OVD_*` de `vm.asm`; repetir en el programa de la placa los `OVB_*` y `OVC_*` de `vm.asm` y las entradas de API `vm_load_room` y `vm_sentence`.
 - Mover lo común a `SCUMM/COMMON/` (D1) y volver a pasar las pruebas de v2.
 - El usuario prueba en la placa: arranque, protección, Barnett College, Venecia, castillo, scroll, sonido, guardar y cargar.
 
@@ -274,11 +324,15 @@ Como se prueba cada manejador nuevo (lo monto la fase 3; `V3/FASE3.md`):
 | 4a | **Hecha** (2026-11-13): 27 opcodes mas (sonido, objetos, camara, actores sin caminar) en el overlay B; 1.484/1.484 trazas iguales; residente 11.832 B libres, B 3.328 B. Sin commit |
 | 4b-1 | **Hecha** (2026-11-13): 22 opcodes mas en el nucleo (overlay B). **2.686/2.686 trazas iguales** (1.486 de las salas, locales, objetos y globales + 1.200 sinteticos con `CODE`); mutaciones 41/45 (las 17 nuevas detectadas). Residente `$4200-$51ED`: **11.795 B libres** hasta `$8000`; overlay B **6.656 de 8.192 B** (1.536 libres); hueco de `ODIRBUF` (bloque 4): **187 B** libres; bloque 7: **122 B** libres. Sin commit |
 | 4b-2 | **Hecha** (2026-11-14): `print` y `printEgo` en el nucleo (overlay B, `ovb4c.asm`; `talk_frame` y `MSGBUF` en el residente). **2.687/2.687 trazas iguales** (1.487 de las salas + 1.200 sinteticos); mutaciones 50/54 (las 9 nuevas detectadas). Residente `$4200-$5392` (tras abrir el overlay C, `$53A8`: **11.352 B libres** hasta `$8000`; +421 B, 320 de `MSGBUF`); overlay B **7.944 de 8.192 B (248 libres)**, y con el overlay C (`call_ovc`, pagina 48): B 7.680 B y C 1.024 B; bloque 7: **60 B** libres; hueco de `ODIRBUF`: 187 B. T: `print` 8.360, `printEgo` 14.104, `talk_frame` 75 T sin mensaje. v2 sin tocar y sin regresiones (Maniac 2.912/2.912, Zak 3.662/3.662). Sin commit |
-| 5 a 10 | Sin empezar. La 5 (salas, objetos y frases) es la siguiente: sus manejadores van en el overlay C |
+| 5 | **Hecha** (2026-11-14): `startScene`, objetos de sala, nombres de objeto, cola de frases y los 12 opcodes (`ovc5.asm`, overlay C). **3.192/3.192 trazas iguales**; mutaciones 72/77. OBJCLS a la página fría 47; residente `$421E-$550E` (**10.994 B libres** hasta `$8000`), overlay C 3.840 B (4.352 libres), overlay B 7.680 B (512 libres), bloque 7: **1.282 B libres**. T: `startObject` 7.620, `drawObject` 8.628, `findObject` 8.869, `isActorInBox` 3.215, `loadRoom` 49.052, `doSentence` 2.745. Sin hacer (fase 6): `adjustXYToBeInBox` con cajas y `startWalkActor` (E_BADOP). Sin commit |
+| 6 | **Hecha** (2026-11-14): caminata de v3 revisada contra ScummVM en el modelo y hecha en el Z80 (overlay D nuevo, página 46: `geom.asm` + `walk.asm`; opcodes en `ovc6.asm`). **3.492/3.492 trazas iguales** (300 escenarios `cwlk` de clics y mezcla en todas las salas con cajas, 12 en las salas 1, 15, 20 y 28) y `wlk_test.py` 600/600; **mutaciones 120/126** (caminata 48/49). Residente `$421E-$5578` (**10.888 B libres**), overlay B 7.680 B (512 libres), C 4.096 B (4.096 libres), **D 4.392 B (3.800 libres)**, bloque 7 **987 B libres**. **T de un paso de caminata: 8.329** (máx. 21.598); cambio de tramo 134.670 de media (máx. 1.467.429): para la fase 10. Sin commit |
+| 5b | **Hecha** (2026-11-15): `scumm.asm` de v3 es ya el programa completo (cargador v3, overlays B/C/D desde la SD, bucle principal, camara, sonido simulado `timed`, proteccion saltada) y el arnes `test_scumm` lo arranca hasta el pasillo: **1.501/1.501 fotogramas con el mismo resumen D que el modelo** (`vmmodel3.py boot-core`; sala 1 en el fotograma 694) y `check_hr.py` 0 distintos en las salas 76, 79, 1, 8, 12 y 20. **Pantalla D3** en `hr.asm` (16 lineas de mensajes, sala de 128 desde la linea 16, 48 de interfaz; `.GFX` v2; salas de 144 lineas o mas recortadas: se pierden las 16 de arriba). Para llegar al pasillo hizo falta `moveCamera` (overlay C, `ovc7.asm`) y `VAR_CAMERA_POS_X`, en modelo y Z80. Bugs hallados: `map_page` debe conservar BC y el cargador pisaba la pagina fria. `build_test.sh` **3.492/3.492**; mutaciones 129/139: las 126 de antes igual (120 detectadas) y 9 de 13 las nuevas de la camara. Residente `$4200-$65B9` (**6.727 B libres** hasta `$8000`), overlay B 7.680 B (512 libres), **C 4.608 B (3.584 libres)**, D 4.392 B (3.800 libres). Sin texto, interfaz ni actores (fases 7 y 8); el pasillo con scroll cuesta ~1.000.000 T por vuelta (fase 10). Detalle en `FASE3.md`. Sin commit |
+| 7 | **Hecha** (2026-11-15): interfaz de Indy3 (`ui3.asm`: verbos colocados por el script, frase, inventario con flechas, mensajes arriba con el color del actor, cursor, teclado y raton, pausa y reinicio) y la entrada en el nucleo (`vm_input.asm`: `processInput`, `checkExecVerbs`, `runInputScript`, ESC / boton derecho / `VAR_CUTSCENEEXIT_KEY`), en modelo y Z80. **`build_test.sh` 3.687/3.687 iguales** (195 escenarios de entrada nuevos); arranque 1.501/1.501 y **partida en Barnett College con 14 sucesos de entrada 1.751/1.751** fotogramas iguales; `check_hr.py` 0 distintos (salas 76, 79, 1, 8, 12, 20; ya comprueba tambien las filas de la interfaz). Mutaciones: 20 de las 24 nuevas (total 148 de 162, sin perder las 129 de 139 de antes). Residente `$4200-$7064` (**3.996 B libres**), overlay B 7.936 B (365 libres), C 4.608 B, D 4.392 B. **Decision (confirmada por el usuario, 2026-11-15):** la frase va en la 2.a fila de mensajes de arriba (Indy3 usa 7 filas de interfaz y D3 da 6). Detalle en `FASE3.md`. Sin commit |
+| 8 a 10 | Sin empezar |
 
 ### Pendiente de la fase 1 (lo que el modelo aproxima o no hace)
 
-- **Caminata**: `startWalkActor`, `walkActor`, `calcMovementFactor`, `actorWalkStep`, `remapDirection`, `findPathTowardsOld`, `getGates`, `getNextBox`, `adjustXYToBeInBox`, `checkXYInBoxBounds` y `closestPtOnLine` están transcritas de ScummVM v3 con sus nombres, pero solo se han leído: no se han comparado con una ejecución real. La fase 6 las verifica.
+- ~~**Caminata** sin verificar~~: **revisada en la fase 6** contra el código de ScummVM (ver la fase 6 y `FASE3.md`); sigue sin compararse con una ejecución real de ScummVM (no hay ejecutable): queda para la placa.
 - **Sin trajes**: el fotograma del actor es el último pedido (`_frame`); `getAnimCounter` devuelve 0 (el opcode no existe en v3). El rectángulo de un actor para `actorFromPos` es una caja fija (`actor_rect`) hasta la fase 8.
 - **Sin diseño de texto**: el modelo no mide letras; el salto de línea nunca falla y el rectángulo de un verbo mide 8 px por letra y 8 de alto (`findVerbAtPos`, `getStringWidth`). La pantalla principal es la de `roomOps` 3 (por omisión y = 16..160).
 - **Sonido**: dos modos. `mock` (escenarios): `isSoundRunning` sale como suceso `E 4` y `VAR_MUSIC_TIMER` no avanza. `timed` (arranque): 60 jiffies por efecto, 3600 por canción (>1000 bytes) y temporizador como `Player_V2Base` (236 Hz, +1 cada 126 ticks tras fijar el tempo). La fase 8 usa el real.

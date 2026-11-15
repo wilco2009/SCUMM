@@ -2,8 +2,8 @@
 ;  ovb4.asm - manejadores de la fase 4a en el overlay B (se incluye desde ovlb.asm): sonido, objetos, camara y actores sin caminar.
 ;  Semantica: ScummVM tal como la transcribe V3/TOOLS/vmmodel3.py + vmgame3.py. Entran por ovb_op con DE = puntero tras el opcode,
 ;  leen sus operandos con los lectores del residente (rd_vb1, rd_vw2, rd_res...) y dejan SPTR antes de hacer nada que pueda correr
-;  otro script. Lo que dependa de una sala cargada (objetos de la sala, cajas) esta marcado con FASE5 / FASE6: hasta entonces no
-;  hay objetos de sala (obj_index no encuentra ninguno) ni cajas (NBOXES = 0).
+;  otro script. Fase 5: los objetos de la sala (RBLOB, obj_index del residente) ya existen; lo que dependa de la geometria de las cajas
+;  (adjust_xy) esta en el overlay D desde la fase 6 (geom.asm): aqui queda la llamada (call_ovd).
 ;  Las variables temporales (SC+n) no sobreviven a un script anidado: lo que cruce una llamada a run_script va en la pila.
 ; =====================================================================
 
@@ -36,50 +36,6 @@ ad_neg:         xor a
                 ret
 
 ; ---------------------------------------------------------------- actores
-actor_ix:       ld h,a                  ; A = actor (0..NACT-1) -> IX = su registro (usa HL, BC)
-                ld l,0
-                srl h
-                rr l
-                srl h
-                rr l
-                ld bc,ACTORS
-                add hl,bc
-                push hl
-                pop ix
-                ret
-
-chk_actor:      ld a,b                  ; derefActor: BC = valor de script -> IX; E_BADACTOR si no esta en 0..NACT-1
-                or a
-                jp nz,err_badactor
-                ld a,c
-                cp NACT
-                jp nc,err_badactor
-                jr actor_ix
-
-actor_num:      push ix                 ; IX = actor -> A = su numero (usa HL, BC)
-                pop hl
-                ld bc,-ACTORS
-                add hl,bc
-                add hl,hl
-                add hl,hl
-                ld a,h
-                ret
-
-in_room:        ld a,(CURROOM)          ; Z si el actor IX esta en la sala en uso
-                cp (ix+A_ROOM)
-                ret
-
-is_act13:       ld a,b                  ; A = 1 si BC es un numero de actor valido (0..NACT-1), si no 0
-                or a
-                jr nz,ia_n
-                ld a,c
-                cp NACT
-                jr nc,ia_n
-                ld a,1
-                ret
-ia_n:           xor a
-                ret
-
 old_dir:        ld a,c                  ; oldDirToNewDir(C & 3) -> HL = 270, 90, 180, 0
                 and 3
                 add a,a
@@ -159,21 +115,14 @@ turn_to_dir:    bit 2,(ix+A_FLAGS)      ; turnToDirection(HL = angulo): sin giro
                 ld (ix+A_MOVING),4      ; MF_TURN
                 ret
 
-; adjustXYToBeInBox(IX = actor, HL = x, DE = y) -> HL, DE, A = caja. Con ignoreBoxes: el punto tal cual y caja invalida; sin cajas: las
-; ultimas coordenadas validas. FASE6: con cajas (NBOXES != 0) falta la geometria
-adjust_xy:      ld a,(ix+A_IGNB)
-                or a
-                jr z,ax_b
-                ld a,$FF
-                ret
-ax_b:           ld a,(NBOXES)
-                or a
-                jp nz,err_badop
-                ld l,(ix+A_LVX)
-                ld h,(ix+A_LVX+1)
-                ld e,(ix+A_LVY)
-                ld d,(ix+A_LVY+1)
-                ld a,$FF
+; adjustXYToBeInBox(IX = actor, HL = x, DE = y) -> HL, DE, A = caja. Esta en el overlay D (geom.asm, fase 6)
+adjust_xy:      ld (WKX),hl
+                ld (WKY),de
+                ld hl,OVD_ADJUST
+                call call_ovd
+                ld hl,(WKX)
+                ld de,(WKY)
+                ld a,(WKBOX)
                 ret
 
 adjust_actor_pos:                       ; IX = actor
@@ -191,9 +140,18 @@ adjust_actor_pos:                       ; IX = actor
                 ld (ix+A_DESTX),$FF
                 ld (ix+A_DESTX+1),$FF
                 ld (ix+A_MOVING),0
-                cp $FF
+                ld c,a                  ; en una caja con direccion fija (banderas & 7), el actor gira hacia donde mira
+                ld b,0
+                call box_addr
+                ret c
+                ld de,17
+                add hl,de
+                ld a,(hl)
+                and 7
                 ret z
-                jp err_badop            ; FASE6: walkbox con banderas (turnToDirection del actor)
+                ld l,(ix+A_FACING)
+                ld h,(ix+A_FACING+1)
+                jp turn_to_dir
 
 hide_actor:     ld a,(ix+A_VIS)         ; IX = actor
                 or a
@@ -345,55 +303,7 @@ chk_obj_hl:     ld de,NOBJ              ; HL = objeto: E_BADOBJ si no esta en 0.
                 add hl,de
                 ret
 
-inv_find:       ld hl,INVSL             ; BC = objeto: Z y HL = el byte alto de su ranura de INVSL si esta en el inventario; si no, NZ
-                ld d,NINV
-if_l:           ld a,(hl)
-                inc hl
-                cp c
-                jr nz,if_n
-                ld a,(hl)
-                cp b
-                jr z,if_y
-if_n:           inc hl
-                dec d
-                jr nz,if_l
-                ld a,1
-                or a
-                ret
-if_y:           xor a
-                ret
-
-obj_index:      ld a,1                  ; getObjectIndex: Z si el objeto esta en la sala. FASE5: aun no hay objetos de sala (los pone
-                or a                    ; startScene): nunca esta
-                ret
-
-; whereIsObject: BC = objeto -> A = $FF no esta, 0 inventario, 1 sala (conserva BC)
-wio:            ld h,b
-                ld l,c
-                ld de,NOBJ
-                or a
-                sbc hl,de
-                jr nc,wio_nf
-                ld a,b
-                or c
-                jr z,wio_nf
-                ld hl,OBJOWN
-                add hl,bc
-                ld a,(hl)
-                cp OWNER_ROOM
-                jr z,wio_room
-                call inv_find
-                jr nz,wio_nf
-                xor a
-                ret
-wio_room:       call obj_index
-                jr nz,wio_nf
-                ld a,1
-                ret
-wio_nf:         ld a,$FF
-                ret
-
-; getObjectOrActorXY: BC = objeto o actor -> HL = x, DE = y; carry si no esta. Cambia IX. FASE5: un objeto de sala (getObjectXYPos) da E_BADOBJ
+; getObjectOrActorXY: BC = objeto o actor -> HL = x, DE = y; carry si no esta. Cambia IX
 goa_xy:         bit 7,b
                 jr nz,gx_none
                 ld a,b
@@ -416,7 +326,20 @@ gx_obj:         call wio
                 jr z,gx_inv
                 cp $FF
                 jr z,gx_none
-                jp err_badobj
+                call obj_index          ; un objeto de la sala: getObjectXYPos (x e y de acercamiento: walk_x, walk_y)
+                ld de,OB_WX
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                inc hl
+                ld a,(hl)
+                inc hl
+                ld h,(hl)
+                ld l,a
+                ex de,hl                ; HL = x, DE = y
+                or a
+                ret
 gx_inv:         ld hl,OBJOWN
                 add hl,bc
                 ld a,(hl)
@@ -428,8 +351,8 @@ gx_inv:         ld hl,OBJOWN
 gx_none:        scf
                 ret
 
-; getObjectOrActorWidth: BC = objeto o actor -> A. Cambia IX. FASE5: la anchura de un objeto de sala (objs[].width)
-goa_width:      bit 7,b
+; getObjectOrActorWidth: BC = objeto o actor -> HL. Cambia IX
+goa_width:      bit 7,b                 ; -> HL = ancho en pixeles (un objeto de la sala: su ancho/8 * 8)
                 jr nz,gw_0
                 ld a,b
                 or a
@@ -440,12 +363,24 @@ goa_width:      bit 7,b
                 call actor_ix
                 call in_room
                 jr nz,gw_0
-                ld a,(ix+A_WIDTH)
+                ld l,(ix+A_WIDTH)
+                ld h,0
                 ret
 gw_o:           call wio
                 or a
-                jr nz,gw_0
-                ld hl,OBJOWN
+                jr z,gw_i
+                cp $FF
+                jr z,gw_0
+                call obj_index
+                ld de,OB_W
+                add hl,de
+                ld l,(hl)
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ret
+gw_i:           ld hl,OBJOWN
                 add hl,bc
                 ld a,(hl)
                 cp NACT
@@ -453,25 +388,11 @@ gw_o:           call wio
                 call actor_ix
                 call in_room
                 jr nz,gw_0
-                ld a,(ix+A_WIDTH)
+                ld l,(ix+A_WIDTH)
+                ld h,0
                 ret
-gw_0:           xor a
+gw_0:           ld hl,0
                 ret
-
-; runInventoryScript(i): C = i
-run_inv0:       ld c,0
-run_inv:        ld hl,(VAR_INVENTORY_SCRIPT)
-                ld a,h
-                or l
-                ret z
-                ld a,c
-                ld (VARARG),a
-                xor a
-                ld (VARARG+1),a
-                inc a
-                ld (VACNT),a
-                xor a
-                jp run_script
 
 ; ---------------------------------------------------------------- sonido
 b_startSound:   call rd_vb1
@@ -732,28 +653,44 @@ b_panCameraTo:  call rd_vw1
                 ld (CAMMOV),a
                 ret
 
-; actorFollowCamera: mientras no haya startScene (fase 5), el actor que no esta en la sala sale al anfitrion como H oo [actor]
+; actorFollowCamera (fase 5: con startScene si el actor no esta en la sala)
 b_actorFollowCamera:
                 call rd_vb1
                 ld (SPTR),de
-                ld (ARGS),bc
                 call chk_actor
-                call in_room
-                jr z,afc_go
-                ld a,1                  ; fuera de la sala: startScene es de la fase 5
-                ld (ARGN),a
-                ld a,(OPC)
-                ld (TOPOP),a
-                jp host_call
-afc_go:         ld a,(CAMFOL)
+                ld a,(CAMFOL)
                 push af                 ; el actor al que seguia
+                call set_cam_follows
+                pop af                  ; si ha cambiado de actor: otra vez
+                ld hl,CAMFOL
+                cp (hl)
+                call nz,run_inv0
+                xor a
+                ld (CAMMOV),a
+                ret
+
+; setCameraFollows: IX = actor (OVB_FOLLOW para el overlay C). Si no esta en la sala, startScene(a.room) y vuelve a seguirle. Cambia IX
+set_cam_follows:
                 call actor_num
-                push af
-                ld a,CAM_FOLLOW         ; setCameraFollows
-                ld (CAMMODE),a
-                pop af
                 ld (CAMFOL),a
-                ld l,(ix+A_X)
+                ld a,CAM_FOLLOW
+                ld (CAMMODE),a
+                call in_room
+                jr z,scf_in
+                ld a,(CAMFOL)
+                push af
+                ld c,(ix+A_ROOM)
+                ld hl,OVC_START
+                call call_ovc           ; (puede correr scripts: ni IX ni SC sobreviven)
+                pop af
+                call actor_ix
+                ld a,CAM_FOLLOW
+                ld (CAMMODE),a
+                ld c,(ix+A_X)
+                ld b,(ix+A_X+1)
+                ld (CAMCUR),bc
+                call set_camera_at
+scf_in:         ld l,(ix+A_X)
                 ld h,(ix+A_X+1)
                 sra h
                 rr l
@@ -785,15 +722,25 @@ afc_n:          pop af
                 inc a
                 cp NACT
                 jr c,afc_rd
-                call run_inv0
-                pop af                  ; si ha cambiado de actor: otra vez
-                ld hl,CAMFOL
-                cp (hl)
-                jr z,afc_e
-                call run_inv0
-afc_e:          xor a
-                ld (CAMMOV),a
+                jp run_inv0
+
+; ---- puntos de entrada fijos de B para el overlay C (OVB_xxx de vm.asm; un overlay no llama a las rutinas de otro)
+ovb_stoptalk:   jp stop_talk
+ovb_hide:       jp hide_actor           ; IX = actor
+ovb_showact:    ld a,1                  ; showActors: show_actor de cada actor 1..NACT-1 que esta en la sala
+osa_l:          push af
+                call actor_ix
+                call in_room
+                call z,show_actor
+                pop af
+                inc a
+                cp NACT
+                jr c,osa_l
                 ret
+ovb_follow:     jp set_cam_follows      ; IX = actor
+ovb_putact:     ld hl,(SC+0)            ; IX = actor, C = sala, x en SC+0 e y en SC+2 (HL lo ocupa call_ovb)
+                ld de,(SC+2)
+                jp put_actor
 
 ; ---------------------------------------------------------------- actores: lectura
 get_prep:       call rd_res             ; resultado y actor (derefActor) -> IX
@@ -948,7 +895,21 @@ b_putActorAtObject:
                 call wio
                 inc a
                 jr z,pao_def
-                jp err_badobj           ; FASE5: getObjectXYPos
+                call obj_index          ; getObjectXYPos de un objeto de la sala (o de un inventario: wio = 0: el objeto no esta en RBLOB: E_BADOBJ)
+                jp nz,err_badobj
+                ld de,OB_WX
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                inc hl
+                ld a,(hl)
+                inc hl
+                ld h,(hl)
+                ld l,a
+                ex de,hl                ; HL = x, DE = y
+                ld c,(ix+A_ROOM)
+                jp put_actor
 pao_def:        ld hl,240
                 ld de,120
                 ld c,(ix+A_ROOM)
@@ -994,8 +955,20 @@ an_dir:         call old_dir
                 call in_room
                 jr nz,an_d1
                 res 2,(ix+A_MOVING)
-an_d1:          ld (ix+A_FACING),l
+an_d1:          ld a,(ix+A_FACING)      ; Actor::setDirection: si cambia, y tiene traje y esta en la sala, hay que redibujarlo
+                cp l
+                jr nz,an_d2
+                ld a,(ix+A_FACING+1)
+                cp h
+                ret z
+an_d2:          ld (ix+A_FACING),l
                 ld (ix+A_FACING+1),h
+                ld a,(ix+A_COST)
+                or (ix+A_COST+1)
+                ret z
+                call in_room
+                ret nz
+                set 0,(ix+A_FLAGS)
                 ret
 an_gen:         jp start_anim
 
@@ -1027,8 +1000,9 @@ b_faceActor:    call rd_vb1
                 push ix
                 call goa_width
                 pop ix
-                srl a                   ; width // 2
-                ld (SC+4),a
+                srl h                   ; width // 2
+                rr l
+                ld (SC+6),hl
                 ld l,(ix+A_X)
                 ld h,(ix+A_X+1)
                 ld de,(SC+0)
@@ -1040,9 +1014,7 @@ b_faceActor:    call rd_vb1
                 ld h,(ix+A_X+1)
                 ld de,(SC+0)
                 call abs_diff
-                ld a,(SC+4)
-                ld e,a
-                ld d,0
+                ld de,(SC+6)
                 or a
                 sbc hl,de
                 jr nc,fa_turn           ; |a.x - x2| >= width // 2
@@ -1212,9 +1184,13 @@ afp_l:          ld (SC+4),a
                 ld e,l
                 add hl,hl
                 add hl,de
-                ld de,OBJCLS+2
+                ld de,WINDOW+2
                 add hl,de
+                call cls_open
                 bit 7,(hl)
+                push af
+                call cls_close
+                pop af
                 jr nz,afp_n
                 ld l,(ix+A_Y)           ; y1 <= y <= y2
                 ld h,(ix+A_Y+1)

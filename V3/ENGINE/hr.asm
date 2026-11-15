@@ -6,7 +6,12 @@
 ;  La sala entera (ROOMnn.GFX, hecho por TOOLS/lfl2hr.py) esta en las paginas fisicas ROOMPG0.. y se asoma por la ventana de datos
 ;  (bloque WINBLK) solo mientras se copia un trozo; despues se restaura la pagina que habia (WINPG, vm_core.asm).
 ;
-;  Formato del .GFX: ver lfl2hr.py. La columna k de la sala esta en el desplazamiento 256 * (k + 1): 32 columnas por pagina de 8 KB.
+;  Formato del .GFX: version 2 de lfl3hr.py (V3/TOOLS/LFL3HR.md): alto variable (+8), columnas por pagina (+12); la columna k esta en
+;  256 + (k / cpp) * 8192 + (k % cpp) * 2 * lineas.
+;
+;  DISENO D3 (V3/PLAN.md): 192 lineas = 16 de mensajes arriba (filas 0-1), 128 de sala (filas 2-17: HR_TOP) y 48 de interfaz (filas 18-23).
+;  Una sala de mas de 128 lineas se recorta: se ven las lineas [hv_ytop, hv_ytop + 128) (hv_ytop = 16 si la sala tiene 144 lineas o mas, que es el
+;  alto visible de la pantalla principal de v3: se pierden las 16 de arriba; D3 deja el scroll vertical para cuando haya prueba en la placa).
 ;
 ;  Camara: gf_cam / gf_fine son la posicion LOGICA (la que piden los scripts, gf_move_*); hv_cam / hv_fine, la del hardware. hr_frame (una vez
 ;  por fotograma) acerca la del hardware a la logica: el fino por POKE 2090 y, al pasar de columna, la orden del motor de scroll
@@ -14,7 +19,8 @@
 ;  Invariante: el bufer de la izquierda tiene la columna hv_cam - 1 y el de la derecha la hv_cam + 32.
 ; =====================================================================
 HR_BM           equ $A000
-HR_RBM          equ HR_BM+$1800         ; entrada derecha (bitmap): un byte por linea
+HR_TOP          equ 16                  ; D3: linea de pantalla de la primera linea de la sala (las 16 de arriba son de los mensajes)
+HR_RBM          equ HR_BM+$1800         ; entrada derecha (bitmap): un byte por linea de pantalla (la sala empieza en HR_TOP)
 HR_LBM          equ HR_BM+$1C00         ; entrada izquierda
 HR_ATT          equ $C000
 HR_RATT         equ $D800
@@ -24,8 +30,9 @@ HR_DLIST        equ HR_BM+$1E00         ; indices de los objetos que se dibujan,
 HR_COLBUF       equ HR_BM+$1F00         ; la columna que se compone: 128 bytes de bitmap y 128 de atributos
 HR_FLAGS        equ HR_ATT+$1A07        ; un byte por objeto (hasta 84): 1 si se dibujaba la ultima vez (sitio libre del bloque de atributos)
 HR_NFLAGS       equ HR_ATT+$1B00        ; lo mismo, con el estado de ahora
-ROOMPG0         equ 8                   ; paginas fisicas de la sala (8-13)
-ROOMMAX         equ 6*8192
+ROOMPG0         equ 8                   ; paginas fisicas de la sala (8-14: la 79 mide 50.602 bytes)
+ROOMMAX         equ 7*8192
+WINBLK          equ 1                   ; bloque de la ventana de datos
 DBGPORT         equ $3FEF
 
 HV              equ SV+100
@@ -55,6 +62,14 @@ hv_c0            equ HV+32               ; columnas (minima y maxima) de los obj
 hv_c1            equ HV+33
 hv_ch            equ HV+34
 hv_dark         equ HV+35               ; 1: la sala esta a oscuras (dark.asm): hr_put oscurece los atributos de lo que dibuja
+hv_lines        equ HV+36               ; D3: lineas de la sala en el .GFX, las que se ven (<= 128), la primera que se ve, columnas por pagina, 2 * lineas (palabra)
+hv_hh           equ HV+37
+hv_ytop         equ HV+38
+hv_cpp          equ HV+39
+hv_l2           equ HV+40
+hv_cs           equ HV+42               ; clip de un objeto en la columna: primera linea (absoluta), destino y longitud
+hv_cd           equ HV+43
+hv_cl           equ HV+44
 hv_drawn        equ HV+31               ; 0: la sala aun no se ha dibujado (se dibuja ya en su sitio: el salto de la camara, o gd_update si nadie la mueve)
 
 ; ---------------------------------------------------------------------
@@ -126,18 +141,66 @@ hfc2:           push bc
 ; ---------------------------------------------------------------------
 ;  Una columna del mundo (DE) con sus objetos encima, en HR_COLBUF. Fuera de la sala: negra
 ; ---------------------------------------------------------------------
+; Desplazamiento en el .GFX del bitmap de la columna hv_w, de la linea hv_ytop: 256 + (k / cpp) * 8192 + (k % cpp) * 2 * lineas + hv_ytop
+hr_coloff:      ld hl,(hv_w)
+                ld a,(hv_cpp)
+                ld c,a
+                ld b,0
+                ld d,0                  ; D = k / cpp
+hco_d:          or a
+                sbc hl,bc
+                jr c,hco_e
+                inc d
+                jr hco_d
+hco_e:          add hl,bc               ; HL = k % cpp (< 256)
+                ld a,l
+                ld e,a                  ; E = k % cpp
+                ld hl,256
+                ld bc,(hv_l2)
+                or a
+                jr z,hco_m
+hco_l:          add hl,bc
+                dec e
+                jr nz,hco_l
+hco_m:          ld a,d                  ; (k / cpp) * 8192 = (k / cpp) * 32 en el byte alto (k / cpp < 8)
+                add a,a
+                add a,a
+                add a,a
+                add a,a
+                add a,a
+                add a,h
+                ld h,a
+                ld a,(hv_ytop)
+                ld e,a
+                ld d,0
+                add hl,de
+                ret
+
 hr_makecol:     ld (hv_w),de
                 ld hl,(gf_cols)
                 or a
                 sbc hl,de
                 jp z,hm_zero
                 jp c,hm_zero
-                ld hl,(hv_w)
-                inc hl
-                ld h,l
-                ld l,0                  ; desplazamiento = (columna + 1) * 256
+                ld a,(hv_hh)
+                cp 128
+                call c,hm_zero          ; una sala de menos de 128 lineas: el resto de la columna a cero
+                call hr_coloff          ; HL = bitmap de la columna (desde la primera linea que se ve)
+                push hl
                 ld de,HR_COLBUF
-                ld bc,256
+                ld a,(hv_hh)
+                ld c,a
+                ld b,0
+                call hr_fcopy
+                pop hl
+                ld a,(hv_lines)
+                ld e,a
+                ld d,0
+                add hl,de               ; y detras, sus atributos
+                ld de,HR_COLBUF+128
+                ld a,(hv_hh)
+                ld c,a
+                ld b,0
                 call hr_fcopy
                 xor a
                 ld (hv_j),a
@@ -211,30 +274,49 @@ hm_mul:         dec b
 hm_md:          ld de,(hv_oo)
                 add hl,de
                 ld (hv_so),hl           ; donde esta el bitmap de esa columna del objeto
+                call hm_clip            ; la parte del objeto que cae en la ventana de 128 lineas: hv_cs (primera, absoluta), hv_cd (destino), hv_cl (longitud)
+                jp c,hm_next
+                jp z,hm_next
                 ld a,(hv_ol)
+                ld c,a
+                ld a,(hv_cs)
+                sub c                   ; A = primera linea dentro de la columna del objeto
+                ld e,a
+                ld d,0
+                ld hl,(hv_so)
+                add hl,de               ; origen del bitmap
+                push hl
+                ld a,(hv_cd)
                 ld e,a
                 ld d,0
                 ld hl,HR_COLBUF
                 add hl,de
-                ex de,hl
-                ld a,(hv_oh)
+                ex de,hl                ; destino
+                ld a,(hv_cl)
                 ld c,a
                 ld b,0
-                ld hl,(hv_so)
+                pop hl
                 call hr_fcopy
-                ld a,(hv_oh)
+                ld a,(hv_ol)
+                ld c,a
+                ld a,(hv_cs)
+                sub c
                 ld e,a
                 ld d,0
                 ld hl,(hv_so)
+                add hl,de
+                ld a,(hv_oh)
+                ld e,a
+                ld d,0
                 add hl,de               ; y detras, sus atributos
                 push hl
-                ld a,(hv_ol)
+                ld a,(hv_cd)
                 ld e,a
                 ld d,0
                 ld hl,HR_COLBUF+128
                 add hl,de
                 ex de,hl
-                ld a,(hv_oh)
+                ld a,(hv_cl)
                 ld c,a
                 ld b,0
                 pop hl
@@ -247,6 +329,35 @@ hm_zero:        ld hl,HR_COLBUF
                 ld bc,255
                 ld (hl),0
                 ldir
+                ret
+
+; recorta el objeto actual (hv_ol, hv_oh) a la ventana [hv_ytop, hv_ytop + hv_hh): carry o Z si no queda nada; si no, NC y NZ con hv_cs, hv_cd, hv_cl
+hm_clip:        ld a,(hv_ol)
+                ld hl,hv_ytop
+                cp (hl)
+                jr nc,hmc1
+                ld a,(hl)               ; start = max(ol, ytop)
+hmc1:           ld (hv_cs),a
+                ld a,(hv_ol)
+                ld hl,hv_oh
+                add a,(hl)
+                ld b,a                  ; B = ol + oh
+                ld a,(hv_ytop)
+                ld hl,hv_hh
+                add a,(hl)              ; ytop + hh
+                cp b
+                jr c,hmc2
+                ld a,b                  ; end = min(ol + oh, ytop + hh)
+hmc2:           ld hl,hv_cs
+                sub (hl)
+                ret z
+                ret c
+                ld (hv_cl),a
+                ld a,(hv_cs)
+                ld hl,hv_ytop
+                sub (hl)
+                ld (hv_cd),a
+                or 1
                 ret
 
 ; HL = origen (128 bytes), DE = destino: uno por linea (paso 32)
@@ -277,29 +388,29 @@ hp_nd:          ld a,(hv_s)
                 cp $FF
                 jr z,hp_l
                 ld e,a
-                ld d,HR_BM>>8
+                ld d,(HR_BM>>8)+HR_TOP/8
                 ld hl,HR_COLBUF
                 call hr_stride
                 ld a,(hv_s)
                 ld e,a
-                ld d,HR_ATT>>8
+                ld d,(HR_ATT>>8)+HR_TOP/8
                 ld hl,HR_COLBUF+128
                 jp hr_stride
 hp_r:           ld hl,HR_COLBUF
-                ld de,HR_RBM
+                ld de,HR_RBM+HR_TOP
                 ld bc,128
                 ldir
                 ld hl,HR_COLBUF+128
-                ld de,HR_RATT
+                ld de,HR_RATT+HR_TOP
                 ld bc,128
                 ldir
                 ret
 hp_l:           ld hl,HR_COLBUF
-                ld de,HR_LBM
+                ld de,HR_LBM+HR_TOP
                 ld bc,128
                 ldir
                 ld hl,HR_COLBUF+128
-                ld de,HR_LATT
+                ld de,HR_LATT+HR_TOP
                 ld bc,128
                 ldir
                 ret
@@ -314,7 +425,7 @@ hr_mkdl:        xor a
                 ld bc,83
                 ld (hl),a
                 ldir
-                ld a,(NOBJS)
+                ld a,(NROBJ)
                 ld (hv_i),a
 hd_l:           ld a,(hv_i)
                 or a
@@ -461,6 +572,29 @@ hr_parse:       xor a
                 ld de,-32
                 add hl,de
                 ld (gf_npos),hl         ; ultima posicion de la camara
+                ld hl,WINDOW+8
+                ld a,(hl)               ; lineas de la sala
+                ld (hv_lines),a
+                ld c,128
+                cp c
+                jr c,hpa_h              ; menos de 128: se ven todas
+                ld a,c
+hpa_h:          ld (hv_hh),a
+                ld a,(hv_lines)
+                ld c,0                  ; primera linea que se ve: 0, o 16 si la sala tiene 144 lineas o mas (se pierden las de arriba)
+                cp 144
+                jr c,hpa_y
+                ld c,16
+hpa_y:          ld a,c
+                ld (hv_ytop),a
+                ld hl,WINDOW+12
+                ld a,(hl)
+                ld (hv_cpp),a
+                ld a,(hv_lines)
+                ld l,a
+                ld h,0
+                add hl,hl
+                ld (hv_l2),hl           ; 2 * lineas
                 ld hl,WINDOW+9
                 ld a,(hl)
                 ld (hv_nobj),a
@@ -496,21 +630,6 @@ hpa_bad2:       scf
 
 gf_load_room:   ld a,(EVARGS)
                 ld (gf_room),a
-                ld hl,(PF_OPEN)         ; los objetos que el perfil da por abiertos (getState, vm_core.asm) se dibujan abiertos desde que se carga la sala
-                call gl_open
-                ld hl,(PF_OPEN+2)
-                call gl_open
-                ld hl,160               ; camara: seguir al protagonista, desde el centro
-                ld (cam_cx),hl
-                ld a,2
-                ld (cam_mode),a
-                ld a,$FF
-                ld (cam_fol),a
-                ld a,1
-                ld (cam_new),a
-                ld a,4                  ; los personajes no vuelven a aparecer hasta saber donde van (y la camara ya esta en su sitio)
-                ld (ac_hold),a
-                call sc_hide_sprites
                 call hr_settle
                 xor a
                 ld (gf_have),a
@@ -526,9 +645,8 @@ gf_load_room:   ld a,(EVARGS)
                 ld (hv_cam),hl
                 ld (gf_objsec),hl
                 call hr_clear
-                ld a,(UI_DIRTY)         ; la pantalla se ha borrado entera: la interfaz se vuelve a dibujar
-                or 7
-                ld (UI_DIRTY),a
+                ld a,1                  ; fase 7: la pantalla de texto (arriba y abajo) se ha borrado: hr_ui la vuelve a pintar
+                ld (ui_chg),a
                 ld a,(gf_room)
                 or a
                 ret z                   ; sala 0: no hay imagen
@@ -536,7 +654,7 @@ gf_load_room:   ld a,(EVARGS)
                 ret c
                 call hr_parse
                 ret c
-                ld a,1                  ; la sala se dibuja cuando la camara sepa donde esta (cm_snap), no antes en la posicion 0
+                ld a,1                  ; la sala se dibuja cuando la camara sepa donde esta (cam_update), no antes en la posicion 0
                 ld (gf_have),a
                 ret
 

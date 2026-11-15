@@ -5,7 +5,7 @@ import os
 import struct
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'TOOLS'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'V2', 'TOOLS'))
 import lfl2gfx as L
 
 DFILE, TILES, COLORS = 0xC800, 0x3800, 0xC000

@@ -52,8 +52,8 @@ Blob de la sala: u8 numero de cajas, por caja 18 bytes tal cual estan en el recu
 Mascara de profundidad: lfl2gfx.mask_blob: u8 tiras, u16 por tira con el desplazamiento de sus tramos y, por tira, tramos (longitud, valor)
   hacia abajo hasta sumar el ALTO DE LA SALA (ROOMDIR +8; en v2 eran siempre 128) o hasta longitud 0. Bit 7 del valor = pixel de la izquierda
   de la tira; 1 = tapa al personaje. Es la mascara de la sala (zplane 1 del fondo); las de los objetos no se empaquetan.
-Tabla de sonidos (la apunta +10): 256 x 4 (prioridad, banderas (bit 7 existe, 0 reiniciable, 1 bucle, 2 fija el tempo del temporizador de
-  musica), u16 duracion en fotogramas a 50 Hz, 65535 = sin fin) y otros 256 x 4 (u8 0, u8 0, u16 tick de 236 Hz en que el sonido fija el tempo).
+Tabla de sonidos (la apunta +10; desde la fase 5b siempre esta): 256 x 4 (prioridad, banderas (bit 7 existe, 0 reiniciable, 1 bucle, 2 fija el tempo del
+  temporizador de musica, 3 es una cancion: el recurso pasa de 1000 bytes), u16 duracion en fotogramas a 50 Hz, 65535 = sin fin) y otros 256 x 4 (u8 0, u8 0, u16 tick de 236 Hz en que el sonido fija el tempo).
   VAR_MUSIC_TIMER: ver sound3vgm.py.
 """
 import argparse
@@ -126,6 +126,7 @@ def read_sounds(path):
     return bytes(t)
 
 
+SONG_BYTES = 1000                            # un sonido de mas de 1000 bytes es una cancion (vmgame3.SOUND_SONG_BYTES)
 BIG_STRIDE = 4096                            # D5: la pagina k de un script grande lleva los bytes [k * 4096, k * 4096 + 6144)
 
 
@@ -222,9 +223,19 @@ def build(ix, costumes_dir=None, sounds=None, game=None, first_page=16):
                     t[table][3 * cid:3 * cid + 3] = struct.pack('<BH', *add('trajes' if not tag else 'trajes (extra)', blob))
                     ncost += 1 if not tag else 0
                     nextra += 1 if tag else 0
-    snd_ref = struct.pack('<BH', *add('tabla de sonidos', read_sounds(sounds))) if sounds else bytes(3)
-    prof = gameprofile.build(game) if game else bytes(256)
-    t['PROFILE'][:] = prof
+    # tabla de sonidos: siempre (la fase 5b la necesita para el temporizador de musica del arranque): con SOUNDS.TXT trae duraciones y banderas; sin el, solo
+    # las banderas que salen del recurso: bit 7 existe y bit 3 "es una cancion" (el recurso pasa de SONG_BYTES: la regla del modelo, vmgame3.SOUND_SONG_BYTES)
+    snd_tab = bytearray(read_sounds(sounds) if sounds else bytes(256 * 8))
+    for sid in range(256):
+        r = ix.resource('sound', sid)
+        if r:
+            snd_tab[4 * sid + 1] |= 0x80 | (8 if len(r) > SONG_BYTES else 0)
+    snd_ref = struct.pack('<BH', *add('tabla de sonidos', bytes(snd_tab)))
+    prof = bytearray(gameprofile.build(game) if game else bytes(256))
+    if game:                                  # extension de v3: PROF+255 = 1 si el perfil pide saltar la proteccion anticopia ([juego] proteccion = 0; D2)
+        cfg = gameprofile.parse(game).get('juego', {})
+        prof[255] = 1 if cfg.get('proteccion', '1').strip() == '0' else 0
+    t['PROFILE'][:] = bytes(prof)
     npages = len(pk.pages)
     head = b'SDAT' + struct.pack('<BBBBH', VERSION, npages, first_page, 0, PAGE_USABLE) + snd_ref + struct.pack('<HB', TABLES, 0)
     tables = bytearray(head)

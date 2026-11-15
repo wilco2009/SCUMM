@@ -34,6 +34,7 @@ class Asm:
         self.out = bytearray()
         self.nv = 0
         self.start = 0
+        self.objs = []                  # fase 5: objetos de la sala y del inventario, para los nombres ($FF 6) de los mensajes
 
     # ---- operandos
     def begin(self):
@@ -79,6 +80,8 @@ class Asm:
         (un numero, un verbo, un actor o un objeto, una cadena), otras una variable cualquiera, un local o un bit; muy pocas, con 0x2000."""
         r = self.rng
         x = r.random()
+        if code == 6 and self.objs and x < 0.5:
+            return self.var(r.choice(self.objs))
         if x < 0.55:
             val = {4: r.choice([0, 1, -1, 7, 42, 100, 255, 1000, -300, 32767, -32768]),
                    5: r.choice([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 99]),
@@ -369,11 +372,149 @@ def gen_print(a, r):
     a.out += a.raw_string(long=r.random() < 0.04)
 
 
+def gen_room5(a, r, ctx):
+    """Fase 5: los 12 opcodes de salas, objetos y frases. ctx (vmmodel3.make_synth_scenarios): rooms (existentes), room (la sala en uso),
+    robjs (sala -> objetos), verbs (objeto -> verbos de su OBCD), nboxes (cajas de la sala en uso), mapped (claves de pseudosala)."""
+    objs = ctx['robjs'].get(ctx['room'], [])
+    anyobj = lambda: pick(r, objs or [1, 2], [0, 1, 2, 13, 14, 700, 999, 1000, 4000, 0xFFFF, 0xFFFE], 0.12)
+    obj = lambda: (r.choice(objs) if objs and r.random() < 0.8 else anyobj())
+    verb_of = lambda o: pick(r, ctx['verbs'](o) or [1, 2, 9], [0, 1, 2, 3, 250, 255, 256, 1000], 0.15)
+    j = struct.pack('<h', 0)
+    k = r.choice([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 10, 10, 11, 11])
+    if k == 0:                                           # loadRoom
+        room = pick(r, ctx['rooms'], [0, 100, 127, 128, 129, 200, 255, 256] + [0x80 + m for m in ctx['mapped']], 0.25)
+        a.op('loadRoom', [('b', room)])
+    elif k == 1:                                         # loadRoomWithEgo
+        room = pick(r, ctx['rooms'], [0, 100, 200, 255, 256], 0.1)
+        o = (r.choice(ctx['robjs'].get(room, [1])) if ctx['robjs'].get(room) and r.random() < 0.85 else anyobj())
+        x = -1 if r.random() < 0.7 else r.randrange(0, 320)
+        a.op('loadRoomWithEgo', [('w', o), ('b', room)], post=struct.pack('<hh', x, r.randrange(0, 150)))
+    elif k == 2:                                         # pseudoRoom
+        a.out += bytes([BASE['pseudoRoom'], pick(r, ctx['rooms'], [0, 100, 255], 0.1)])
+        for _ in range(r.randrange(0, 4)):
+            a.out.append(pick(r, [0x80 + m for m in ctx['mapped']] or [0x80], [0x80, 0x90, 0xA5, 0xFF, 0x40, 0x7F], 0.5))
+        a.out.append(0)
+    elif k == 3:                                         # startObject
+        o = obj()
+        a.op('startObject', [('w', o), ('b', verb_of(o))])
+        for _ in range(r.randrange(0, 4)):
+            f, body = a.params([('w', r.choice([0, 1, 2, 5, 100, 999]))], 0x80)
+            a.out += bytes([r.randrange(1, 0x60) | f]) + body
+        a.out.append(0xFF)
+    elif k == 4:                                         # getVerbEntrypoint
+        o = obj()
+        a.op('getVerbEntrypoint', [('w', o), ('w', verb_of(o))], pre=a.result())
+    elif k == 5:                                         # drawObject (con x = 255: sin mover)
+        o = obj()
+        x = 255 if r.random() < 0.4 else pick(r, [0, 1, 20, 40, 100, 254], [256, 300, 0xFFFF, 255 + 0x100], 0.06)
+        a.op('drawObject', [('w', o), ('w', x), ('w', pick(r, [0, 2, 8, 16, 100, 255], [256, 0xFFFE], 0.06))])
+    elif k == 6:                                         # pickupObject
+        a.op('pickupObject', [('w', obj() if r.random() < 0.95 else pick(r, [0, 0xFFFF, 5000]))])
+    elif k == 7:                                         # findObject (a menudo sobre el rectangulo de un objeto de la sala)
+        if objs and ctx['rects'] and r.random() < 0.7:
+            x, y = r.choice(ctx['rects'])
+            x, y = x + r.choice([0, 0, 1, -1, 3]), y + r.choice([0, 0, 1, -1, 3])
+        else:
+            x, y = pick(r, [0, 8, 50, 160, 300, 319, 0xFFFF], [], 0), pick(r, [0, 30, 60, 100, 144, 0xFFF0])
+        a.op('findObject', [('b', x), ('b', y)], pre=a.result())
+    elif k == 8:                                         # isActorInBox / setBoxFlags
+        nb = ctx['nboxes']
+        box = pick(r, list(range(max(nb, 1))), [nb, nb + 1, 255, 254, 256, 0], 0.15)
+        if r.random() < 0.6:
+            a.op('isActorInBox', [('b', pick(r, [0, 1, 2, 3, 4, 5, 12], [13, 255], 0.05)), ('b', box)], post=j)
+        else:
+            a.op('setBoxFlags', [('b', box)], post=bytes([r.choice([0, 1, 8, 0x10, 0x20, 0x40, 0x80, 0xFF, 7])]))
+    elif k == 9:                                         # doSentence
+        if r.random() < 0.08:
+            a.out += bytes([BASE['doSentence'], 0xFE])
+        else:
+            o = obj()
+            a.op('doSentence', [('b', pick(r, [1, 2, 3, 4, 5, 7, 8, 9, 13, 14, 15], [0, 255, 256], 0.05)), ('w', o),
+                                ('w', obj() if r.random() < 0.4 else 0)])
+    else:                                                # waitForSentence
+        a.out.append(BASE['waitForSentence'])
+
+
+def walk_point(r, boxes, width=320, wild=0.05):
+    """Un punto para andar: casi siempre dentro de una caja de la sala (donde pincharia un jugador), a veces cerca de una esquina, en
+    cualquier sitio de la sala o (wild) muy lejos, con coordenadas s16 extremas."""
+    x = r.random()
+    if boxes and x < 0.7:
+        b = r.choice(boxes)
+        t, u = r.random(), r.random()
+        top = (b[0] + (b[2] - b[0]) * t, b[1] + (b[3] - b[1]) * t)
+        bot = (b[6] + (b[4] - b[6]) * t, b[7] + (b[5] - b[7]) * t)
+        return int(top[0] + (bot[0] - top[0]) * u), int(top[1] + (bot[1] - top[1]) * u)
+    if boxes and x < 0.82:
+        b = r.choice(boxes)
+        k = r.randrange(4)
+        return b[2 * k] + r.randrange(-4, 5), b[2 * k + 1] + r.randrange(-4, 5)
+    if x < 1 - wild:
+        return r.randrange(-8, width + 8), r.randrange(0, 160)
+    return (r.choice([-50, 400, 1000, -1000, 4095, 4200, 30000, -32768, 32767, -3000]),
+            r.choice([-30, 250, 1000, -4096, 5000, -32768, 32767, 20000]))
+
+
+def gen_walk(a, r, ctx):
+    """Fase 6: caminata. Los 4 opcodes y lo que les cambia el camino: putActor / putActorInRoom (adjustActorPos), actorOps (traje, velocidad,
+    ignoreBoxes), setBoxFlags (cajas invisibles, cerradas, con direccion fija o volteadas), setClass (volteo del actor, jugador) y animateActor."""
+    boxes = ctx.get('boxes', [])
+    room = ctx['room']
+    act = lambda: pick(r, [1, 1, 2, 3, 4, 12], [0, 13, 255], 0.015)
+    pt = lambda: walk_point(r, boxes, ctx.get('width', 320))
+    k = r.choice([0, 0, 0, 0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 7, 8, 9])
+    if k == 0:
+        x, y = pt()
+        a.op('walkActorTo', [('b', act()), ('w', x), ('w', y)])
+    elif k == 1:
+        a.op('walkActorToActor', [('b', act()), ('b', act())], post=bytes([r.choice([0, 0, 5, 20, 40, 0xFF, 0xFF, 200])]))
+    elif k == 2:
+        objs = ctx['robjs'].get(room, [])
+        o = pick(r, objs or [1], [0, 1, 13, 999, 4000] + list(ctx.get('inv', [])), 0.1)
+        a.op('walkActorToObject', [('b', act()), ('w', o)])
+    elif k == 3:
+        a.op('waitForActor', [('b', act())])
+    elif k == 4:
+        x, y = pt()
+        a.op('putActor', [('b', act()), ('w', x), ('w', y)])
+    elif k == 5:
+        a.op('putActorInRoom', [('b', act()), ('b', pick(r, [room, room, room, 0], [5, 255], 0.1))])
+    elif k == 6:
+        a.op('actorOps', [('b', act())])
+        for _ in range(r.randrange(1, 3)):
+            q = r.randrange(5)
+            if q == 0:
+                a.sub(1, [('b', r.choice([0, 1, 2, 3]))])                            # traje
+            elif q == 1:
+                a.sub(4, [('b', pick(r, [1, 2, 3, 4, 8, 8, 12, 20], [0, 255, 100], 0.05)),      # velocidad
+                          ('b', pick(r, [1, 1, 2, 2, 3, 5, 8], [0, 255, 254], 0.05))])
+            elif q == 2:
+                a.out.append(20 if r.random() < 0.5 else 10)                         # ignoreBoxes (20) / initActor(0) (10: vuelve a seguir las cajas)
+            elif q == 3:
+                a.sub(6, [('b', pick(r, [2, 2, 2, 3, 6, 0x39, 0x3A], [0x3D], 0.03))])     # fotograma de caminar
+            else:
+                a.sub(8, [('b', pick(r, [3, 3, 2, 7, 0x3A], [0x3D], 0.03))])              # fotograma de parado
+        a.out.append(0xFF)
+    elif k == 7:
+        nb = len(boxes)
+        a.op('setBoxFlags', [('b', pick(r, list(range(max(nb, 1))), [nb, 255], 0.05))],
+             post=bytes([r.choice([0, 0, 1, 2, 3, 4, 5, 6, 8, 0x10, 0x18, 0x20, 0x40, 0x80, 0xA0, 0x89, 0x12])]))
+    elif k == 8:
+        a.op('setClass', [('w', act())])
+        for _ in range(r.randrange(1, 3)):
+            f, body = a.params([('w', r.choice([29, 30, 31, 20]) | (0x80 if r.random() < 0.6 else 0))], 0x80)
+            a.out += bytes([1 | f]) + body
+        a.out.append(0xFF)
+    else:
+        a.op('animateActor', [('b', act()), ('b', r.choice([244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 2, 3, 6]))])
+
+
 GENS = [gen_state_class, gen_inventory, gen_string, gen_string, gen_cursor, gen_verbs, gen_verbs, gen_actor, gen_actor, gen_room,
-        gen_sys, gen_extra, gen_print, gen_print, gen_print, gen_print]
+        gen_sys, gen_extra, gen_print, gen_print, gen_print, gen_print, gen_room5, gen_room5, gen_room5, gen_room5, gen_room5,
+        gen_walk, gen_walk, gen_walk, gen_walk, gen_walk]
 
 
-def make_code(rng, n_ins=None):
+def make_code(rng, n_ins=None, ctx=None):
     a = Asm(rng, varprob=rng.choice([0.0, 0.25, 0.5]))
     for sid in range(4 if rng.random() < 0.85 else 0):                  # cadenas ya creadas, para que getStringWidth y compania no fallen siempre
         a.begin()
@@ -381,6 +522,48 @@ def make_code(rng, n_ins=None):
         a.out += bytes([1, sid]) + a.raw_string()
     for _ in range(n_ins or rng.randrange(3, 16)):
         a.begin()
-        rng.choice(GENS)(a, rng)
+        g = rng.choice(GENS)
+        if ctx is not None:
+            a.objs = list(ctx['robjs'].get(ctx['room'], [])) + list(ctx.get('inv', []))
+        if g is gen_room5 or g is gen_walk:
+            if ctx is None:
+                continue
+            g(a, rng, ctx)
+        else:
+            g(a, rng)
     a.out.append(0x00)                                      # stopObjectCode
     return bytes(a.out)
+
+
+def make_walk_code(rng, ctx, n_ins=None, setup=None):
+    """Fase 6: un script solo de caminata (gen_walk). setup: lista de (actor, traje, x, y) que se colocan primero en la sala."""
+    a = Asm(rng, varprob=rng.choice([0.0, 0.0, 0.3]))
+    for act, cost, x, y in setup or ():
+        a.begin()
+        a.op('actorOps', [('b', act)])
+        a.sub(1, [('b', cost)])
+        a.out.append(0xFF)
+        a.begin()
+        a.op('putActor', [('b', act), ('w', x), ('w', y)])
+        a.begin()
+        a.op('putActorInRoom', [('b', act), ('b', ctx['room'])])
+    for _ in range(rng.randrange(1, 4) if n_ins is None else n_ins):
+        a.begin()
+        gen_walk(a, rng, ctx)
+    a.out.append(0x00)
+    return bytes(a.out)
+
+
+def click_code(rng, ctx, act):
+    """Un "clic" en la sala: lo que hace el script de verbos de Indy3 con un clic en la escena, walkActorTo del ego a ese punto."""
+    a = Asm(rng, varprob=0.0)
+    a.begin()
+    x, y = walk_point(rng, ctx.get('boxes', []), ctx.get('width', 320), wild=0.02)
+    a.op('walkActorTo', [('b', act), ('w', x), ('w', y)])
+    a.out.append(0x00)
+    return bytes(a.out)
+
+
+def speed_code(rng, act):
+    """actorOps 2 (velocidad de caminata) del actor: con el actor andando, setActorWalkSpeed recalcula el tramo (calcMovementFactor)."""
+    return bytes([BASE['actorOps'], act, 4, rng.choice([1, 2, 3, 4, 6, 12, 16]), rng.choice([1, 2, 3, 4, 6]), 0xFF, 0x00])

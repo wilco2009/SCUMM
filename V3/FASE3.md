@@ -17,7 +17,10 @@ TS_VM=1 build/test_vm.exe build/vm.bin build/vm.sym build/ovlb.bin build/DATA.BI
 | `ENGINE/vm_ops.asm` | Manejadores nativos del nucleo (36 opcodes, `vmmodel3.CORE_OPS`) |
 | `ENGINE/ovb4.asm`, `ovb4b.asm`, `ovb4c.asm` | Manejadores del overlay B de las fases 4a (sonido, objetos, camara, actores), 4b-1 (estados, clases, cadenas, verbos, `actorOps`, sala) y 4b-2 (`print`, `printEgo`, mensajes); se incluyen desde `ovlb.asm` |
 | `ENGINE/ovlc.asm`, `ovc1.asm`, `ovctab.inc` | **Overlay C** (pagina fisica 48; abierto tras la fase 4b-2): `roomOps`, `resourceRoutines`, `lights`, `systemOps` y `saveLoadGame` salieron de B; la fase 5 pone aqui lo suyo. `ovctab.inc` (generada) es su despacho por opcode |
-| `ENGINE/arith32.asm` | Aritmetica de 32 bits (copiada de `geom.asm`: la usa `expression`; la fase 6 la comparte con la geometria) |
+| `ENGINE/ovc5.asm` | **Fase 5** (overlay C): `startScene`, `load_room_state`, objetos de la sala (`findObject`, `drawObject`, `pickupObject`, `startObject`, `getVerbEntrypoint`), cajas (`isActorInBox`, `setBoxFlags`), pseudosalas y la cola de frases (`doSentence`, `waitForSentence`, `checkAndRunSentenceScript`) |
+| `ENGINE/ovld.asm`, `geom.asm`, `walk.asm` | **Overlay D** (pagina fisica 46; fase 6): geometria de las cajas y caminata de v3 (`geom.asm` y `walk.asm` ya no son la copia de v2). Ver "Fase 6" |
+| `ENGINE/ovc6.asm` | **Fase 6** (overlay C): `walkActorTo`, `walkActorToActor`, `walkActorToObject`, `waitForActor` (leen sus operandos y entran en D) |
+| `ENGINE/arith32.asm` | Aritmetica de 32 bits (copiada de `geom.asm` de v2: la usa `expression` y, en el overlay D, `mul32` y `neg32`) |
 | `ENGINE/ovlb.asm` | Overlay B (D4, pagina 49): de momento `expression`, con pila de 32 bits |
 | `ENGINE/vm.asm` | Montaje de pruebas: codigo desde `$4200`, tablas desde `$8000`, como el programa de la placa |
 | `ENGINE/tables3.inc`, `ENGINE/vars_v3.inc` | **Generados** por `TOOLS/gen_vmtables3.py` (no editar) |
@@ -28,7 +31,7 @@ TS_VM=1 build/test_vm.exe build/vm.bin build/vm.sym build/ovlb.bin build/DATA.BI
 | `TOOLS/vmcommon3.py` | Limites del Z80 en el modelo: 256 variables, 16 locales, 24 ranuras, 32 argumentos, pila de 32 |
 | `TOOLS/pack_data3.py` | D5: paginas solapadas para los scripts grandes |
 
-Los demas `.asm` de `V3/ENGINE` son la copia de v2 sin tocar (`scumm.asm`, `game.asm`, `walk.asm`, `geom.asm`, `input.asm`, `hr.asm`, el overlay A...):
+Los demas `.asm` de `V3/ENGINE` son la copia de v2 sin tocar (`scumm.asm`, `game.asm`, `input.asm`, `hr.asm`, el overlay A...; `walk.asm` y `geom.asm` son de v3 desde la fase 6 y van en el overlay D: `scumm.asm` no debe incluirlos):
 las fases 4-9 los pasan a v3. **`scumm.asm` de v3 todavia no ensambla** con el nucleo nuevo (usa la capa de juego de v2); lo arregla la fase 5.
 
 ## Resultado
@@ -61,7 +64,11 @@ Bloque 7 (fijado en la fase 3; las direcciones estan en `vm_core.asm`):
 | `$E000` VARS | 512 | 256 variables de 16 bits. Tiene que estar en `$E000` (`rd_var`: `ld h,$70 / add hl,hl`) |
 | `$E200` OBJST | 1.000 | estado de cada objeto |
 | `$E5E8` OBJOWN | 1.000 | dueno |
-| `$E9D0` OBJCLS | 3.000 | clases, 24 bits |
+| `$E9D0` RBLOB | 1.536 | **fase 5:** copia del blob de la sala en uso (cajas, matriz de cajas y objetos, tal cual `pack_data3.room_blob`). Sustituye a OBJCLS (ver "Fase 5") |
+| `$EFD0` SENTN, SENTQ | 43 | **fase 5:** cola de frases: cuantas hay y 6 x 7 B (verbo, a, b, preposicion, congelada) |
+| `$EFFB` RESMAP | 128 | **fase 5:** `_resourceMapper` (pseudoRoom): sala de cada clave 0x80-0xFF (0 = sin asignar) |
+| `$F07B` RMV | 11 | **fase 5:** `OBJP`, `OBJEND`, `NROBJ`, `MATP`, `CLSSV`, `ODTMP` (variables de la sala). Hasta `$F085` |
+| `$F086` WKX... | 294 | **fase 6:** `WKX`, `WKY`, `WKDIR`, `WKBOX` (argumentos de las entradas del overlay D), `ROOMRES`, `P3Y` (13 palabras: `walkdata.point3.y`) y `GW` (260 B de trabajo de `geom.asm` y `walk.asm`). Hasta `$F1AB`; **`$F1AC-$F587` libres (987 B)** |
 | `$F588` SCRDIR | 600 | scripts globales: pagina, direccion (pagina 255 = grande, la direccion es el indice en BIGDIR) |
 | `$F7E0` BIGDIR | 32 | scripts grandes (D5) |
 | `$F800` SLOTS | 384 | 24 ranuras de 16 bytes |
@@ -84,8 +91,8 @@ cambiar de traje; las de cada instruccion (estado, dueno, clases, SCRDIR) estan 
 Ranura (16 bytes): `+0` estado (bit 7 congelada), `+1` donde, `+2` numero, `+4` pagina, `+5` puntero, `+7` retardo (32 bits con signo), `+11` banderas (bit 5 freezeResistant,
 bit 6 recursive, como en el opcode de `startScript`), `+12` freezeCount, `+13` cutsceneOverride, `+14` grande (indice + 1 en BIGDIR), `+15` didexec.
 
-Paginas fisicas: 0-7 la memoria base; 8-14 la sala (`hr.asm`; la 79 pide 7); **15 tablas frias**; 16-62 cache de paginas de datos (`dp_cache.inc`) **menos la 49 (overlay B) y
-la 50 (overlay A)**: la fase 9 tiene que quitar la 49 de la cache (`DP_OVLIDX`); 63 depurador.
+Paginas fisicas: 0-7 la memoria base; 8-14 la sala (`hr.asm`; la 79 pide 7); **15 tablas frias**; 16-62 cache de paginas de datos (`dp_cache.inc`) **menos la 46 (overlay D, fase 6), la 47 (OBJCLS, fase 5), la 48
+(overlay C), la 49 (overlay B) y la 50 (overlay A)**: la fase 9 tiene que quitar la 46, la 47, la 48 y la 49 de la cache (`DP_OVLIDX`); 63 depurador.
 
 ### Lo que queda por colocar (fases 4-8)
 
@@ -227,6 +234,280 @@ hace falta, va a la 47). **La fase 9 tiene que quitar tambien la 48 de la cache 
   residente `$4200-$53A8` (+22 B: `call_ovc` y `h3_ovc`; 11.352 B libres).
 - Arnes: `test_vm.exe` admite `ovlc.bin` como 7.o argumento (pagina `OVC_PAGE`); `build_test.sh` y `mutaciones.py` lo ensamblan.
 
+## Fase 5: salas, objetos y frases (2026-11-14)
+
+Todo en `ENGINE/ovc5.asm` (overlay C, incluido desde `ovlc.asm`) salvo lo del residente (`vm_core.asm`) y unos retoques de B. Semantica: `vmgame3.py` (`start_scene`, `find_object`, `do_sentence`,
+`check_and_run_sentence_script`...) y `vmmodel3.CoreVM` (los 12 opcodes en `CORE_OPS`; `o_loadRoom`, `o_loadRoomWithEgo`, `o_doSentence`, `o_drawObject`, `o_pseudoRoom`, `o_findObject` propios de
+`CoreVM`).
+
+### Decision de colocacion: OBJCLS a la pagina fria 47
+- El blob de la sala (el mayor de Indy3 mide 1.496 B) no cabia en el hueco de `ODIRBUF` (187 B) ni en el bloque 7 (60 B). Se movio **OBJCLS (3.000 B)** a la **pagina fisica 47** (3 bytes por objeto desde
+  el principio de la pagina; el arnes la llena desde `DATA.BIN` y la fase 9 tiene que cargarla y quitar la 47 de la cache; como todas las paginas de datos, lleva la copia de la tabla de caracteres en
+  `$3800-$3FFF` de la pagina). En su sitio (bloque 7, `$E9D0-$F085`): `RBLOB` (1.536 B), `SENTN/SENTQ` (43 B), `RESMAP` (128 B) y `RMV` (11 B); **quedan 1.282 B libres** (`$F086-$F587`).
+- **Acceso:** las clases se tocan por el bloque 1 (la ventana de datos): `cls_open` guarda la pagina que hay (`CLSSV`) y mapea la 47; `cls_ptr` da `$2000 + 3 * objeto`; `cls_close` devuelve la
+  pagina. Entre `cls_open` y `cls_close` no se lee el script ni se mapea otra pagina de datos (si se pueden llamar overlays: solo mueven el bloque 0). Cuesta ~170 T por acceso; `setClass`,
+  `ifClassOfIs` y `getClass`/`putClass` de B, `actorFromPos`, `findObject` (una sola apertura para todo el bucle) y `pickupObject` lo usan.
+- **Lo que gano el residente (~360 B, `$421E-$550E`; 10.994 B libres hasta `$8000`):** las rutinas que ahora usan B y C a la vez salieron de B: `cls_*`, `obj_index`, `inv_find`, `wio`, `odir`
+  (`BC` = objeto -> pagina y direccion del OBCD en `ODIR`), `run_inv0/run_inv`, `restore_win` (devuelve la ventana a la pagina del script en curso), `actor_ix`, `chk_actor`, `actor_num`, `in_room`, `is_act13`.
+  Mas la API (`vm_load_room` en +24 y `vm_sentence` en +27: el arnes) y la cola de frases en `freeze_scripts`/`unfreeze_scripts`/`vm_frame`.
+- **Overlay C:** 3.840 B de 8.192 (4.352 libres). **B:** 7.680 B (512 libres; los helpers que salieron compensan los cinco puntos de entrada nuevos). Entradas fijas de C (`vm.asm`): `OVC_OP` (+0), `OVC_SENT` (+3,
+  `checkAndRunSentenceScript`), `OVC_START` (+6, `startScene`, C = sala), `OVC_ROOM` (+9, `load_room_state`, C = sala, B = 1 con cajas) y `OVC_SENTADD` (+12). Entradas fijas de B para C: `OVB_STOPTALK` (+9),
+  `OVB_HIDE` (+12, IX = actor), `OVB_SHOWACT` (+15), `OVB_FOLLOW` (+18, IX = actor, `setCameraFollows`) y `OVB_PUTACT` (+21, IX = actor, C = sala, x en `SC+0`, y en `SC+2`).
+
+### Estado de la sala y objetos
+- `load_room_state` (C): `CURRD` = su entrada de `ROOMDIR` (ceros si no existe), `RBLOB` = su blob (`ldir`; ~31.000 T con el blob mas grande), `OBJP`/`OBJEND`/`NROBJ` (los registros de objetos de 14 B: id, x/8, y/8,
+  ancho/8, alto/8, padre, estado del padre, x e y de acercamiento (s16), direccion, banderas), `MATP` (la matriz de cajas, para la fase 6) y `NBOXES`. `obj_index` recorre de arriba abajo (getObjectIndex).
+  `ROOM n [1]` del arnes (`vm_set_room`) carga solo esto (con cajas si hay un 1); `startScene` lo carga siempre con cajas.
+- **El inventario no copia el OBCD:** el codigo de un objeto del inventario es su bloque de `ODIR`, igual que el de uno de sala (en Indy3 ningun objeto esta en dos salas: `pack_data3` lo comprueba). El modelo
+  (`CoreVM.obcd_of`, `add_object_to_inventory`) hace lo mismo. Un objeto en `INVSL` sin OBCD en `ODIR` da E_BADOBJ en `getVerbEntrypoint`/`startObject` (modelo y Z80).
+- **Nombres de objeto** (`FF 6`): `cm_name` (`ovb4c.asm`) mira primero los nombres nuevos de `setObjectName` y despues el del OBCD (inventario o sala): `ODIR` + el byte `+16` del bloque. Los nombres de Indy3 no
+  llevan codigos `FF`; el unico con caracteres de control es el del objeto 403 (`IndyWear\x10\x11 by Lucasfilm`).
+- **`startScene`** (`ovc_start`), en el orden del modelo: recurso (`RESMAP` si la sala es >= $80), E_BADROOM si no existe, `stop_talk` (B), el script en curso se abandona si es de sala, local o de FLObject,
+  `runExitScript` (VAR_EXIT_SCRIPT, `EXCD`, VAR_EXIT_SCRIPT2), `killScriptsAndResources` (las ranuras de sala/local/FLObject mueren **conservando su numero**, como en el modelo, y se borran los nombres nuevos de objetos
+  de la sala o sin dueno), actores 1..12 ocultos, VAR_ROOM/CURROOM/VAR_ROOM_RESOURCE, `load_room_state`, suceso `E 6 [sala]`, camara (VAR_CAMERA_MIN_X/MAX_X, modo normal, cur = dest = 160), `showActors` (B),
+  `EGOPOS = 0` y `runEntryScript`. Con el recurso 0 acaba tras cargar (sin suceso, camara ni entrada). Todo lo que corre scripts guarda sus datos en la pila (`SC` no sobrevive).
+- **`loadRoomWithEgo`:** la pila durante `startScene` es ego, direccion antigua, y, x, objeto; el `put_actor` y el `setCameraFollows` van por B (`OVB_PUTACT`, `OVB_FOLLOW`). `actorFollowCamera` con un actor
+  fuera de la sala ya hace `startScene` (el salto al anfitrion de la fase 4a desaparece).
+
+### Frases
+- `SENTQ`: 6 entradas de 7 B (verbo, a, b, preposicion = b <> 0, congelada). `doSentence` (verbo $FE: vacia la cola y para el script de frases), `waitForSentence` y `checkAndRunSentenceScript` (en `vm_frame`, justo
+  despues de `run_all`; si la cola esta vacia solo cuesta ~30 T). Los argumentos del script de frases son locales 0-2 (verbo, a, b). `freezeScripts` suma 1 a `freeze` de cada frase y `unfreezeScripts` lo resta.
+  El estado en el resumen (`Q=` cuenta y crc de la cola) lo calcula igual el arnes.
+
+### Prueba
+- Modelo: `set_room_core` (`ROOM n [1]`), ordenes `LOADROOM n`, `SENTENCE v a b`, `PSEUDO k v` y `ACTORSET n sala x y traje visible ign`; resumen `Q=` y `R=` (cajas, objetos, `ego_positioned`, `RESMAP`).
+  El arnes (`test_vm.cpp`) carga OBJCLS en la pagina 47, lee el ENCD de la sala en uso de `CURRD` y los scripts locales de su tabla.
+- Escenarios nuevos: `clrm<sala>` (startScene desde otra sala, con actores que ignoran cajas), `csnt<sala>` (1-3 frases con objetos de la sala y el script de frases real de Indy3), `cfnd<sala>` (findObject sobre el centro de los objetos con estados al azar), `cbox<sala>.<k>` (isActorInBox con todas las cajas y el actor en puntos de interes), scripts globales y locales con la
+  sala en uso (con o sin cajas) y `vmsynth3.gen_room5` (los 12 opcodes con operandos al azar y por variable, objetos de la sala, cajas reales y erroneas, salas validas, pseudosalas y erroneas).
+  Aparte, `ENGINE/test/ibx_test.py`: 600 escenarios de `isActorInBox` con un punto al azar (dentro, cerca, lejos y con coordenadas extremas s16) y cajas de seis salas: iguales (la geometria usa productos de 32 bits con signo y modulo). `ENGINE/test/escenario.py NOMBRE` depura un escenario suelto.
+- **T medidos** (`TS_VM=1`, 2.851 escenarios; media exclusiva con el despachador; entre parentesis, con los scripts que arrancan): `doSentence` 2.745, `startObject` 7.620 (36.291), `getVerbEntrypoint` 3.205,
+  `drawObject` 8.628 (recorre los objetos de la sala dos veces), `pickupObject` 6.558 (89.693: el script de inventario), `findObject` 8.869, `isActorInBox` 3.215 (geometria de 32 bits: 4 aristas x 2 productos),
+  `loadRoom` 49.052 (408.816: salida y entrada de la sala; casi todo es la copia del blob y los scripts), `loadRoomWithEgo` 71.496, `pseudoRoom` 881, `setBoxFlags` 940, `waitForSentence` 1.912
+  (recorre las 24 ranuras). `checkAndRunSentenceScript` con la cola vacia cuesta ~30 T por fotograma (el `ld a,(SENTN) / or a / ret z` de `vm_frame`). Lo primero que mirar en la fase 10: `drawObject` y
+  `findObject` (recorren todos los objetos de la sala con `rec_addr`, ~200 T por objeto) y la copia del blob de `loadRoom` (`ldir` de hasta 1.496 B = 31.000 T).
+- **Limites del Z80 que el modelo hace suyos** (`E_RANGE`): ver `PLAN.md` (fase 5).
+- **Fase 6 (hecha):** `adjust_xy`/`adjust_actor_pos` y `startWalkActor` ya no dan E_BADOP: ver "Fase 6" abajo.
+
+## Fase 6: caminata (2026-11-14)
+
+Modelo: `TOOLS/vmgame3.py` (la caminata de `GameMixin`, ya sin las versiones recortadas de `CoreVM`) y `vmmodel3.py` (`CORE_OPS` + `walkActorTo`, `walkActorToActor`,
+`walkActorToObject`, `waitForActor`; `walkActors` al final del fotograma). Z80: **overlay D** nuevo (`ENGINE/ovld.asm` = `geom.asm` + `walk.asm`), los cuatro opcodes en el
+overlay C (`ovc6.asm`) y lo de cada fotograma en el residente (`walk_frame`).
+
+### Revision del modelo contra ScummVM (`actor.cpp`, `boxes.cpp`, `script_v5.cpp`, `script_v3.cpp`, `common/rect.h`)
+Las funciones estaban transcritas pero sin revisar. Se han leido una a una contra ScummVM y esto es lo que cambio:
+- **Aritmetica de C en la geometria.** `closestPtOnLine` y `compareSlope` trabajan con `int` de 32 bits que desbordan: el modelo usaba enteros de Python en parte de las
+  cuentas. Ahora todo pasa por `m32`/`d32` (producto y division de `int`, con `wrap32`), y el resultado se guarda en un `Common::Point` (int16) antes de recortarlo al segmento.
+- **`Common::Point::sqrDist`** (lo usa `getClosestPtOnBox`): si la diferencia en x o en y llega a 0x1000 devuelve 0xFFFFFF. El modelo sumaba los cuadrados sin tope.
+- **Tipos de la caminata:** `xfrac`, `yfrac`, `xAdd`, `yAdd` son `uint16` y la posicion `int16`: las sumas de `actorWalkStep` dan la vuelta en 16 bits.
+- **`Actor::setDirection`:** si la direccion no cambia no hace nada; si cambia y el actor tiene traje y esta en la sala, marca `_needRedraw` (el modelo solo ponia `_facing`).
+  Afecta tambien a `animateActor` con "cambiar de direccion" (overlay B, `an_dir`).
+- **`getNextBox`:** el WORKAROUND de la sala 46 mira el recurso de la sala (`_roomResource`), no `_currentRoom` (difieren con pseudosalas).
+- **`startWalkActor`:** `abr.x`/`abr.y` son int16 (el destino se trunca antes de comparar) y `_facing` es uint16.
+- Lo demas (`walkActor`, `calcMovementFactor` con `_facingXYratio` = 3 y el arreglo #1052, `actorWalkStep`, `remapDirection`/`updateActorDirection`, `findPathTowardsOld`, `getGates`,
+  `adjustXYToBeInBox` con `_lastValidX/Y`, `checkXYInBoxBounds`, `inBoxQuickReject`, `walkActorToActor`, `o3_waitForActor`) coincidia con ScummVM.
+- **No hay un ScummVM ejecutable con el que comparar posiciones**: la comprobacion es la lectura del codigo y que el Z80, escrito aparte desde ScummVM y el modelo, da las mismas
+  trazas. Queda como riesgo para la placa (comparar a ojo con ScummVM en el pasillo y el castillo).
+- **Lo que ScummVM deja sin definir se fija igual en el modelo y en el Z80:** division por cero en `closestPtOnLine` y velocidad 0 en `calcMovementFactor` (ScummVM se cuelga) =
+  `E_RANGE`; `_stepX` mayor de 255 (velocidad y 255) = `E_RANGE`; `closest[]` de `getGates` sin candidato (C lo deja sin inicializar) = 0; la terna de la matriz de cajas no se lee
+  mas alla del final de la matriz (ScummVM leeria lo que haya detras); `_targetFacing` fuera de 0..359 = `E_RANGE` (no pasa: sale siempre de `oldDirToNewDir`); una caja que no
+  existe (`walkbox` de otra sala) = `E_RANGE` (ScummVM: `assert`). En v3 no hay `followBoxes` (la tabla de `actorOps` acaba en 20 = `ignoreBoxes`): un actor solo vuelve a seguir
+  las cajas con `initActor` (`actorOps` 8).
+
+### Overlay D (pagina fisica 46)
+- B tenia 512 B libres, C 4.352 y el residente esta contado para lo que falta (`scumm.asm`, `hr.asm`, `game.asm`...): la caminata (4,4 KB) va en un overlay propio, **pagina
+  fisica 46** (`OVD_PAGE`; **la fase 9 tiene que quitarla de la cache de paginas**, como la 47, la 48 y la 49). `call_ovd` (residente) es la copia de `call_ovc`.
+- No tiene despacho por opcode. Entradas fijas (`vm.asm`): `OVD_WALK` (+0, `walkActors`), `OVD_ADJUST` (+3, `adjustXYToBeInBox`), `OVD_STARTWALK` (+6, `startWalkActor`) y
+  `OVD_CALCMF` (+9, `calcMovementFactor(_walkdata.next)`). **Los argumentos y los resultados van en memoria** (`call_ovX` usa HL y A): actor en IX (D lo conserva), `WKX`, `WKY`
+  (entrada y salida), `WKDIR` (direccion final; -1 = ninguna) y `WKBOX` (caja que devuelve `adjust_xy`).
+- Quien entra: `walk_frame` (residente, al final de `vm_frame`: si hay sala en uso y algun actor de la sala tiene `_moving` distinto de 0, `OVD_WALK`; si no, ~940 T);
+  `adjust_xy` del overlay B (`put_actor`, `show_actor`: ahora es solo la llamada a D) y `actorOps` 2 con el actor en movimiento (`OVD_CALCMF`); en el overlay C, `loadRoomWithEgo` con
+  x distinto de -1 y los cuatro opcodes de `ovc6.asm` (`b_walkActorTo`, `b_walkActorToObject`, `b_walkActorToActor`, `b_waitForActor`: leen sus operandos en C).
+- `box_addr` salio de C al residente (lo usan B, C y D). `adjust_actor_pos` (B) ya gira al actor en las cajas con direccion fija (`banderas & 7`).
+- **El programa de la placa (fase 9)** tiene que: cargar `ovld.bin` en la pagina 46, repetir los `OVD_*` de `vm.asm`, y llamar a `walk_frame` despues de
+  `checkAndRunSentenceScript` (ya esta dentro de `vm_frame`). `moveCamera` y `updateObjectStates`, que en ScummVM van justo despues de `walkActors`, siguen sin estar en el nucleo.
+
+### Memoria (bloque 7, tras `RMV`: `$F086-$F1AB`, 294 B; **quedan 987 B libres**, `$F1AC-$F587`)
+`WKX`, `WKY`, `WKDIR` (palabras), `WKBOX`, `ROOMRES` (recurso de la sala cargada, lo pone `load_room_state`: el WORKAROUND de la sala 46), `P3Y` (13 palabras:
+`walkdata.point3.y` de cada actor, que no cabe en su registro de 64 B; `point3.x` si esta, en `A_P3X`) y `GW` (260 B de trabajo de `geom.asm` y `walk.asm`: nada sobrevive a otra
+entrada en D). `vm_init` los pone a 0. El registro del actor no cambia (`Actor.pack()`).
+
+### Geometria (`geom.asm`)
+- `cplin` (`closestPtOnLine`): trabaja siempre con el eje mayor `u` (x si |lx| > |ly|; si no, y, cambiando x por y en los tres puntos: las formulas de C son simetricas porque el
+  producto de `int` es conmutativo) y el menor `v`: con `lv` = 0 (segmento vertical u horizontal) `ru = pu`, `rv = sv`; si no, la formula general sobre **una pila de valores de
+  32 bits** (`gpush16/32`, `gpop32`, `gadd`, `gsub`, `gmul`, `gdiv`), y despues el recorte al segmento a lo largo de `u`.
+- `smul`: signo aparte y `mul16u` si los dos caben en 16 bits (8 vueltas si uno cabe en un byte), si no `mul32` del residente. `sdiv`: signo aparte y tres casos: divisor de
+  16 bits (dos divisiones 32/16 de 16 vueltas en registros), divisor de 17 a 31 bits (el cociente cabe en 16 bits: 16 vueltas) y divisor 2^31. No usa `div32s` (12.000 T).
+- `cslope` (`compareSlope`): diferencias con signo y modulo (`sdiff`), producto con `mul16u` y comparacion de los dos productos de 32 bits con signo.
+- `cxb` (`checkXYInBoxBounds`, punto en `BP`, caja en IY), `cxb_num` (con el numero de caja: `$FF` = no; sin cajas, `E_RANGE`), `qrej` (`inBoxQuickReject`, con la suma saturada),
+  `cpb` (`getClosestPtOnBox`: distancia de 32 bits, devuelta saturada a 16), `gates` (`getGates`), `fpo` (`findPathTowardsOld`), `gnb` (`getNextBox`: carry = sin camino) y
+  `adjust_xy`. El overlay C conserva su `check_xy_box` de la fase 5 para `isActorInBox`.
+- Las clases del actor (jugador, volteo en x y en y: bits 6, 2 y 1 del tercer byte) se leen con `actor_cls` (`cls_open`/`cls_close`).
+
+### Caminata (`walk.asm`)
+`start_walk`, `walk_actor`, `cmf` (`calcMovementFactor`: divisiones de 16/8 bits; `|dy| * 3 > |dx|` se hace como `|dy| > |dx| / 3`), `walk_step` (`actorWalkStep`; los ejes x
+e y comparten rutina porque en el registro del actor los campos de y estan 2 bytes despues de los de x), `upd_dir` (`remapDirection` + `updateActorDirection`), `w_set_dir`,
+`w_turn_to`, `w_start_anim` (copia de la de B) y `ovd_walk`.
+
+### Prueba
+- **Escenarios nuevos** (`make_scenarios_core`): `cwlk<sala>.<k>` en todas las salas con cajas (3 por sala; 12 en el pasillo (1), Venecia (15) y el castillo (20 y 28)). Dos de cada
+  tres son de **clics**: el ego se coloca en la sala y recibe de 3 a 7 `walkActorTo` (lo que hace el script de verbos con un clic en la sala) a puntos dentro de las cajas, cerca de
+  sus esquinas o fuera, unos antes de llegar y alguno repetido, con todos los fotogramas en la traza. El tercero mezcla hasta 3 actores con `walkActorToActor`,
+  `walkActorToObject`, `waitForActor`, `putActor`, `putActorInRoom`, `actorOps` (traje, velocidad, `ignoreBoxes`, `initActor`, fotogramas), `setBoxFlags` (cajas invisibles,
+  cerradas, con direccion fija o volteadas), `setClass` (jugador, volteos) y `animateActor`. `vmsynth3.gen_walk` mete lo mismo en los sinteticos, con coordenadas s16 extremas.
+- **El resumen lleva `G=`**: `n:x,y,caja,moving` de cada actor de la sala en uso (la traza de posiciones; el arnes la saca de `ACTORS`).
+- En el modelo, 183 de 200 escenarios de clics acaban con el ego en su destino; los 17 que no, piden una caja que la matriz no conecta (p. ej. las dos zonas de la sala 20).
+- Arnes: `test_vm.exe` carga `ovld.bin` (8.o argumento, o el que este junto a `ovlc.bin`); con `TS_VM=1` mide `walk_frame` por clases y con `TS_PD=1` saca el perfil del overlay D por
+  etiqueta. `mutaciones.py` ensambla tambien el D y sus salas por omision son `1,15,20` (**borrar `build/mut/expected.txt` si cambia el modelo**: no se regenera solo).
+
+### Cifras (2026-11-14)
+- **Trazas: 3.492/3.492 iguales** (`build_test.sh`, 88 salas, 1 semilla: los de la fase 5 mas 300 escenarios `cwlk` y `gen_walk` en los 1.200 sinteticos). Aparte, `ENGINE/test/wlk_test.py`:
+  600 escenarios de caminata con coordenadas extremas (s16, 4095/4096, +-6.000) iguales, e `ibx_test.py` de la fase 5 sigue igual.
+- **Mutaciones** (`mutaciones.py`, salas `1,15,20`): **120 de 126 detectadas**; de las 49 de la caminata, 48. Sin detectar: las 5 de las fases anteriores y `getGates: |d0 - d1| < 2`
+  (con las cajas de Indy3 de esas salas, las distancias entre los puntos de una puerta son iguales o difieren en mas de 3: el umbral 4 no se distingue de 2).
+- **Tamanos:** residente `$421E-$5578` (**10.888 B libres** hasta `$8000`; +106 B: `call_ovd`, `box_addr`, `walk_frame`); overlay B 7.680 B (codigo hasta `$1BCB`; 512 libres tras la
+  tabla); overlay C 4.096 B (codigo hasta `$0D1E`; **4.096 libres**); **overlay D 4.392 B de 8.192 (3.800 libres)**; bloque 7: **987 B libres**.
+- **T** (`TS_VM=1`, todos los escenarios): `walk_frame` sin nadie en movimiento **942 T**; **un paso de caminata** (un actor dentro de su tramo: `updateActorDirection`, ajuste al
+  punto, fracciones y, si esta cambiando de caja, `checkXYInBoxBounds`) **8.329 T de media, 21.598 de maximo**; un fotograma en que un actor arranca, cambia de tramo (busqueda
+  de la puerta entre dos cajas: `getGates` = 8 `getClosestPtOnBox`), gira o llega: **134.670 T de media y 1.467.429 de maximo**. Opcodes (media exclusiva con el despachador):
+  `walkActorTo` 50.922 (con `adjustXYToBeInBox` si el destino no esta en la caja de destino de antes), `walkActorToActor` 19.909, `walkActorToObject` 15.655, `waitForActor` 1.108.
+- **Para la fase 10:** el cambio de tramo es lo caro (hasta 0,45 s a 3,25 MHz en el peor caso de los escenarios). Ya se quito lo mas facil (division de 32 bits por casos:
+  antes 260.000 T de media y 3,1 M de maximo). El perfil del overlay D (`TS_PD=1`) es plano: division 12 %, `mul16u` 14 %, la pila de 32 bits de `cplin` 22 %, contar esquinas
+  (`axis_cnt`) 5 %. Lo siguiente seria no calcular las 8 esquinas de `getGates` cuando las cajas comparten un lado, guardar la puerta de cada par de cajas, o saltarse las cajas
+  lejanas en la tercera pasada de `adjustXYToBeInBox` (hoy recorre todas con `getClosestPtOnBox` si el punto esta a mas de 80 px de cualquier caja). `walk_frame` recorre los 12
+  actores dos veces (residente y D): un contador de actores en movimiento lo dejaria en ~100 T.
+
 ## Para las fases 4a y 4b
 
 Ver `PLAN.md` (fase 4): que manejadores, donde van y como se prueban.
+
+## Fase 5b: programa completo hasta el pasillo (2026-11-15)
+
+Lo que la fase 5 dejo sin hacer: `scumm.asm` de v3 seguia siendo la copia de v2 (no ensamblaba con el nucleo). Ahora es el **programa completo** (sin texto, interfaz, actores ni sonido
+real: fases 7 y 8) y el arnes de PC lo arranca (script 1) hasta el pasillo (sala 1) con la imagen correcta y las trazas iguales a las del modelo.
+
+```
+sh test/build_boot.sh [fotogramas]   # scumm.asm + overlays -> test/prog/; DATA.BIN; arnes test_scumm; compara el resumen D de cada fotograma con vmmodel3.py boot-core
+```
+
+### Ficheros (todos en `ENGINE/`, salvo el modelo)
+| Fichero | Que es |
+|---|---|
+| `scumm.asm` | Programa: `scumm_main` (paginacion, HiRes, `vm_init`, overlays, `load_data`, `vm_run_script` con el script 1), `main_loop` (delta como v2, `hr_frame`, depuracion `DBG_START`/`DBG_ROOM`, proteccion anticopia, `vm_frame`, `cam_update`, `gd_update`, `keys`, `hr_end`), `ev_handler`, `ov_load_all`, sonido simulado, `cam_update`, `obj_drawn`. Entrada `RAND USR 16917` (`$4215`, `ENTRY_POINT` de `vm_core.asm`, +21). Sale con X o error de la VM (`PRINT USR` da el codigo) |
+| `loader.asm`, `dp_cache.inc` | Cargador de `DATA.BIN` **v3** (tablas calientes al bloque 7, `OBJCLS` a la pagina 47, tablas frias a la 15, perfil, banderas de sonido) y cache de paginas de datos sin las paginas 46-50 (42 paginas: 16-45 y 51-62) |
+| `hr.asm` | Pantalla **D3** (abajo) |
+| `ovc7.asm` | Overlay C: `moveCamera` y `camera_moved` (entrada `OVC_MOVECAM` = +15) |
+| `build_scumm.sh`, `test/build_boot.sh`, `test/test_scumm.cpp`, `test/check_hr.py`, `test/compare_boot.py`, `test/mk_digest_boot.py` | Montaje y prueba. `digest_boot.inc` se **genera** de `test_vm.cpp` (mismo `digest()` que el arnes del nucleo) |
+| `TOOLS/vmmodel3.py` | Orden de escenario `BOOT n`, `OPT sonido timed`, `OPT proteccion`, comando `boot-core` y, en `CoreVM.step_frame`, `update_music_timer`, `VAR_CAMERA_POS_X` y `move_camera` |
+| `TOOLS/pack_data3.py`, `games/indy3.cfg` | Tabla de sonidos siempre presente (bit 3 = cancion) y `PROF+255` = saltar la proteccion (`[juego] proteccion = 0`) |
+
+### Pantalla D3 (`hr.asm`)
+- 192 lineas: **16 de mensajes arriba (filas 0-1), 128 de sala (filas 2-17, `HR_TOP` = 16) y 48 de interfaz (filas 18-23)**. Los bufers de entrada del scroll (`HR_RBM`, `HR_LBM`, `HR_RATT`, `HR_LATT`) llevan la sala desde la linea 16. Filas que se desplazan: `2091 = $FC`, `2092 = $FF`, `2093 = $03` (las 0-1 y 18-23 se quedan quietas).
+- `.GFX` **version 2**: alto de `+8`, columnas por pagina de `+12`; la columna k esta en `256 + (k / cpp) * 8192 + (k % cpp) * 2 * lineas` (`hr_coloff`). `ROOMMAX` pasa a **7 paginas** (la sala 79 mide 50.602 B y esta en el arranque).
+- **Salas de mas de 128 lineas: recortadas** (no hay prueba del scroll vertical en la placa): se ven `[hv_ytop, hv_ytop + 128)`, con `hv_ytop` = **16 si la sala tiene 144 lineas o mas** (la pantalla principal de v3 mide 144: se pierden las 16 de arriba, que es cielo o techo; D3 decia "las 8 de arriba" para la ventana de 192) y 0 si no. Los objetos se recortan igual (`hm_clip`). Una sala de menos de 128 lineas se rellena de ceros. Comprobado con `check_hr.py` en las salas 1, 76, 79, 8 (200 lineas), 12 (192) y 20 (184); las salas 8, 12 y 20 se cargan con `DBG_ROOM` (`TS_POKE`).
+- Pendiente (fase 8): las coordenadas y de los sprites y de la mascara de profundidad tienen que restar `hv_ytop` y sumar 16.
+- **Camara** (`cam_update`): la posicion logica sale de `CAMCUR` (`izquierda = cur - 160`, acotada a la sala); el hardware la sigue (`hr_frame` / `hr_end`, como v2: hasta 8 px por fotograma). Un salto grande de camara se ve como un scroll de varios fotogramas.
+- **Objetos** (`obj_drawn`, sustituye al de v2): `drawRoomObject` de ScummVM (`object.cpp`): se dibuja si su estado no es 0 y, mientras tiene padre, el estado del padre (`& $F`) es el que pide. El `.GFX` lleva **una sola imagen por objeto**: los objetos con varias imagenes (un estado por imagen) se ven con la primera.
+- No se pinta texto, ni interfaz, ni actores: `hr_clear` borra toda la pantalla al cambiar de sala.
+
+### Lo que hubo que anadir al nucleo para llegar al pasillo
+- **`moveCamera`** (overlay C, `ovc7.asm`) y **`VAR_CAMERA_POS_X`** en `vm_frame`, en el modelo (`CoreVM.step_frame`) y en el Z80: la sala 79 (los creditos) hace `panCameraTo` y el script espera a que la camara llegue; sin `moveCamera` el arranque se quedaba ahi para siempre. Orden de `scummLoop`: `update_scumm_vars`, `update_music_timer`, `runAllScripts`, frases, `walkActors`, `moveCamera`. Emite el suceso `EV_CAMERA` (10) [cur] como el modelo.
+- **Sonido simulado** (`snd_tick`, `snd_*` en `scumm.asm`): el modo `timed` del modelo en el Z80: cada sonido dura 60 jiffies, 3.600 si es una cancion (bit 3 de la tabla de banderas `SNDF`, que sale de `DATA.BIN`: el recurso pasa de 1.000 B), y `VAR_MUSIC_TIMER` avanza como `Player_V2Base` (236 Hz). `isSoundRunning` lo contesta el programa (`EV_SOUND_QUERY` -> `HRES`). Maximo 8 sonidos a la vez. `snd_tick` se llama desde `vm_frame` justo antes de `runAllScripts` (en `vm.asm`, el arnes del nucleo, es un `ret`). La fase 8 lo sustituye por el reproductor real.
+- **Proteccion anticopia** (D2): `protection_hook` en el bucle principal: en la sala 92, a los 30 fotogramas `Var[57] = 1` si `PROF+255` = 1 (el perfil `games/indy3.cfg` lo pone).
+- Los overlays B, C y D los lee el programa de la SD al arrancar (`DATA/OVLB.BIN`, `OVLC.BIN` y `OVLD.BIN`, a las paginas 49, 48 y 46); `DATA.BIN` lleva `OBJCLS` (pagina 47) y las tablas frias (pagina 15). **La fase 9** decide la ruta definitiva de esos ficheros, hace `compila_scumm.bat` y el cargador BASIC (la entrada ahora es `$4215`, no `$4212` como en v2).
+
+### Fallos que salieron al montarlo (los del arnes del nucleo no los veian)
+- **`map_page` tiene que conservar BC.** Los overlays (p. ej. `ovc_room`: `ld bc,size / call map_page / ... ldir`) cuentan con ello porque en el arnes del nucleo `map_page_x` solo cambia la pagina; la cache de paginas (`dp_cache.inc`) usa BC. Ahora `map_page_x` guarda BC. Sin esto, `loadRoom` copiaba 64 KB a partir de `RBLOB`.
+- El cargador leia el relleno del final de las tablas con la **pagina fria 15 aun en la ventana** y pisaba las primeras salas del ROOMDIR (las salas 1-6): ahora lo lee con una pagina de la cache.
+
+### Resultado (2026-11-15)
+- **Arranque: 1.501 de 1.501 fotogramas con el mismo resumen D** que el modelo (`boot-core`, 1.500 fotogramas con `delta = max(1, VAR_TIMER_NEXT)`): sala 76 (logo) en el fotograma 0, 79 (creditos) en el 148, 6 en el 627, **1 (pasillo) en el 694**, 92 (proteccion, saltada) en el 1.108 y 73 en el 1.212. Es el mismo recorrido que el modelo completo (`vmmodel3.py boot`), sin clics.
+- **Pantalla:** `check_hr.py` sobre los volcados de los fotogramas 100 (sala 76), 400 (79, camara 40 de 128), 760 y 1.000 (pasillo, camara 67 de 120): 6.400 bytes comprobados por volcado, 0 distintos, 0 bytes no cero fuera de la ventana de la sala. Imagen del pasillo (fotograma 760): `test/build/room1_f760.png`.
+- **Tamanos:** residente `$4200-$65B9` (**6.727 B libres hasta `$8000`**; la fase 6 dejaba 10.888: el nucleo con los cambios de 5b acaba en `$5590` y el programa (`hr.asm`, cargador y cache, bucle, sonido simulado, camara) suma 4.137 B), tablas hasta `$8493`, overlay B 7.680 B (512 libres), **C 4.608 B (3.584 libres)**, D 4.392 B (3.800 libres). Nada de codigo por encima de `$8000`.
+- **Regresion:** `build_test.sh` (todas las salas): **3.492/3.492 iguales**, 0 distintos (con `moveCamera`, `VAR_CAMERA_POS_X` y `snd_tick`).
+- **Mutaciones** (`mutaciones.py 1,15,20`): **120 de 126** las de antes (sin perder ninguna; las 6 sin detectar son las de siempre) y **9 de 13** las nuevas de `moveCamera` / `camera_moved` / `VAR_CAMERA_POS_X`: **129 de 139**. Sin detectar (los escenarios de las salas 1, 15 y 20 no los recorren): `cur` fuera del minimo (avanza 7, o se acota el destino al minimo), `cur` fuera del maximo sin retroceder, y `CAM_LEFT` 10 -> 9
+- **T** (`TS_PROF=700-760`, el pasillo con scroll de camara): media 255.117 T por vuelta, mediana 121.878, p90 999.544, maximo 1.057.475. Casi todo es el scroll de la sala (`hs_l`, `hfc2`) y recomponer columnas (`hm_o`, 11 %): la vuelta no cabe en el presupuesto de la fase 10 (325.000 T) cuando la camara se mueve; `obj_drawn` pesa 1,3 % y `moveCamera` es despreciable. Para la fase 10.
+
+### Lo que queda (apuntado, no es de 5b)
+- **Fase 7:** texto (los mensajes no se pintan: `print` llena `MSGBUF` y `display_dialog` corre, pero nadie lo escribe en las filas 0-1), interfaz y verbos en las filas 18-23, raton y teclas, `runInputScript` / `checkExecVerbs`. El arranque no los necesitaba (el modelo llega al pasillo sin clics).
+- **Fase 8:** actores (sprites con `hv_ytop` y `HR_TOP`), sonido real, objetos de varias imagenes, `updateObjectStates` (el Z80 mira `OBJST` vivo).
+- **Fase 9:** ruta de los `OVL*.BIN` en la SD, `compila_scumm.bat`, cargador BASIC, guardar y cargar, probar en la placa (el scroll con las filas `$FC / $FF / $03`, el recorte de salas altas, `HR_TOP`).
+
+## Fase 7: interfaz, mensajes, raton y teclado (2026-11-15)
+
+Modelo: `TOOLS/vmgame3.py` (`draw_verb`, `find_verb_at_pos`, `process_input`, `check_exec_verbs`, `run_input_script`) y `TOOLS/vmmodel3.py` (`CoreVM.step_frame`, ordenes `CLICK`/`MOVE`/`RCLICK`/`KEY`/`ESC`/`INPUT`/`USERPUT`,
+`AT`, `screen_to_scumm`). Z80: `ENGINE/vm_input.asm` (el nucleo: la entrada), `ENGINE/ui3.asm` (programa: pantalla de texto, verbos, mensajes, cursor, teclado y raton), `vd_draw`/`ovb_vname` en `ovb4b.asm`
+(overlay B) y `ev_handler`, `restart`, `do_pause` en `scumm.asm`.
+
+```
+sh test/build_test.sh                                              # nucleo: todas las salas, con los escenarios de entrada cinp<sala>.<k>
+sh test/build_boot.sh 1500 "../../Indy Last Crusade" eventos.txt   # programa completo: el arranque con sucesos de entrada (lineas "fotograma tipo [a b]"; abajo)
+python -I test/check_hr.py test/build/boot_dump.bin test/prog/scumm.sym ../preview_hr/gfx    # ahora tambien comprueba las filas de la interfaz
+python -I test/render_hr.py test/build/boot_dump.bin pantalla.png 3                          # la pantalla HiRes (256 x 192) del volcado a PNG
+```
+
+### Decision confirmada por el usuario (2026-11-15): la frase va en la fila de arriba
+D3 decia "6 filas de interfaz: frase, verbos e inventario", pero Indy3 usa **7 filas de 8 lineas desde la 144**: la frase (y = 144), tres filas de verbos (152-168) y tres de inventario (176-192, con las flechas).
+No caben en 48 lineas. Solucion tomada (cambiarla es tocar `ui_verb`, `in_conv` y `screen_to_scumm`): la pantalla de texto `UIVB` tiene 8 filas de 40 columnas de 6 pixeles y la fila de UIVB de un verbo es
+**(y - 144) / 8 + 1**: la frase (fila 1) cae en la segunda de las 2 filas de mensajes de arriba (lineas 8-15) y las seis de verbos e inventario (filas 2-7) en las 48 lineas de abajo. **Mientras hay un mensaje en pantalla
+la frase no se ve** (el original la deja a la vista; se pierde una linea de texto durante los dialogos). La columna es x / 8 (las x de Indy3 son multiplos de 8: 0, 48, 104, 176, 256 y 152, 168; 40 columnas x 6 px = 240 px).
+Alternativas: una fila de 7 lineas (49 > 48: no), o una sola fila de mensajes de 8 lineas (la 4.a fila de interfaz a costa de los dialogos de 2 lineas).
+
+### Coordenadas
+- La pantalla del ZX81 es de 256 x 192 y la de SCUMM de 320 x 200: el programa pasa el cursor (pixeles; `cur_x` 0-248, `cur_y` 0-184) a coordenadas de SCUMM en `in_conv` (modelo: `vmmodel3.screen_to_scumm`):
+  en la sala y en las 2 filas de arriba, tal cual (la x virtual suma el borde izquierdo de la camara en `vm_input`); en la interfaz (y >= 144), **x = (x / 6) * 8, y = y + 8**.
+- El rectangulo de un verbo es `[left, left + 8 * V_LEN) x [top, top + 8)`: `V_LEN` (columnas del nombre ya convertido, tope 40) se fija **al dibujar el verbo**, como `drawVerb` de ScummVM fija `curRect.right`
+  (al final de `verbOps` y al restaurar con `saveRestoreVerbs`: `vd_draw`, modelo `draw_verb`); un verbo nunca dibujado o con imagen no tiene rectangulo. **`VSZ` pasa de 18 a 19** (campo `V_LEN`; `verb_ix` multiplica
+  por 19) y el CRC de los verbos (`W=`) lo incluye.
+- **Correccion del modelo:** la pantalla principal mide `main_h - main_top` (`initScreens(b, h)`: altura h - b) y no `main_h`: el modelo usaba 144 de alto desde la 16 (Indy3 llama a `SetScreen(16, 144)`: son 128).
+  El Z80 (`MAINTOP`, `MAINH`) guarda los dos valores de `roomOps` 3 tal cual, sin cambios.
+
+### El nucleo (`vm_input.asm`; residente, ~560 B)
+El nucleo no sabe de teclado ni de raton: el programa deja **un suceso por fotograma** en `INEV` (tipo 1 clic, 2 clic derecho, 3 tecla, 4 ESC, 5 mover; x, y de SCUMM; tecla) y `vm_frame` lo consume (`vm_input` tras
+`talk_frame`, como `processInput` tras `displayDialog` en v3). `vm_input`: recorta el raton a 0-319 / 0-199, calcula el raton virtual (`VMOUSEX/Y`; y = -1 fuera de la pantalla principal) y `MKSTAT`
+(`_mouseAndKeyboardStat`: $8000 clic izquierdo, $4000 derecho, o la tecla); ESC o el clic derecho (la tecla de salir de la escena cortada en v0-v3) llaman a `abortCutscene` y dejan `VAR_CUTSCENEEXIT_KEY` como tecla
+si la variable no es 0; `.` pone `talk_delay` a 0; ESPACIO (la pausa) no llega a los scripts; **Intro es un clic izquierdo si el cursor esta activo** (`_cursor.state` > 0). `in_vars` escribe `VAR_VIRT_MOUSE_X/Y` y
+`VAR_MOUSE_X/Y`. `check_exec_verbs` (tras `run_all`, antes de `checkAndRunSentenceScript`, como en `scummLoop`): con `_userPut` > 0 y algo pulsado, la tecla de un verbo (`V_KEY`, modo 1) llama a
+`runInputScript(1, verbo, 1)`, otra tecla a `(4, tecla, 1)`, un clic sobre un verbo a `(1, verbo, 0)` y un clic en la pantalla principal a `(2, 0, 0)` (fuera de ella, `(1, 0, 0)`). `rin` pone los tres argumentos en los
+locales 0-2 de `VAR_VERB_SCRIPT` como `checkAndRunSentenceScript`. API nueva `vm_inpscr` (+30: zona en `APIVERB`, valor en `APIN`, modo en `APIA`: orden `INPUT` del arnes).
+Variables en el bloque 7 (`$F1AC-$F1BC`, 17 B tras `GW_END`): `INEV` (7), `MOUSEX/Y`, `VMOUSEX/Y`, `MKSTAT`; `vm_init` las pone a 0.
+
+### Pantalla de texto, verbos y mensajes (`ui3.asm`, residente)
+- `UIVB` (`$9900`, 8 x 40 codigos de glifo), `UIBUF` (`$9A40`, el nombre de un verbo), variables `UIV` (`$9A80-$9ABF`), `FAKESL` (`$9AB0`), `PGBUF` (`$9AC0`, la pagina de mensaje). Fuente `font_tiles` (384 B en el
+  residente; `TOOLS/gen_font3.py` la genera desde `ENGINE/font6.bin`: flechas 208-209 y 46 glifos 210-255; solo mayusculas; los codigos 1-4 de los nombres de verbo de Indy3 son las flechas del inventario).
+- `hr_ui` (copia de `hrui.asm` de v2): pinta solo los grupos de 4 caracteres que cambian (`HRUI_PREV`, en el bloque de atributos); la fila r de UIVB va a la fila de pantalla r (r < 2) o r + 16. Blanco brillante sobre
+  negro; con un mensaje, las filas 0-1 con el color del que habla. `check_hr.py` comprueba el bitmap de esas filas contra UIVB.
+- **Verbos:** `EV_VERB` marca `ui_dirty`; `ui_redraw` (una vez por fotograma si hace falta) limpia las filas de UIVB y escribe cada verbo visible (id, curmode <> 0, saveid = 0, de texto) en su celda con el nombre que da
+  el overlay B (`ovb_vname`, entrada +24: convierte el nombre, con los codigos `$FF`, a `UIBUF`; en `emit_a` es el modo 2). El nombre de un verbo apunta al texto de un script: fuera de un script `ovb_vname` pone una ranura
+  falsa en `CURSLOT` (`FAKESL`) para que `cm_nest` devuelva la ventana a la pagina del nombre (sin ella se leia basura despues de un nombre anidado: la frase). El valor de vuelta va en HL: `call_ovb` pisa A. Un verbo
+  atenuado (curmode 2: Talk y Travel en el gimnasio) se pinta como uno normal (no hay color por verbo).
+- **Mensajes:** `EV_TEXT` ([255]: borrar las 2 filas de arriba; [0, ...]: una pagina): `display_dialog` (B) deja los caracteres de la pagina en `PGBUF` (`dg_sum`) y `ui_text_ev` los escribe en las filas 0-1 con el color del
+  actor (`ega2chroma`), sin partir por palabras (se parte a las 40 columnas; lo que pasa de 2 filas se pierde). El tiempo del mensaje es el de `displayDialog` (`talk_delay`, igual al modelo). El texto suelto de `print`
+  (ranura 1) no se pinta.
+- **Cursor:** el sprite 63 (la flecha de v2), visible si `_cursor.state` > 0.
+
+### Teclado y raton (`in_poll`; una vez por fotograma, antes de `vm_frame`)
+Letras y cifras = la tecla de SCUMM (minuscula: los verbos de Indy3 usan q a z w s x e d c r f v t g b y u h j n m o l); **Intro** = clic izquierdo; **ESPACIO** = pausa (otra vez, sigue; "GAME PAUSED" arriba);
+**SHIFT + 5 6 7 8** = mover el cursor (izquierda, abajo, arriba, derecha: 3 px por fotograma); **SHIFT + ESPACIO** = ESC; **SHIFT + X** = salir al BASIC (la X sola es el verbo Look: antes salia); **SHIFT + R** = reiniciar
+(`restart`: como el arranque, sin volver a leer los overlays). Con raton Bluetooth (`mouse.asm`) mueve el cursor y los botones son los clics (izquierdo; derecho = ESC). Un suceso por fotograma (clic derecho/ESC > clic >
+tecla > mover). Para probar sin teclado ni raton, `IT_KIND`/`IT_X`/`IT_Y`/`IT_KEY` (`ui3.asm`) sustituyen a `in_poll` (el arnes los escribe con `TS_POKE`; `IT_KIND` 6 = reiniciar).
+
+### Resultado (2026-11-15)
+- **`build_test.sh` (todas las salas): 3.687 de 3.687 trazas iguales** (los 3.492 de antes mas 195 de entrada: `cinp<sala>.<k>`, `cinpboot` (ESC y boton derecho en las escenas cortadas del arranque), `cinpverb` (un clic en el borde derecho de cada verbo) y `cinpdot` (`.` con un mensaje)).
+- **Arranque con la interfaz: 1.501 de 1.501 fotogramas iguales** (sala 1 en el 694, como antes); `check_hr.py` **0 distintos** en las salas 76, 79, 1, 8, 12 y 20, y las filas de la interfaz iguales a UIVB. Cargando una sala con `DBG_ROOM` (`room n` en el fichero de sucesos) las trazas tambien son iguales (8, 12, 20).
+- **Partida en Barnett College** (`test/ev_barnett.txt`, 14 sucesos entre los fotogramas 1.290 y 1.700: Look, clic en la puerta, Walk to, clics en la escena, teclas `e` y `z`, boton derecho, Intro, ESC, el script 3 con su mensaje): **1.751 de 1.751 iguales**, `check_hr.py` 0 distintos. El teclado de la matriz del arnes (`ZX81_MATRIX`, `EVF_NOPOKE=1`: la tecla X = Look) da el mismo suceso que el modelo. Mensaje "THAT DOESN'T SEEM TO WORK." en amarillo (color de Indy) arriba. Reiniciar (`restart`, SHIFT + R) probado sin comparar (el modelo no reinicia): vuelve al logo y a los creditos sin errores.
+- **Mutaciones** (`mutaciones.py 1,15,20`; `test/mut_fase7.py` las 24 nuevas): **20 de 24 de la fase 7 detectadas**. Sin detectar (Indy3 no las recorre): el verbo centrado (ninguno lo usa), el clic derecho en `check_exec_verbs` (codigo que no se alcanza en v3: el boton derecho es siempre ESC), y dos de `drawVerb` con verbos guardados (el rectangulo solo cambiaria si el nombre cambia entre guardar y restaurar). **Total 148 de 162** (las 138 de antes, sin perder ninguna: 129 de 139 contando `update_scumm_vars`, mas las 24 nuevas; las 14 sin detectar son las 10 de siempre y 4 de la fase 7). La del texto de `restaurar verbos deja el saveid` se adapto al codigo nuevo.
+- **Tamanos:** residente (programa) `$4200-$7064` (**3.996 B libres** hasta `$8000`; la 5b dejaba 6.727: +2.7 KB = `vm_input` 560 B, `ui3.asm` ~1.8 KB incl. la fuente de 384 B y `mouse.asm`, `in_poll`/pausa/reinicio); en el nucleo de pruebas (`vm.asm`) `$4221-$57EE`. Overlay B 7.936 B (codigo hasta `$1C93`; **365 B libres** antes de la tabla en `$1E00`), C 4.608 B (3.584 libres), D 4.392 B (3.800 libres). Bloque 7: 970 B libres. Hueco del bloque 4: `STRHEAP` acaba en `$93ED` (36 B menos de margen por `VSZ` = 19).
+- **T:** fotograma tranquilo del gimnasio (`TS_PROF=1280-1310`, 30 vueltas): **50.337 T por vuelta de media** (78.372 antes de `ui_chg`); `hr_ui` ya no aparece (21.040 T cuando se ejecuta), `kbd_scan` ~1.700 T por vuelta (`ks_key` 3,3 %), `ui_redraw` solo cuando cambia un verbo (una conversion por verbo visible por el overlay B). Con scroll el pasillo sigue en ~1.000.000 T (fase 10).
+
+### Pendiente / apuntado
+- El texto de los mensajes no se parte por palabras (40 columnas, 2 filas); `print` suelto (ranura 1) no se pinta; verbos atenuados sin color; sin colores por verbo (hover); solo mayusculas.
+- `compila_scumm.bat`, la ruta de los `OVL*.BIN` y probar el cursor / raton / teclas en la placa son de la fase 9. El mapeo de teclas (SHIFT + 5-8, SHIFT + ESPACIO, SHIFT + X, SHIFT + R) se puede cambiar en `in_poll`.
+- `hr_ui` solo se ejecuta cuando UIVB cambia (`ui_chg`): sin eso costaba ~21.000 T por fotograma (`hu_cmp` 27 % de la vuelta en un fotograma tranquilo).
+
+### Pruebas
+- **Escenarios de entrada** (`make_scenarios_core`, `cinp<sala>.<k>`: 6 en las salas 1, 15, 20 y 28, 2 en las demas con cajas): la sala, el script 96 (que pone los verbos de Indy3), `USERPUT` (activo, apagado, negativo...) y
+  de 6 a 14 sucesos al azar (clics en verbos, en objetos de la sala, en el inventario, arriba, fuera de la pantalla; teclas de verbo, Intro, ESC, `.`, ESPACIO; boton derecho; `INPUT`) con fotogramas entre ellos.
+- **Arranque con sucesos de entrada:** `build_boot.sh N juego eventos.txt` (`mk_events.py` -> `TS_POKE`; `vmmodel3.py ... boot-core DIR N eventos.txt`: ordenes `AT`). Tipos: `click px py`, `move px py`, `rclick`,
+  `key k`, `esc`, `script n` (px, py: pixeles de la pantalla del ZX81). Ej. (el gimnasio, sala 73, desde el fotograma 1.264): `1290 click 38 162` (Look) y `1300 click 125 90` (el hueco de la puerta, objeto 834):
+  la frase pasa a "LOOK LOCKER ROOM", con las trazas iguales fotograma a fotograma (`test/build/ev2.txt`, `ui_ev2.png`).
