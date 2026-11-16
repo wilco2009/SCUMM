@@ -220,9 +220,9 @@ class Ref:
         # mascara de profundidad
         use_mask = False
         wbox = r[A_WBOX]
-        if mblob and wbox < nboxes and boxes[wbox] and cw < 7 and ch < 9:
+        if mblob and (wbox == 255 or (wbox < nboxes and boxes[wbox])) and cw < 7 and ch < 9:     # 10a: caja 255 (sin caja) = mascara 1 en v3 (getMaskFromBox)
             X0 = x + cam
-            if X0 >= 0 and (X0 >> 3) <= 255:
+            if -64 <= X0 and (X0 >> 3) < 248:        # 10a: el borde izquierdo puede caer fuera de la sala (X0 < 0): la mascara sigue valiendo (antes se quitaba entera)
                 use_mask = True
         out = []
         for i in range(n):

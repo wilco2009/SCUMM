@@ -1687,11 +1687,17 @@ class VM(GameMixin):
     def load_game(self, slot):
         """loadState: el estado vuelve a como estaba; el script que estaba en marcha sigue por su ranura; el sonido para y vuelve a empezar el que sonaba."""
         name, snap = self.saves[slot]
+        in_script, ptr_now = self.cur != 0xFF, self.ptr                # 10a: el puntero del script que carga, justo despues del opcode
         memo = {id(self): self, id(self.w): self.w}
         for k, v in snap.items():
             setattr(self, k, copy.deepcopy(v, memo))
         self.room = self.w.rooms.get(self.cur_room)
         if self.cur != 0xFF:
+            # 10a: o4_saveLoadGame acaba con updateScriptPtr / getScriptBaseAddress / resetScriptPointer y loadState no toca _scriptPointer: el script en marcha
+            # (la ranura _currentScript RESTAURADA) sigue justo despues del opcode de CARGAR, no del de guardar (asi se quedaba en un bucle el dialogo de Indy3).
+            # Cargando desde el bucle principal (DBG_SAVE, sin script en marcha) la ranura sigue por donde la dejo el guardado, como antes.
+            if in_script:
+                self.slots[self.cur].offs = ptr_now
             self.load(self.cur)
         self.snd_log.append('SND f=%d STOP' % self.frame)               # sd_stopvgm; si sonaba algo, vuelve a empezar (sc_nt: STOP, LOOP, PLAY)
         cur = self.snd_cur
@@ -2406,7 +2412,7 @@ def screen_to_scumm(px, py):
     py = max(0, min(184, py))
     if py < 144:
         return px, py
-    return min(px // 6, 39) * 8, py + 8
+    return min(max(px - 8, 0) // 6, 39) * 8, py + 8          # 10a: el texto de la interfaz empieza en el pixel 8 (hr_ui: un byte de margen a cada lado)
 
 
 def screen_event(kind, a, vm=None):

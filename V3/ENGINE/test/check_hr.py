@@ -94,6 +94,7 @@ for r in range(8):
         bits = []
         for c in range(40):
             code = uivb[r * 40 + c]
+            if 80 <= code < 128: code += 128                 # 10a: letra de un verbo atenuado (el mismo glifo, otro atributo)
             g8 = ft[(code - 208) * 8 + ln] if code >= 208 else 0
             bits += [(g8 >> (5 - k)) & 1 for k in range(6)]
         exp = bytes(1) + bytes(sum(bits[b * 8 + k] << (7 - k) for k in range(8)) for b in range(30)) + bytes(1)      # 240 pixeles = 30 bytes con un byte de margen a cada lado

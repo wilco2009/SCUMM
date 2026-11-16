@@ -818,6 +818,8 @@ aq_mkdec:       xor a
                 ld hl,(CURRD+16)
                 ld (aq_mbl),hl
                 ld a,(ix+A_WBOX)
+                cp 255                  ; 10a: sin caja (kOldInvalidBox: el actor ignora las cajas, como Indy al salir por la puerta del gimnasio): en v3 la mascara
+                jr z,mk_box             ; es 1 (getMaskFromBox de ScummVM, WORKAROUND de los bugs #791 y #897); antes se quedaba sin mascara
                 ld hl,NBOXES
                 cp (hl)
                 ret nc
@@ -830,7 +832,7 @@ aq_mkdec:       xor a
                 ld a,(hl)               ; mascara de la caja
                 or a
                 ret z
-                ld a,(iy+2)             ; ancho en celdas: con el desplazamiento caben 8 tiras
+mk_box:         ld a,(iy+2)             ; ancho en celdas: con el desplazamiento caben 8 tiras
                 cp 7
                 ret nc
                 add a,2
@@ -845,22 +847,28 @@ aq_mkdec:       xor a
                 ld hl,(aq_x)            ; columna de la sala del borde izquierdo del fotograma
                 ld de,(aq_cam)
                 add hl,de
-                bit 7,h
-                ret nz
-                ld a,l
-                and 7
+                ld a,l                  ; 10a: la columna puede ser negativa (el actor asoma por el borde izquierdo de la sala: la puerta del gimnasio);
+                and 7                   ; antes se quitaba la mascara entera y el actor salia por delante de la pared
                 ld (aq_sh),a
-                srl h
+                sra h                   ; tira = columna / 8 con signo (hacia abajo)
                 rr l
-                srl h
+                sra h
                 rr l
-                srl h
+                sra h
                 rr l
                 ld a,h
                 or a
-                ret nz
+                jr z,mk_pos
+                inc a
+                ret nz                  ; menos de -256: fuera
                 ld a,l
-                ld (aq_s0),a
+                cp $F8
+                ret c                   ; mas de 8 tiras a la izquierda de la sala: no se ve nada del fotograma
+                jr mk_s0
+mk_pos:         ld a,l
+                cp $F8
+                ret nc                  ; (las tiras 248-255 no existen: aq_s0 >= $F8 quiere decir -8..-1)
+mk_s0:          ld (aq_s0),a
                 ld a,(aq_mpg)
                 call map_page
                 ld hl,MKBUF
@@ -877,7 +885,15 @@ mk_strip:       ld hl,(aq_dd)           ; la tira, a ceros
                 ld a,(aq_s0)
                 ld hl,aq_k
                 add a,(hl)              ; tira de la sala = s0 + k
-                jp c,mk_next
+                ld e,a
+                sbc a,a
+                ld d,a                  ; D = $FF si la suma ha dado la vuelta
+                ld a,(aq_s0)
+                cp $F8
+                sbc a,a                 ; $FF si s0 >= 0
+                xor d                   ; 10a: vale si s0 >= 0 y no da la vuelta, o si s0 < 0 (-8..-1) y la da (la tira ya es >= 0)
+                jp z,mk_next
+                ld a,e
                 ld hl,(aq_mbl)
                 cp (hl)
                 jp nc,mk_next           ; fuera de la sala

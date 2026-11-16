@@ -1,7 +1,7 @@
 # Barnett College (sala 73, desde el fotograma 1.264): una partida corta con clics, teclas, ESC, Intro y un mensaje
-1290 click 38 162
+1290 click 46 162
 1300 click 125 90
-1360 click 80 146
+1360 click 88 146
 1370 click 150 110
 1420 key 101
 1425 click 40 100

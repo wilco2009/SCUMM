@@ -36,6 +36,9 @@ ui_col          equ UIV+31
 ui_len          equ UIV+32
 ui_moved        equ UIV+33
 ui_chg          equ UIV+34              ; 1: UIVB ha cambiado (o la pantalla se ha borrado): hr_ui tiene que volver a mirarla
+ui_dimf         equ UIV+35              ; 10a: el verbo que se escribe esta atenuado (curmode 2): sus letras van a UIVB con el codigo - 128 (80-127)
+ui_dimc         equ UIV+36              ; el atributo de los atenuados (ega2chroma[dimcolor del verbo]; Indy3: 8, gris oscuro)
+hu_dim          equ UIV+37              ; hu_group: el grupo que se pinta lleva alguna letra atenuada
 HRUI_PREV       equ $DEC0               ; 8 filas x 40 columnas: el codigo que hay pintado en cada celda (en el bloque de atributos: sitio libre)
 HU_GL           equ HR_ATT+$1900        ; 4 glifos x 8 lineas
 GLYPH0          equ 210                 ; codigos 210-255: la fuente (46 glifos); el 210 es el espacio
@@ -248,7 +251,24 @@ ui_verb:        ld a,(ix+V_ID)
                 ld a,c
                 cp 2
                 ret c                   ; la fila 1 es del mensaje
-uv_r:           ld l,(ix+V_LEFT)        ; columna = left / 8
+uv_r:           xor a                   ; 10a: un verbo atenuado (curmode 2: no se puede pinchar, findVerbAtPos solo acepta curmode 1) se pinta con su dimcolor,
+                ld (ui_dimf),a          ; como drawVerb de ScummVM (antes salia como los demas y parecia que el clic fallaba: TALK y TRAVEL en el gimnasio)
+                ld a,(ix+V_MODE)
+                cp 2
+                jr nz,uv_nd
+                ld (ui_dimf),a
+                ld a,(ix+V_DIM)
+                and 15
+                ld e,a
+                ld d,0
+                ld hl,ega2chroma
+                add hl,de
+                ld a,(hl)
+                or a
+                jr nz,uv_dc
+                ld a,8
+uv_dc:          ld (ui_dimc),a
+uv_nd:          ld l,(ix+V_LEFT)        ; columna = left / 8
                 ld h,(ix+V_LEFT+1)
                 bit 7,h
                 ret nz
@@ -308,7 +328,13 @@ uvd_l:          ld a,(hl)
                 ret
 uvd_c:          push hl
                 call ui_code
-                ld (de),a
+                ld l,a
+                ld a,(ui_dimf)
+                or a
+                ld a,l
+                jr z,uvd_w
+                sub 128                 ; atenuado: el mismo glifo con el codigo 80-127 (hr_ui lo pinta con ui_dimc)
+uvd_w:          ld (de),a
                 inc de
                 pop hl
                 dec c
@@ -514,7 +540,9 @@ hu_srow:        cp 2                    ; fila de UIVB -> fila de la pantalla (0
                 ret
 
 ; pinta el grupo hu_g de la fila hu_r: los 4 codigos estan antes de (hu_src)
-hu_group:       ld hl,(hu_src)
+hu_group:       xor a
+                ld (hu_dim),a
+                ld hl,(hu_src)
                 ld bc,-4
                 add hl,bc
                 ld de,HU_GL
@@ -524,7 +552,15 @@ hg_c:           push bc
                 ld a,(hl)
                 cp ARROW_UP
                 jr nc,hg_s
-                ld hl,hu_zero
+                cp ARROW_UP-128         ; 10a: 80-127 = el glifo + 128, atenuado: el grupo entero (24 pixeles) toma el atributo ui_dimc
+                jr c,hg_z
+                cp 128
+                jr nc,hg_z
+                add a,128
+                ld hl,hu_dim
+                ld (hl),1
+                jr hg_s
+hg_z:           ld hl,hu_zero
                 jr hg_cp
 hg_s:           ld l,a
                 ld h,0
@@ -618,7 +654,11 @@ hu_clr:         ld a,(hu_r)
                 jr z,hc_w
                 ld a,(tx_clr)
                 ret
-hc_w:           ld a,$0F
+hc_w:           ld a,(hu_dim)
+                or a
+                ld a,$0F
+                ret z
+                ld a,(ui_dimc)
                 ret
 hu_zero:        defs 8,0
 
@@ -714,7 +754,10 @@ ic_if:          add a,8
                 ld h,0
                 ld (INEV+3),hl
                 ld a,(cur_x)
-                ld c,0
+                sub 8                   ; 10a: hr_ui pinta el texto con un byte de margen (columna c en el pixel 8 + 6 * c): sin restarlo la caja de un verbo
+                jr nc,ic_m              ; quedaba 8 pixeles a la izquierda de la palabra (solo respondia su mitad izquierda)
+                xor a
+ic_m:           ld c,0
 ic_d:           sub 6
                 jr c,ic_e
                 inc c

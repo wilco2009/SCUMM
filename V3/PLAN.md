@@ -313,6 +313,18 @@ Como se prueba cada manejador nuevo (lo monto la fase 3; `V3/FASE3.md`):
 - Perfil con `TS_PROF` en las salas medidas en el estudio: 1, 20, 28, 70 y una de 4-6 actores. Las vueltas tienen que caber en `delta` 6 (325.000 T).
 - Repaso de las diferencias que queden con ScummVM y lista de lo pendiente para Loom EGA.
 
+**Subdivisión (usuario, 2026-11-16):** la fase 10 va en subtareas independientes, **una sesión cada vez** (tocan los mismos ficheros), con Fable y, si se acaba su cupo, se pasa a Opus y se sigue. Cada subtarea deja escrito en `FASE3.md` lo hecho y lo que falta antes de acabar, para poder retomarla en otra sesión.
+**Pruebas en la fase 10 (usuario, 2026-11-16):** no se pasan las pruebas (`build_test.sh`, arranque, Barnett, guardar/cargar, `mutaciones.py`) tras cada cambio. Solo se ensambla. Al final de cada subtarea la sesión **pregunta al usuario** y las pasa cuando él da permiso.
+
+| Sub | Qué | Estado |
+|---|---|---|
+| 10a | **Fallos de la placa** (2026-11-16): (1) al salir de una sala los sprites deben apagarse antes de borrar el fondo; (2) en el gimnasio Indy se ve por encima de la puerta antes de pasar a la sala de al lado; (3) la caja del clic de un verbo no coincide con su longitud (solo responde la mitad izquierda de la palabra); (4) **LOAD de una partida guardada se cuelga** | **Arreglados los cuatro (2026-11-16), solo ensamblado**: (1) `evh_room` apaga los sprites antes de `gf_load_room`; (2) Indy sale por la puerta con `ignoreBoxes` (caja 255) y en v3 `getMaskFromBox(255)` = 1: ahora lleva máscara (2.º intento, tras la prueba del usuario; además la máscara ya no se quita con el borde izquierdo en columna negativa); (3) `in_conv` no restaba los 8 px de margen de `hr_ui`; (4) tras cargar, el script seguía por el opcode de guardar y no por el de cargar (ScummVM: `updateScriptPtr` al final de `o4_saveLoadGame`), bucle sin fin en el diálogo: reproducido en el modelo. El usuario confirmó en el emulador el 1 y el 4; el 2 corregido de nuevo, sin probar; TALK/TRAVEL no se pueden pinchar porque el juego los atenúa en el gimnasio (ya se pintan atenuados con su `dimcolor`: `ui3.asm`, sin probar). **Faltan las pruebas del arnés (pendientes del permiso del usuario) y la placa.** Detalle en `FASE3.md` ("Fase 10a"). Sin commit |
+| 10b | Rendimiento: pasillo (sala 1) con scroll, ~1.000.000 T por vuelta | Sin empezar |
+| 10c | Rendimiento: recomposición de objetos en las salas 20/28 (`hm_o`, `hr_makecol`; 334.176 y 451.235 T de media, máx. 1,2 y 1,5 M) | Sin empezar |
+| 10d | Rendimiento: cambio de tramo de la caminata (134.670 T de media, máx. 1.467.429) y perfil de las salas 70 y una de 4-6 actores | Sin empezar |
+| 10e | Huecos de las pruebas: mutaciones de actores sin detectar (fase 8), las 4 de `moveCamera` y las 4 de la fase 7, mutaciones de `ovc9.asm` | Sin empezar |
+| 10f | Repaso de las diferencias con ScummVM y lista de lo pendiente para Loom EGA | Sin empezar |
+
 ## Orden y paralelismo
 
 - Las fases 0, 1 y 2 no tocan los mismos ficheros: pueden ir en paralelo (tres sesiones Sonnet).

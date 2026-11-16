@@ -13,3 +13,4 @@ echo "== cruzando salas (400 / 700)"; sh build_boot.sh 900 "$G" ev_save2.txt | $
 echo "== opcode en un script (sintetico 199)"; SCUMM_SYNTH="$(pwd)/synth_save.hex" sh build_boot.sh 400 "$G" ev_save3.txt | $F | tail -3
 echo "== dialogo F5 con una partida guardada"; rm -f build/sdboot/SAVE*.SAV; sh build_boot.sh 1500 "$G" ev_f5.txt | $F | tail -3; python -I check_hr.py build/boot_dump.bin prog/scumm.sym ../../preview_hr/gfx | tail -1
 echo "== SHIFT + S por la matriz"; EVF_NOPOKE=1 ZX81_MATRIX="1300:SHIFT+S,1310:" sh build_boot.sh 1350 "$G" ev_f5hw.txt | $F | tail -3
+echo "== cargar con el OK del dialogo (10a: SAVE, nombre, OK; LOAD, fila, OK)"; rm -f build/sdboot/SAVE*.SAV; sh build_boot.sh 2600 "$G" ev_f5j.txt | $F | tail -3

@@ -26,6 +26,8 @@ SL_HDR          equ $9750               ; la cabecera que se escribe o se espera
 SL_TMP          equ $9762               ; cabecera leida (18); a continuacion, SL_NM (juntos: 50 bytes para leer el nombre sin mas)
 SL_NM           equ $9774               ; el nombre (32)
 SL_LIVE         equ $97A0               ; los bytes de sl_live guardados mientras se lee el bloque 7 (hasta 64)
+sl_ccur         equ $97DB               ; 10a: CUR al empezar a cargar ($FF: desde el bucle principal) y, desde sl_cpos, por donde va el script que carga:
+sl_cpos         equ $97DC               ; pagina (SL_PAGE), SL_BIG y SPTR (justo despues del opcode). SL_LIVE usa 54 de sus 64 bytes: no pasar de $97DA
 sl_h            equ $97E0               ; manejador del fichero
 sl_slot         equ $97E1
 slp_sid          equ $97E2
@@ -274,7 +276,18 @@ sll_c:          ld a,(de)
                 inc hl
                 inc de
                 djnz sll_c
-                ; a partir de aqui el estado cambia
+                ld a,(CUR)              ; 10a: el script que carga sigue despues por donde va AHORA (ver el final de sl_load)
+                ld (sl_ccur),a
+                inc a
+                jr z,sll_nc
+                ld ix,(CURSLOT)
+                ld a,(ix+SL_PAGE)
+                ld (sl_cpos),a
+                ld a,(ix+SL_BIG)
+                ld (sl_cpos+1),a
+                ld hl,(SPTR)
+                ld (sl_cpos+2),hl
+sll_nc:                                 ; a partir de aqui el estado cambia
                 ld hl,sl_live
                 ld de,SL_LIVE
 sst_l:          ld c,(hl)
@@ -362,10 +375,26 @@ sun_e:          call aq_init            ; sprites: la cache de firma y los conta
                 ld a,EV_OBJSTATE
                 call ev_handler
                 call sl_snd
-                ld a,(CUR)              ; el script en marcha sigue por su ranura restaurada
+                ld a,(CUR)              ; el script en marcha es el de la ranura restaurada...
                 cp $FF
-                call nz,load_slot
-                ld hl,3
+                jr z,sll_done
+                ld a,(sl_ccur)          ; 10a: ...pero sigue justo despues del opcode de CARGAR, no del de guardar: o4_saveLoadGame de ScummVM acaba con
+                inc a                   ; updateScriptPtr / getScriptBaseAddress / resetScriptPointer y loadState no toca _scriptPointer. El dialogo de Indy3
+                jr z,sll_ls             ; (script 9) guarda en un opcode y carga en otro: siguiendo por el de guardar se quedaba en un bucle sin ceder el turno.
+                ld a,(CUR)              ; (cargando desde el bucle principal, DBG_SAVE, la ranura sigue por donde la dejo el guardado)
+                call slot_addr
+                push hl
+                pop ix
+                ld a,(sl_cpos)
+                ld (ix+SL_PAGE),a
+                ld a,(sl_cpos+1)
+                ld (ix+SL_BIG),a
+                ld hl,(sl_cpos+2)
+                ld (ix+SL_PTR),l
+                ld (ix+SL_PTR+1),h
+sll_ls:         ld a,(CUR)
+                call load_slot
+sll_done:       ld hl,3
                 ret
 sll_bad:        ld a,(sl_h)
                 call f_close

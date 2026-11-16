@@ -101,3 +101,10 @@ Para arrancar: entra en `SCUMM\V3\INDY3`, `LOAD "INDY3"` (o `LOAD *…` como con
 - Texto: sin partir por palabras, solo mayúsculas, sin colores por verbo (hover) ni verbos atenuados.
 - El texto suelto de `print` (ranura 1) no se pinta.
 - Rendimiento (fase 10): vueltas de 330.000 a 1.000.000 T con scroll u objetos animados (presupuesto 325.000).
+
+## 5. Tras la subtarea 10a (2026-11-16): qué volver a mirar
+Las partidas guardadas con el programa anterior **se rechazan** (cambia la cabecera): guarda una nueva antes de probar la carga.
+1. **Cambio de sala:** al salir de una sala los personajes desaparecen antes de que la pantalla se ponga en negro (ya no quedan sprites sobre el fondo borrado).
+2. **Gimnasio (sala 73), puerta de la izquierda:** al salir, Indy pasa por detrás del marco y de la pared (va sin caja: en v3 eso es con máscara). TALK y TRAVEL no responden en el gimnasio porque el juego los tiene atenuados: ahora salen en gris oscuro y vuelven a blanco cuando el juego los activa.
+3. **Verbos:** el clic responde en todo el ancho de la palabra (y ya no 8 px a su izquierda); lo mismo el inventario y sus flechas.
+4. **Cargar desde el diálogo (SHIFT + S, LOAD, fila, OK):** vuelve a la sala y la situación guardadas, sin colgarse.

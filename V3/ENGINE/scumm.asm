@@ -533,7 +533,12 @@ evh_verb:       ld a,1
                 jr evh_end
 evh_pal:        call hr_pal_apply       ; fase 8: roomOps 2 y 4
                 jr evh_end
-evh_room:       call ov_clear           ; fase 9: el texto suelto y las cajas de la sala anterior
+evh_room:       ld b,63                 ; 10a: los sprites de los actores (0-62; el 63 es el cursor) se apagan ANTES de borrar el fondo: actors_run los
+                call sh1                ; apagaba un fotograma despues de leer la sala nueva de la SD y se veian encima de la pantalla en negro
+                xor a
+                ld (2131),a             ; y los sprites extra
+                ld (aq_used),a          ; no queda ninguno encendido (au_hide no tiene nada que apagar)
+                call ov_clear           ; fase 9: el texto suelto y las cajas de la sala anterior
                 call gf_load_room
                 ld a,2                  ; los actores siguen apagados dos fotogramas: la camara del hardware aun va a su sitio
                 ld (aq_hold),a
