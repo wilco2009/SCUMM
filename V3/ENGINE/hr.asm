@@ -30,6 +30,8 @@ HR_DLIST        equ HR_BM+$1E00         ; indices de los objetos que se dibujan,
 HR_COLBUF       equ HR_BM+$1F00         ; la columna que se compone: 128 bytes de bitmap y 128 de atributos
 HR_FLAGS        equ HR_ATT+$1A07        ; un byte por objeto (hasta 84): 1 si se dibujaba la ultima vez (sitio libre del bloque de atributos)
 HR_NFLAGS       equ HR_ATT+$1B00        ; lo mismo, con el estado de ahora
+HR_ZFL          equ HR_ATT+$1A60        ; fase 10b: 84 bytes, 1 si el objeto esta en OV_ZL (lo dibujo un drawObject: va al final de la lista); lo rellena hr_mkdl
+HR_DIRTY        equ HR_ATT+$1980        ; fase 10b: 32 bytes (alineado a 32), un bit por columna del mundo (0-255) que hr_objupd tiene que recomponer (en el bufer de abajo del scroll vertical, que no se usa)
 ROOMPG0         equ 8                   ; paginas fisicas de la sala (8-14: la 79 mide 50.602 bytes)
 ROOMMAX         equ 7*8192
 WINBLK          equ 1                   ; bloque de la ventana de datos
@@ -360,19 +362,60 @@ hmc2:           ld hl,hv_cs
                 or 1
                 ret
 
-; HL = origen (128 bytes), DE = destino: uno por linea (paso 32)
+; HL = origen (128 bytes, sin cruzar de pagina de 256: HR_COLBUF o HR_COLBUF+128), DE = destino: uno por linea (paso 32). Fase 10b: 8 por vuelta, desenrollado
 hr_stride:      ld c,16
-hs_g:           ld b,8
-hs_l:           ld a,(hl)
-                inc hl
+hs_l:
+                ld a,(hl)
+                inc l
                 ld (de),a
                 ld a,e
                 add a,32
                 ld e,a
-                djnz hs_l
+                ld a,(hl)
+                inc l
+                ld (de),a
+                ld a,e
+                add a,32
+                ld e,a
+                ld a,(hl)
+                inc l
+                ld (de),a
+                ld a,e
+                add a,32
+                ld e,a
+                ld a,(hl)
+                inc l
+                ld (de),a
+                ld a,e
+                add a,32
+                ld e,a
+                ld a,(hl)
+                inc l
+                ld (de),a
+                ld a,e
+                add a,32
+                ld e,a
+                ld a,(hl)
+                inc l
+                ld (de),a
+                ld a,e
+                add a,32
+                ld e,a
+                ld a,(hl)
+                inc l
+                ld (de),a
+                ld a,e
+                add a,32
+                ld e,a
+                ld a,(hl)
+                inc l
+                ld (de),a
+                ld a,e
+                add a,32
+                ld e,a
                 inc d
                 dec c
-                jr nz,hs_g
+                jr nz,hs_l
                 ret
 
 ; HR_COLBUF a la columna de pantalla A (0-31), al bufer de la derecha (32) o al de la izquierda ($FF)
@@ -425,7 +468,29 @@ hr_mkdl:        xor a
                 ld bc,83
                 ld (hl),a
                 ldir
-                ld a,(NROBJ)
+                ld hl,HR_ZFL            ; fase 10b: los de OV_ZL, marcados (antes se buscaban en la lista para cada objeto)
+                ld de,HR_ZFL+1
+                ld bc,83
+                ld (hl),a
+                ldir
+                ld a,(OV_ZN)
+                or a
+                jr z,hd_z0
+                ld b,a
+                ld de,OV_ZL
+hd_z:           ld a,(de)
+                inc de
+                cp 84
+                jr nc,hd_zn
+                ld l,a
+                ld h,0
+                push de
+                ld de,HR_ZFL
+                add hl,de
+                pop de
+                ld (hl),1
+hd_zn:          djnz hd_z
+hd_z0:          ld a,(NROBJ)
                 ld (hv_i),a
 hd_l:           ld a,(hv_i)
                 or a
@@ -442,9 +507,16 @@ hd_l:           ld a,(hv_i)
                 ld hl,HR_NFLAGS
                 add hl,de
                 ld (hl),1
+                ld hl,HR_ZFL
+                add hl,de
+                ld a,(hl)
+                or a
+                jr nz,hd_l              ; los de drawObject van al final de la lista (ov_zadd)
+                jr hd_add
 hd_nf:          ld a,(hv_i)
-                call ov_inzl            ; los de drawObject van al final de la lista (ov_zadd)
+                call ov_inzl            ; (indice de 84 o mas: se busca en la lista)
                 jr z,hd_l
+hd_add:
                 ld a,(hv_ndl)
                 ld e,a
                 ld d,0
@@ -851,6 +923,9 @@ hf_cnt:         ld a,h                  ; B = min(HL, 8)
 ;  La sala entera
 ; ---------------------------------------------------------------------
 gf_draw_window: call hr_settle
+                call hr_dclr            ; fase 10b: se dibuja todo: nada sucio
+                xor a
+                ld (hv_ch),a
                 ld a,1
                 ld (hv_drawn),a
                 ld hl,(gf_cam)
@@ -902,10 +977,6 @@ hr_objupd:      call hr_settle
                 call hr_mkdl
                 xor a
                 ld (hv_i),a
-                ld (hv_ch),a
-                ld (hv_c1),a
-                dec a
-                ld (hv_c0),a
 hou_l:          ld a,(hv_i)
                 ld hl,hv_nobj
                 cp (hl)
@@ -921,41 +992,8 @@ hou_l:          ld a,(hv_i)
                 add hl,de
                 ld a,(hl)
                 cp b
-                jr z,hou_n              ; sigue igual
-                ld h,d
-                ld l,e
-                add hl,hl
-                add hl,de
-                add hl,hl               ; 6 * objeto
-                ld de,HR_OBJREC
-                add hl,de
-                ld e,(hl)
-                inc hl
-                ld d,(hl)
-                inc hl
-                ld a,d
-                and e
-                inc a
-                jr z,hou_n              ; sin imagen: no hay nada que redibujar
-                ld a,1
-                ld (hv_ch),a
-                ld a,(hl)               ; primera columna
-                ld c,a
-                inc hl
-                inc hl
-                ld b,(hl)               ; columnas
-                ld hl,hv_c0
-                cp (hl)
-                jr nc,hou_a
-                ld (hl),a
-hou_a:          ld a,c
-                add a,b
-                dec a                   ; ultima columna
-                ld hl,hv_c1
-                cp (hl)
-                jr c,hou_n
-                jr z,hou_n
-                ld (hl),a
+                ld a,e
+                call nz,hr_omark        ; ha cambiado: sus columnas, sucias (fase 10b: antes un solo rango del minimo al maximo, que en el pasillo cogia casi toda la pantalla)
 hou_n:          ld hl,hv_i
                 inc (hl)
                 jr hou_l
@@ -964,6 +1002,7 @@ hou_cmp:        call ov_merge           ; fase 9: las columnas que ha tocado la 
                 or a
                 jr z,hou_cp
                 xor a
+                ld (hv_ch),a
                 ld (hv_c),a             ; 0 = bufer de la izquierda, 1-32 = columnas de pantalla 0-31, 33 = bufer de la derecha
 hou_s:          ld a,(hv_c)
                 ld e,a
@@ -975,13 +1014,10 @@ hou_s:          ld a,(hv_c)
                 or a
                 jr nz,hou_sn
                 ld c,l
-                ld hl,hv_c0
-                ld a,c
-                cp (hl)
-                jr c,hou_sn
-                ld a,(hv_c1)
-                cp c
-                jr c,hou_sn
+                ld a,l
+                call hr_dbit
+                and (hl)
+                jr z,hou_sn             ; no esta sucia
                 ld e,c
                 ld d,0
                 call hr_makecol
@@ -997,11 +1033,73 @@ hou_sn:         ld hl,hv_c
                 ld a,(hl)
                 cp 34
                 jr c,hou_s
+                call hr_dclr
 hou_cp:         ld hl,HR_NFLAGS
                 ld de,HR_FLAGS
                 ld bc,84
                 ldir
                 jp hr_unmap
+
+; fase 10b: columnas sucias. hr_omark: A = objeto (indice desde 0, < hv_nobj) -> sus columnas; hr_dmark: C = primera, B = cuantas (0: nada). Ponen hv_ch
+hr_omark:       ld l,a
+                ld h,0
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,de
+                add hl,hl               ; 6 * objeto
+                ld de,HR_OBJREC
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                inc hl
+                ld a,d
+                and e
+                inc a
+                ret z                   ; sin imagen: no hay nada que redibujar
+                ld c,(hl)               ; primera columna
+                inc hl
+                inc hl
+                ld b,(hl)               ; columnas
+hr_dmark:       ld a,b
+                or a
+                ret z
+                ld a,1
+                ld (hv_ch),a
+hdm_l:          ld a,c
+                call hr_dbit
+                or (hl)
+                ld (hl),a
+                inc c
+                ret z
+                djnz hdm_l
+                ret
+; A = columna -> HL = su byte de HR_DIRTY, A = su bit (destruye E)
+hr_dbit:        ld e,a
+                rrca
+                rrca
+                rrca
+                and $1F
+                or HR_DIRTY&$FF
+                ld l,a
+                ld h,HR_DIRTY>>8
+                ld a,e
+                and 7
+                ld e,a
+                ld a,1
+                ret z
+hdb_l:          add a,a
+                dec e
+                jr nz,hdb_l
+                ret
+hr_dclr:        ld hl,HR_DIRTY
+                ld b,32
+                xor a
+hdc_l:          ld (hl),a
+                inc hl
+                djnz hdc_l
+                ret
 
 ; salto de la camara: HL = posicion en pixeles (se acota a la sala)
 gf_jump:        ld a,l

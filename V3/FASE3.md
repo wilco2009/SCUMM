@@ -706,3 +706,33 @@ Regla de la fase 10: solo se ensambla; las pruebas (`build_test.sh`, arranque, B
 - **Límite:** el atributo es por grupo de 4 columnas: si un verbo atenuado y uno activo compartieran grupo, los dos saldrían atenuados (en Indy3 no pasa: columnas 0, 6, 13, 22 y 32). Sigue sin hacer el color por verbo (`color`, `hicolor` al pasar el ratón).
 - `test/check_hr.py` entiende los códigos 80-127 (mismo glifo). El modelo no cambia (UIVB es solo del Z80).
 - Residente `$4200-$79A6` (**1.626 B libres** hasta `$8000`). Copiado a la SD del emulador con `compila_scumm.bat`.
+
+## Fase 10b: velocidad del scroll del pasillo (2026-11-16; solo ensamblado, sin pasar las pruebas)
+
+**Medida** (`test/`, tras `sh ../build_scumm.sh` y copiar `prog/ovl?.bin` a `build/sdboot/DATA/`): arranque con `TS_NOSTOP=1 TS_MODELDELTA=1 TS_T=1 TS_PROF=582-760 build/test_scumm.exe prog/scumm.bin prog/scumm.sym build/sdboot 760 x.bin` (el pasillo, sala 1, desde el fotograma 582, con la camara siguiendo a Indy). Herramientas nuevas del arnes (`test_scumm.cpp`): `TS_LOOPS=n` (una linea `V vuelta T rutinas...` por vuelta, las n rutinas que mas pesan), `TS_WATCH=simbolo` (imprime el fotograma, `hv_c0/c1/ch`, `ov_dc0/1` y los registros cada vez que el PC pasa por ahi) y los simbolos de los overlays B, C y D (bloque 0) en el perfil (`B:`, `C:`, `D:`; antes salian como `?`, el 25 %).
+
+| | media | mediana | p90 | maxima | sin las 2 vueltas que leen de la SD: media / maxima / vueltas > 325.000 |
+|---|---|---|---|---|---|
+| antes | 362.787 | 174.288 | 1.100.705 | 3.728.793 | 334.497 / 1.306.870 / 38 de 176 |
+| despues | **192.782** | 161.025 | **271.147** | 3.728.793 | **167.050 / 404.736 / 4 de 176** |
+
+(Las vueltas 583 y 705 son lecturas de la SD, `frd_l`/`mcu_rw`: 3,7 M la carga de la sala y 1,2 M la 705; no son del scroll.)
+
+**Causa de los picos de ~1,2 M (cada 3-4 vueltas):** no era el scroll (cruzar de columna cuesta una columna, ~30.000 T), sino `hr_objupd`: en el pasillo cambian de estado objetos pequenos casi cada fotograma (columnas 45-49, 71-76, 101-114) y se recomponia **un solo rango del minimo al maximo** (p. ej. 71..112): casi las 34 columnas (`hs_l` 409.000 T y `hfc2` 202.000 en una vuelta).
+
+**Cambios** (lo que se ve no cambia: se recomponen las mismas columnas que han cambiado, con el mismo codigo):
+1. `hr.asm`: **columnas sucias en un mapa de bits** (`HR_DIRTY` = `HR_ATT+$1980`, 32 bytes, un bit por columna del mundo; en el bufer de abajo del scroll vertical, que no se usa). `hr_objupd` marca las columnas de cada objeto que cambia (`hr_omark`) y solo recompone las de pantalla y bufers marcadas; `ov_merge` (`txtlayer.asm`) marca las de la capa de texto (`hr_dmark`); `gf_draw_window` borra el mapa. Diferencia con lo de antes, solo en un caso raro: un objeto que un `drawObject` sube de orden sin cambiar su "se dibuja" ya no se redibuja por casualidad cuando queda entre dos objetos que si cambian (antes tampoco se redibujaba si no habia otro cambio).
+2. `hr.asm`: `hr_stride` desenrollado (8 bytes por vuelta, `inc l`): 33 T por byte en vez de 48.
+3. `hr.asm`: `hr_mkdl` marca en `HR_ZFL` (`HR_ATT+$1A60`, 84 bytes) los objetos de `OV_ZL` en vez de buscar cada objeto en la lista (`ov_inzl`, 1,1 M); para indices de 84 o mas sigue buscando.
+4. `ovc5.asm` (`drawObject`, `do_state`): recorre los registros con un puntero (-14) en vez de `rec_addr` por objeto; `SC+6` acaba en 0 como antes.
+5. `scumm.asm` (`obj_drawn`): aprovecha el registro del objeto para mirar el padre (antes `od_rec` dos veces).
+
+Tamanos: residente `$4200-$7A2A` (**1.494 B libres** hasta `$8000`), overlay C igual (5.632 B).
+
+**Lo que queda pesando** (despues): las 4 vueltas de 330.000-405.000 T mezclan columnas recompuestas, `drawObject` (`C:dr_l`), actores (`D:acd_cell`) y la interfaz (`hg_l`, `hu_cmp`: la 698). Sin un punto caliente claro: `hou_l` (comparar banderas por objeto, 0,8 M), `hd_l`/`hr_mkdl` (los dos `ldir` de 84 bytes por llamada), `obj_drawn`/`od_rec` (multiplicar por 14). La recomposicion de objetos de las salas 20/28 es la 10c.
+
+6. `txtlayer.asm` (tras las pruebas): el texto y la caja que se pierden por turnos (16 textos y 8 cajas llenos: `ov_rr2`, `ov_rr`) marcan sus columnas como sucias. Antes no lo hacian y el rango minimo-maximo lo tapaba a veces. Residente hasta `$7A57` (**1.449 B libres**).
+
+**Pruebas (2026-11-16, con permiso del usuario):** `build_test.sh` **3.687/3.687**; pasillo hasta el fotograma 760 (scroll) **761/761** y `check_hr` 0 distintos; arranque **1.501/1.501**, `check_hr` 0; Barnett **1.751/1.751**, `check_hr` 0; `objflip.sh` en las salas 20 y 28 (objetos que cambian en cada fotograma) `check_hr` 0 distintos en los 8 volcados; `savetest.sh` (repetido despues del cambio 6): **701, 901, 401, 1.501, 1.351 y 2.601 iguales**; `check_hr` 0 en "cruzando salas". En el dialogo F5 (sala 14) `check_hr` da **8 distintos**, y son correctos: el glifo "0" del texto de la capa en x = 216, y = 21 (encima de la caja 1 del dialogo), que esta en `OV_TXT`; `check_hr.py` no modela la capa de texto. En la fase 9 dio 0 porque ese texto no caia en la parte visible; la 10a cambio la `x` de `print` y esta prueba no se habia vuelto a pasar.
+
+**Falta:** la placa. Sin commit.

@@ -260,6 +260,7 @@ static std::vector<long long> vm_n_loops;                 // instrucciones de sc
 static bool vm_in_pro = false;
 static std::map<int, std::vector<std::pair<unsigned, std::string>>> osyms;
 static const char* sym_of(unsigned pc) {
+  if (pc < 0x2000 && osyms.count(1000 + blk[0])) { auto& v = osyms[1000 + blk[0]]; std::pair<unsigned, std::string>* b = 0; for (auto& p : v) if (p.first <= pc && (!b || p.first >= b->first)) b = &p; if (b) return b->second.c_str(); }
   if (pc >= 0x2000 && pc < 0x4000) { auto& v = osyms[blk[1]]; std::pair<unsigned, std::string>* b = 0; for (auto& p : v) if (p.first <= pc && (!b || p.first >= b->first)) b = &p; if (b) return b->second.c_str(); }
   static std::string cur; const std::pair<unsigned, std::string>* best = nullptr;
   for (auto& p : syms) { if (p.first <= pc && (!best || p.first >= best->first)) best = &p; }
@@ -408,6 +409,8 @@ int main(int argc, char** argv) {
     while (q && fgets(line, sizeof line, q)) { char name[128]; unsigned v; if (sscanf(line, "%127s EQU %xH", name, &v) == 2 && v < 0x4200) syms.push_back({v, std::string("ovl:") + name}); }
     if (q) fclose(q); }
   { static const struct { int pg; const char* nm; const char* f; } T[] = {{41, "A", "agia.sym"}, {42, "B", "agib.sym"}, {44, "C", "agic.sym"}, {46, "D", "agid.sym"}, {48, "E", "agie.sym"}, {49, "F", "agif.sym"}};
+    static const struct { int pg; const char* nm; const char* f; } S[] = {{49, "B", "prog/ovlb.sym"}, {48, "C", "prog/ovlc.sym"}, {46, "D", "prog/ovld.sym"}};   // fase 10b: los overlays de SCUMM v3 corren en el bloque 0
+    for (auto& t : S) { FILE* q = fopen(t.f, "r"); char line[256]; while (q && fgets(line, sizeof line, q)) { char name[128]; unsigned v; if (sscanf(line, "%127s EQU %xH", name, &v) == 2 && v < 0x2000) osyms[1000 + t.pg].push_back({v, std::string(t.nm) + ":" + name}); } if (q) fclose(q); }
     for (auto& t : T) { FILE* q = fopen(t.f, "r"); char line[256]; while (q && fgets(line, sizeof line, q)) { char name[128]; unsigned v; if (sscanf(line, "%127s EQU %xH", name, &v) == 2 && v >= 0x2000 && v < 0x4000) osyms[t.pg].push_back({v, std::string(t.nm) + ":" + name}); } if (q) fclose(q); } }
   if (const char* pf = getenv("TS_PROF")) sscanf(pf, "%d-%d", &prof_lo, &prof_hi);
   if (const char* w = getenv("TS_WATCH")) { unsigned lo = 0, hi = 0, fr = 0; sscanf(w, "%x-%x,%u", &lo, &hi, &fr); w_lo = lo; w_hi = hi; w_from = fr; }
@@ -498,6 +501,8 @@ int main(int argc, char** argv) {
       if (z80.pc.w < a_es_loop || z80.pc.w > a_es_noerr + 6) { vm_exit_oh += vm_pro_acc; vm_pro_acc = 0; }
     }
     steps_g++;
+    { static int w1 = -2, w2 = -2; if (w1 == -2) { w1 = getenv("TS_WATCH") && sym.count(getenv("TS_WATCH")) ? sym[getenv("TS_WATCH")] : -1; w2 = sym.count("hv_c0") ? sym["hv_c0"] : 0; }
+      if (w1 >= 0 && z80.pc.w == w1) printf("W f=%d c0=%d c1=%d ch=%d dc0=%d dc1=%d A=%02X BC=%04X DE=%04X HL=%04X sp0=%04X%c", frames_done, rd(w2), rd(w2+1), rd(w2+2), rd(sym["ov_dc0"]), rd(sym["ov_dc0"]+1), z80.af.b.h, z80.bc.w, z80.de.w, z80.hl.w, rd(z80.sp.w) | rd(z80.sp.w+1) << 8, 10); }
     if (cmd_pend) motor_tick(false);
     static const char* ts_ns = getenv("TS_NOSTOP"); if (steps > 50000000LL && !ts_ns) { printf("atascado; ultimos PC:%c", 10); for (int k = 120; k > 0; k--) printf("%04X ", hist[(hi - k) & 255]); printf("%c", 10); break; }
     if (++steps > 2000000000LL) { printf("demasiadas instrucciones, pc=%04X%c", z80.pc.w, 10); break; }
@@ -509,6 +514,7 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < v.size() && i < (getenv("TS_TOP") ? (size_t)atoi(getenv("TS_TOP")) : 25); i++) printf("  %-18s %9lld  %5.1f%%%c", v[i].second.c_str(), v[i].first, 100.0 * v[i].first / prof_total, 10);
     { std::vector<std::pair<long long, int>> w; for (auto& kv : prof_by_loop) { long long t = 0; for (auto& q : kv.second) t += q.second; w.push_back({t, kv.first}); }
       std::sort(w.rbegin(), w.rend());
+      if (getenv("TS_LOOPS")) { for (auto& kv : prof_by_loop) { long long t = 0; std::vector<std::pair<long long, std::string>> q; for (auto& x : kv.second) { t += x.second; q.push_back({x.second, x.first}); } std::sort(q.rbegin(), q.rend()); printf("V %d %lld", kv.first, t); for (size_t k = 0; k < (size_t)atoi(getenv("TS_LOOPS")) && k < q.size(); k++) printf(" %s=%lld", q[k].second.c_str(), q[k].first); printf("%c", 10); } }
       printf("las 8 vueltas mas pesadas (instrucciones):%c", 10);
       for (size_t i = 0; i < w.size() && i < 8; i++) {
         auto& m = prof_by_loop[w[i].second]; std::vector<std::pair<long long, std::string>> t; for (auto& q : m) t.push_back({q.second, q.first}); std::sort(t.rbegin(), t.rend());

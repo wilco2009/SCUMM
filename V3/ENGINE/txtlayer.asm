@@ -193,22 +193,18 @@ omk_b:          ld a,1
                 ld (gd_pending),a
                 ret
 
-; hr_objupd: las columnas sucias de la capa pasan a las que recompone (hv_c0 .. hv_c1) y se borran
+; hr_objupd: las columnas sucias de la capa pasan a las que recompone (HR_DIRTY) y se borran
 ov_merge:       ld a,(ov_dc0)
                 cp $FF
                 ret z
-                ld hl,hv_c0
-                cp (hl)
-                jr nc,omg_a
-                ld (hl),a
-omg_a:          ld a,(ov_dc1)
-                ld hl,hv_c1
-                cp (hl)
-                jr c,omg_b
-                ld (hl),a
-omg_b:          ld a,1
-                ld (hv_ch),a
-                ld a,$FF
+                ld c,a
+                ld a,(ov_dc1)
+                sub c
+                jr c,omg_r
+                inc a
+                ld b,a                  ; fase 10b: a las columnas sucias (hr.asm, hr_dmark)
+                call hr_dmark
+omg_r:          ld a,$FF
                 ld (ov_dc0),a
                 xor a
                 ld (ov_dc1),a
@@ -282,6 +278,16 @@ ota_n:          ld de,OVT_SZ
                 ld d,0
                 ld iy,OV_TXT
                 add iy,de
+                ld l,(iy+OVT_X)         ; fase 10b: el texto que se pierde deja sus columnas sucias (antes lo tapaba el rango minimo-maximo de hr_objupd)
+                ld h,(iy+OVT_X+1)
+                call ov_col
+                ld c,a
+                ld a,(iy+OVT_LEN)
+                add a,c
+                dec a
+                ld b,a
+                ld a,c
+                call ov_mark
 ota_put:        ld a,(ov_tl)
                 ld (iy+OVT_LEN),a
                 ld hl,(ov_tx)
@@ -481,6 +487,17 @@ obb_bn:         ld de,8
                 ld d,0
                 ld iy,OV_BOX
                 add iy,de
+                ld l,(iy+OVB_X0)        ; fase 10b: la caja que se pierde deja sus columnas sucias
+                ld h,(iy+OVB_X0+1)
+                call ov_col
+                ld c,a
+                ld l,(iy+OVB_X1)
+                ld h,(iy+OVB_X1+1)
+                dec hl
+                call ov_col
+                ld b,a
+                ld a,c
+                call ov_mark
 obb_set:        ld (iy+OVB_USED),1
                 ld hl,(ov_bx0)
                 ld (iy+OVB_X0),l

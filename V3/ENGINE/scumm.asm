@@ -660,14 +660,25 @@ od_rec:         dec a                   ; A = indice desde 1 -> HL = registro
 obj_drawn:      inc a
                 ld (od_b),a             ; b = el objeto (desde 1)
                 call od_rec
+                push hl                 ; fase 10b: el registro se aprovecha para mirar el padre (antes se volvia a calcular)
                 ld e,(hl)
                 inc hl
                 ld d,(hl)
                 ld hl,OBJST
                 add hl,de
                 ld a,(hl)
+                pop hl
                 and $0F
                 ret z                   ; sin estado: no se dibuja (NC)
+                ld a,(od_b)
+                push hl
+                ld hl,NROBJ
+                cp (hl)
+                pop hl
+                jr c,od_r1
+                jr z,od_r1
+                scf
+                ret
 od_loop:        ld a,(od_b)
                 ld hl,NROBJ
                 cp (hl)
@@ -676,7 +687,7 @@ od_loop:        ld a,(od_b)
                 scf                     ; un registro que no existe (estado 0, padre 0): sin padre, se dibuja
                 ret
 od_re:          call od_rec
-                push hl
+od_r1:          push hl
                 ld de,OB_PST
                 add hl,de
                 ld a,(hl)

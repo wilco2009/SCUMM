@@ -738,11 +738,11 @@ b_drawObject:   call rd_vw1
                 ld a,(SC+4)
                 ld (ix+OB_Y),a
 do_state:       ld a,(NROBJ)            ; los que ocupan el mismo rectangulo pasan al estado 0
-                ld (SC+6),a
-dr_l:           ld a,(SC+6)
                 or a
                 jr z,dr_done
+                ld b,a                  ; fase 10b: del ultimo al primero recorriendo los registros (14 bytes) sin rec_addr en cada uno
                 call rec_addr
+dr_l:           push hl
                 ld e,(hl)
                 inc hl
                 ld d,(hl)
@@ -767,14 +767,17 @@ dr_l:           ld a,(SC+6)
                 jr nz,dr_n
                 ld h,d
                 ld l,e
-                call chk_obj_hl
+                call chk_obj_hl         ; (si da error, vm_err restaura SP)
                 ld de,OBJST
                 add hl,de
                 ld (hl),0
-dr_n:           ld hl,SC+6
-                dec (hl)
-                jr dr_l
-dr_done:        ld hl,(SC+0)
+dr_n:           pop hl
+                ld de,-14
+                add hl,de
+                djnz dr_l
+dr_done:        xor a
+                ld (SC+6),a             ; como antes: el contador acaba en 0
+                ld hl,(SC+0)
                 call chk_obj_hl
                 ld de,OBJST
                 add hl,de
