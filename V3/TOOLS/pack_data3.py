@@ -174,6 +174,12 @@ def build(ix, costumes_dir=None, sounds=None, game=None, first_page=16):
             big.append((i, len(code), n, first))
         else:
             t['SCRDIR'][3 * i:3 * i + 3] = struct.pack('<BH', *add('scripts globales', code))
+    synth = os.environ.get('SCUMM_SYNTH')          # fase 9 (solo pruebas): un script global 199 (hexadecimal en ese fichero), que Indy3 no usa; el modelo lo lee igual (World)
+    if synth:
+        code = bytes.fromhex(open(synth).read().strip())
+        if ix.resource('script', 199) is not None:
+            raise ValueError('el script 199 existe en el juego')
+        t['SCRDIR'][3 * 199:3 * 199 + 3] = struct.pack('<BH', *add('scripts globales', code))
     for oid in range(NUM_OBJECTS):
         t['OBJOWN'][oid] = ix.owner[oid]
         t['OBJST'][oid] = ix.state[oid]

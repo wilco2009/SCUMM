@@ -14,6 +14,8 @@ VMOUSEX         equ INEV+11             ; palabra: _virtualMouse (x + el borde i
 VMOUSEY         equ INEV+13
 MKSTAT          equ INEV+15             ; palabra: _mouseAndKeyboardStat ($8000 clic izquierdo, $4000 derecho, o una tecla)
 IN_END          equ INEV+17
+ACV             equ IN_END              ; fase 8: variables de los actores (ovd_act.asm: lista, cache de firma, contadores de poses, tiras de la mascara); las pone a 0 scumm.asm
+AC_ZERO         equ 194                 ; bytes que se ponen a 0 (hasta ac_mt); detras vienen las tiras de la mascara (512 B), que no hace falta borrar
 MBS_LEFT        equ $8000
 
 ; HL < DE con signo: carry si es menor. Conserva HL, DE y BC (destruye A)

@@ -54,6 +54,7 @@ Uso:
   vmmodel3.py DIR_LFL scenarios-core SALIDA [SEMILLAS] [SALAS]   lo mismo con el modelo del nucleo (CoreVM, fase 3; SALAS = 1,15,...)
 El mundo del arnes del Z80 es DATA.BIN de V3/TOOLS/pack_data3.py (formato definitivo; ya no hay world3.bin).
 """
+import copy
 import os
 import re
 import random
@@ -88,6 +89,8 @@ class World:
             b = ix.resource('script', i)
             if b is not None:
                 self.scripts[i] = b[4:]
+        if os.environ.get('SCUMM_SYNTH'):      # fase 9 (solo pruebas): el script global 199 de pack_data3.py
+            self.scripts[199] = bytes.fromhex(open(os.environ['SCUMM_SYNTH']).read().strip())
         self.rooms = {}
         for rn in ix.rooms():
             self.rooms[rn] = R.Room(ix, rn)
@@ -95,10 +98,29 @@ class World:
         for rn, r in sorted(self.rooms.items()):
             for o in r.objects:
                 self.objects.setdefault(o.id, (rn, o))
+        self.sound_table = build_sound_table(ix, os.path.join(directory, '..', 'preview_hr', 'snd', 'SOUNDS.TXT'))   # fase 8: modo de sonido "real"
 
     def sound_size(self, n):
         b = self.index.resource('sound', n)
         return len(b) if b else 0
+
+
+def build_sound_table(ix, txt_path):
+    """La tabla de sonidos del Z80 (pack_data3.read_sounds + las banderas de existencia y cancion de build): 256 x (prioridad, banderas, duracion u16)."""
+    t = bytearray(256 * 4)
+    if txt_path and os.path.exists(txt_path):
+        with open(txt_path) as f:
+            for ln in f:
+                if ln.startswith('#') or len(ln.split()) < 7:
+                    continue
+                sid, prio, rest, ticks, loop, tempo, ttick = (int(x) for x in ln.split()[:7])
+                dur = 65535 if loop >= 0 else min(65534, -(-ticks * 50 // 236))
+                t[4 * sid:4 * sid + 4] = struct.pack('<BBH', prio, (1 if rest else 0) | (2 if loop >= 0 else 0) | (4 if tempo else 0), dur)
+    for sid in range(256):
+        r = ix.resource('sound', sid)
+        if r:
+            t[4 * sid + 1] |= 0x80 | (8 if len(r) > 1000 else 0)
+    return bytes(t)
 
 
 # ------------------------------------------------------------------------------------------------ modelo
@@ -131,6 +153,8 @@ class VM(GameMixin):
         self.w = world
         self.seed = seed
         self.protection = protection
+        self.saves = {}                        # fase 9: ranura -> (nombre, estado) de las partidas guardadas (modo real_saves)
+        self.real_saves = False
         self.sound_mode = sound_mode
         self.soundcard = soundcard
         self.trace = []
@@ -152,6 +176,8 @@ class VM(GameMixin):
         self.max_slots = 0
         self.resource_mapper = {}
         self.in92 = 0
+        self.pan_on = False
+        self.pan_px = 0
         self.charset_color = 15
         self.game_reset(self.soundcard)
         self.reset_vars_v3()
@@ -1180,6 +1206,10 @@ class VM(GameMixin):
         elif k in (2, 4):
             if not 0 <= a <= 256:
                 raise VMError(E_RANGE, 'roomOps color')
+            if a > 15 or not 0 <= b <= 15:                     # la pantalla del Z80 tiene 16 colores: lo demas es E_RANGE (ScummVM escribiria en una tabla de 256)
+                raise VMError(E_RANGE, 'roomOps color de 16')
+            (self.room_pal if k == 2 else self.shadow_pal)[b] = a
+            self.ev(EV_PALETTE, [])
         elif k == 3:
             self.main_top, self.main_h = a, b
         elif k in (5, 6):
@@ -1427,7 +1457,41 @@ class VM(GameMixin):
         n = self.vb(P1)
         if n not in self.strings:
             raise VMError(E_RANGE, 'la cadena %d no existe' % n)
-        self.set_result(8 * len([c for c in self.strings[n] if c not in (0, 0xFF)]))
+        self.set_result(8 * self.string_chars(self.strings[n]))
+
+    @staticmethod
+    def string_chars(s):
+        """CharsetRenderer::getStringWidth (charset.cpp, version 3, arg 0): los caracteres hasta el primer 0 (o salto de linea) sin contar los '@' ni los codigos $FF / $FE;
+        el modelo (y el Z80) cuentan 1 por caracter: 8 pixeles. Fase 9: antes se contaban todos los bytes que no eran 0 ni $FF, aunque vinieran detras del 0 final
+        (el dialogo de guardar de Indy3 mide con esto el nombre que se esta escribiendo, una cadena de 49 '@' despues de su 0: salia 392 y rechazaba cada tecla)."""
+        pos, n = 0, 0
+        rd = lambda k: s[k] if k < len(s) else 0
+        while True:
+            c = rd(pos)
+            pos += 1
+            if c == 0 or c in (10, 13):
+                break
+            if c == 64:
+                continue
+            if c in (255, 254):
+                c = rd(pos)
+                pos += 1
+                if c in (3, 9, 1, 2):
+                    break
+                if c == 8:                                     # while (text[pos++] == ' ') {}
+                    while True:
+                        k = rd(pos)
+                        pos += 1
+                        if k != 32:
+                            break
+                    continue
+                if c in (10, 21, 12, 13, 14):
+                    pos += 2
+                    continue
+            if pos > len(s):
+                break
+            n += 1
+        return n
 
     # verbos. Limites del Z80: NUM_VERBS ranuras (la 0 es una ranura de trabajo como en ScummVM), ids y saveid de 0 a 255, los campos
     # de un byte (color...) se guardan en un byte, y el nombre de un verbo desde una cadena (subopcode 20) no esta soportado (E_BADSUB:
@@ -1556,9 +1620,7 @@ class VM(GameMixin):
                 b = self.vb(P2)
                 args += [a, b]
                 if not saving and not (a == 9 and b == 9):
-                    for s in range(a, b + 1):         # sin partidas guardadas: los nombres quedan vacios
-                        if s in self.strings and len(self.strings[s]):
-                            self.strings[s][0] = 0
+                    self.load_save_names(a, b)
             elif k == 3:
                 self.read_raw_string()
             elif k == 4 or k == 0x1F:
@@ -1573,8 +1635,103 @@ class VM(GameMixin):
         res = {0x00: 100, 0x20: 3, 0x40: 5, 0x80: 0, 0xC0: 7}.get(sub)
         if res is None:
             raise VMError(E_BADSUB, 'saveLoadGame %d' % sub)
-        self.host([a], op)
+        if self.real_saves:                                        # fase 9: partidas de verdad (sl_main del Z80, overlay C)
+            res = self.save_load_game(a)
+        else:
+            self.host([a], op)
         self.set_result(res)
+
+    # ---- fase 9: guardar y cargar (ScummEngine_v4::o4_saveLoadGame, ScummEngine::saveState / loadState; el Z80: ovc9.asm)
+    # Que se guarda: todo el estado de la VM (variables, ranuras, locales, objetos, inventario, actores, verbos, cadenas, camara, mensaje,
+    # frases, paletas, cajas y sala en uso, el reproductor de sonido y su temporizador). Lo que NO: el fotograma, los sucesos de entrada
+    # y el raton, el resultado en curso (_resultVarNumber), la pila de expression, las ordenes de sonido ni lo que sea del anfitrion.
+    # fase 9: la ventana movil del programa (el ZX81 ensena 256 de los 320 pixeles de SCUMM): no es estado de la partida
+    def pan_event(self, px):
+        if px >= 232:
+            self.pan_on = True
+        elif px < 100:
+            self.pan_on = False
+
+    def update_pan_px(self):
+        """cam_update: lo que esta corrida la ventana = min(64, borde izquierdo maximo - borde izquierdo de SCUMM) si pan_on."""
+        w = self.room.width if self.room else 0
+        maxleft = max(0, (w // 8 - 32) * 8)
+        left = min(max(0, self.cam['cur'] - 160), maxleft)
+        self.pan_px = min(64, maxleft - left) if self.pan_on else 0
+
+    SAVE_SKIP = frozenset(['pan_on', 'pan_px', 'w', 'seed', 'protection', 'soundcard', 'sound_mode', 'trace', 'snd_log', 'at_events', 'saves', 'real_saves',
+                           'frame', 'insn', 'max_slots', 'pending', 'mouse', 'vmouse', 'res', 'op_byte', 'opcode', 'room', 'stack',
+                           'code', 'ptr', 'in92'])
+    SAVE_NAME_BASE = 9                                              # STRINGID_SAVENAME1 (10) + slot - 1: el nombre de la partida de la ranura es la cadena 9 + ranura
+    SAVE_NAME_MAX = 31                                              # strlcpy(name, ptr, 32)
+
+    def save_name(self, slot):
+        sid = self.SAVE_NAME_BASE + slot
+        s = self.strings.get(sid)
+        if sid >= NUM_STRINGS or not s:
+            return b''
+        out = bytearray()
+        for c in s[:self.SAVE_NAME_MAX]:
+            if c == 0:
+                break
+            out.append(c)
+        return bytes(out)
+
+    def save_game(self, slot):
+        """saveState: el puntero del script en marcha va a su ranura (al cargar sigue justo despues de este opcode)."""
+        self.update_script_ptr()
+        memo = {id(self): self, id(self.w): self.w}                    # los actores llevan una referencia a la VM: que no se copie
+        snap = {k: copy.deepcopy(v, memo) for k, v in self.__dict__.items() if k not in self.SAVE_SKIP}
+        self.saves[slot] = (self.save_name(slot), snap)
+
+    def load_game(self, slot):
+        """loadState: el estado vuelve a como estaba; el script que estaba en marcha sigue por su ranura; el sonido para y vuelve a empezar el que sonaba."""
+        name, snap = self.saves[slot]
+        memo = {id(self): self, id(self.w): self.w}
+        for k, v in snap.items():
+            setattr(self, k, copy.deepcopy(v, memo))
+        self.room = self.w.rooms.get(self.cur_room)
+        if self.cur != 0xFF:
+            self.load(self.cur)
+        self.snd_log.append('SND f=%d STOP' % self.frame)               # sd_stopvgm; si sonaba algo, vuelve a empezar (sc_nt: STOP, LOOP, PLAY)
+        cur = self.snd_cur
+        if cur:
+            info = self.snd_info(cur['nr'])
+            self.snd_log += ['SND f=%d STOP' % self.frame, 'SND f=%d LOOP %d' % (self.frame, info[3] if info else 0),
+                             'SND f=%d PLAY DATA/SND/SOUND%03d.VGM' % (self.frame, cur['nr'])]
+
+    def save_load_game(self, a):
+        slot, sub = a & 0x1F, a & 0xE0
+        if sub == 0x00:
+            return 100
+        if sub == 0x20:
+            return 3
+        if sub == 0x80:
+            self.save_game(slot)
+            return 0
+        if sub == 0x40:
+            if slot not in self.saves:
+                return 5
+            self.load_game(slot)
+            return 3
+        return 6 if slot in self.saves else 7                          # 0xC0
+
+    def load_save_names(self, a, b):
+        """loadVars 2: las cadenas a..b reciben los nombres de las partidas 1.. (las que existen); el resto, vacias. En modo mock solo se vacian."""
+        for sid in range(a, b + 1):
+            s = self.strings.get(sid)
+            if not s:
+                continue
+            slot = sid - a + 1
+            if self.real_saves and slot in self.saves:
+                nm = self.saves[slot][0]
+                n = min(len(nm), len(s) - 2) if len(s) >= 2 else 0
+                for i in range(n):
+                    c = nm[i]
+                    s[i] = c if 32 <= c <= 122 and c != 64 else 0x5F    # '_' como ScummVM (los caracteres especiales)
+                s[n] = 0
+            else:
+                s[0] = 0
 
     # =========================================================================================== bucle principal
     def update_scumm_vars(self):
@@ -2127,6 +2284,7 @@ class CoreVM(VM):
         if self.cur_room != 0:                                  # fase 6: walkActors; fase 5b: moveCamera (updateObjectStates no esta en el nucleo: el Z80 mira OBJST vivo)
             self.walk_actors()
             self.move_camera()
+        self.update_pan_px()                                    # fase 9: la ventana movil (cam_update del programa)
 
     def digest(self):
         v = crc16(b''.join(struct.pack('<H', x & 0xFFFF) for x in self.vars))
@@ -2151,13 +2309,13 @@ class CoreVM(VM):
         inv = crc16(b''.join(struct.pack('<H', x) for x in self.inventory))
         nn = crc16(b''.join(struct.pack('<H', x & 0xFFFF) for x in self.new_names))
         cam = self.cam
-        return ('D f=%d V=%04X L=%04X K=%d,%04X A=%04X O=%04X I=%04X N=%04X M=%d,%d,%d,%d,%d X=%d,%d,%d,%d,%04X,%04X C=%d,%d,%d,%d,%d U=%d,%d,%d,%d W=%04X T=%04X P=%04X Q=%d,%04X R=%d,%d,%04X,%d,%04X G=%s S=%s' % (
+        return ('D f=%d V=%04X L=%04X K=%d,%04X A=%04X O=%04X I=%04X N=%04X M=%d,%d,%d,%d,%d X=%d,%d,%d,%d,%04X,%04X C=%d,%d,%d,%d,%d U=%d,%d,%d,%d W=%04X T=%04X P=%04X Q=%d,%04X R=%d,%d,%04X,%d,%04X Y=%04X G=%s S=%s' % (
             self.frame, v, lc, self.cut_sp, k, a, o, inv, nn, self.have_msg, self.talk_delay, int(self.keep_text), self.cur_room,
             s16(self.last_sound), int(self.use_talk_anims), self.msg_count, self.charset_pos, self.charset_color,
             crc16(self.charset_buf), self.slots_crc(), s16(cam['cur']), s16(cam['dest']), cam['mode'], cam['follows'], int(cam['moving_to_actor']),
             s16(self.user_put), s16(self.cursor_state), s16(self.main_top), s16(self.main_h), self.verbs_crc(), self.strings_crc(),
             self.actor_names_crc(), len(self.sentence), self.sentence_crc(), len(self.boxes), self.room_nobj(), self.room_crc(),
-            int(self.ego_positioned), self.resmap_crc(), self.walk_trace(), ' '.join(sl)))
+            int(self.ego_positioned), self.resmap_crc(), crc16(bytes(self.room_pal + self.shadow_pal)), self.walk_trace(), ' '.join(sl)))
 
     def walk_trace(self):
         """fase 6: posicion de cada actor de la sala en uso (n:x,y,caja,moving), para seguir la caminata fotograma a fotograma."""
@@ -2251,10 +2409,15 @@ def screen_to_scumm(px, py):
     return min(px // 6, 39) * 8, py + 8
 
 
-def screen_event(kind, a):
-    """Un suceso de entrada de la pantalla (click px py, move px py, rclick, key k, esc) -> el de CoreVM.pending."""
+def screen_event(kind, a, vm=None):
+    """Un suceso de entrada de la pantalla (click px py, move px py, rclick, key k, esc) -> el de CoreVM.pending.
+    Con vm: la ventana movil del programa (ui3.asm pan_update / scumm.asm cam_update): la x de SCUMM suma lo que esta corrida (vm.pan_px, la del fotograma anterior) y
+    el cursor a la derecha del todo (px >= 232) la corre, a la izquierda (px < 100) la devuelve."""
     if kind in ('click', 'move'):
         x, y = screen_to_scumm(a[0], a[1])
+        if vm is not None:
+            x += vm.pan_px
+            vm.pan_event(a[0])
         return ('click' if kind == 'click' else 'mouse', x, y)
     if kind == 'key':
         return ('key', a[0])
@@ -2276,6 +2439,8 @@ def run_scenario_core(world, lines):
                     vm.sound_mode = p[2]
                 elif p[1] == 'proteccion':
                     vm.protection = bool(int(p[2]))
+                elif p[1] == 'guardar':                 # fase 9: OPT guardar 1 = guardar y cargar de verdad (el programa; en el nucleo de pruebas es el resultado simulado)
+                    vm.real_saves = bool(int(p[2]))
             elif cmd == 'SETVAR':
                 vm.vars[int(p[1])] = s16(int(p[2]))
             elif cmd == 'AT':                           # AT fotograma tipo [a b] (fase 7): un suceso de entrada en ese fotograma de BOOT; a, b en pixeles de la pantalla del ZX81
@@ -2288,11 +2453,26 @@ def run_scenario_core(world, lines):
                         if kind == 'script':                    # un script global en ese fotograma (el programa: DBG_START)
                             vm.cur = 0xFF
                             vm.run_script(a[0], False, False, [0] * NUM_LOCAL)
+                        elif kind == 'snd':                     # fase 8: un sonido sin pasar por un script (el programa: DBG_SND): a = [operacion (1 empezar, 2 parar, 3 parar todo), sonido]
+                            if a[0] == 1:
+                                vm.real_start(a[1])
+                            elif a[0] == 2:
+                                vm.real_stop(a[1])
+                            else:
+                                vm.snd_log.append('SND f=%d STOP' % vm.frame)
+                                vm.snd_cur = None
+                                vm.snd_next = 0
+                        elif kind in ('save', 'load'):          # fase 9: guardar / cargar la ranura a[0] entre fotogramas (el programa: DBG_SAVE)
+                            vm.cur = 0xFF
+                            if kind == 'save':
+                                vm.save_game(a[0])
+                            elif a[0] in vm.saves:
+                                vm.load_game(a[0])
                         elif kind == 'room':                    # cargar una sala (el programa: DBG_ROOM, vm_load_room)
                             vm.cur = 0xFF
                             vm.start_scene(a[0])
                         else:
-                            vm.pending.append(screen_event(kind, a))
+                            vm.pending.append(screen_event(kind, a, vm))
                     protection_hook(vm)
                     vm.step_frame(delta)
                     vm.trace.append(vm.digest())
@@ -2694,11 +2874,14 @@ def main():
         evl = []                                        # fase 7: sucesos de entrada (un fichero con lineas "fotograma tipo [a b]": click, move, rclick, key, esc; a, b en pixeles)
         if len(args) > 4:
             evl = ['AT ' + ln.strip() for ln in open(args[4]) if ln.strip() and not ln.startswith('#')]
-        trace, vm = run_scenario_core(world, ['INIT', 'OPT proteccion 0', 'OPT sonido timed', 'SCRIPT 1'] + evl + ['BOOT %d' % n])
+        trace, vm = run_scenario_core(world, ['INIT', 'OPT proteccion 0', 'OPT sonido real', 'OPT guardar 1', 'SCRIPT 1'] + evl + ['BOOT %d' % n])
         with open(os.path.join(out, 'boot_expected.txt'), 'w') as fe:
             for t in trace:
                 if t.startswith(('D ', 'ERR')):
                     fe.write(t + chr(10))
+        with open(os.path.join(out, 'boot_snd_expected.txt'), 'w') as fe:       # fase 8: las ordenes al MCU (STOP, LOOP, PLAY) que tiene que dar el Z80
+            for t in vm.snd_log:
+                fe.write(t + chr(10))
         firsts = {}
         for t in trace:
             if t.startswith('D '):

@@ -19,9 +19,9 @@ NUM_ACTORS = 13
 NUM_SENTENCE = 6
 NUM_INVENTORY = 80
 NUM_OBJECTS = 1000           # objetos globales de Indy3 (DATA.BIN: NOBJ)
-NUM_VERBS = 36               # ranuras de verbo, la 0 incluida (ScummVM: 100): el arranque de Indy3 llega a 30 vivos. Sin ranura libre: E_RANGE
-NUM_STRINGS = 32             # ids de cadena 0..31 (ScummVM: 100; Indy3 usa hasta la 24). Fuera de rango: E_RANGE
-STR_HEAP = 480               # bytes del monton de cadenas (incluido el 0 final de cada una); Indy3 llega a 355 en el arranque. Desbordado: E_RANGE
+NUM_VERBS = 52               # ranuras de verbo, la 0 incluida (ScummVM: 100): el arranque de Indy3 llega a 30 vivos. Sin ranura libre: E_RANGE
+NUM_STRINGS = 40             # ids de cadena 0..31 (ScummVM: 100; Indy3 usa hasta la 24). Fuera de rango: E_RANGE
+STR_HEAP = 1248              # bytes del monton de cadenas (incluido el 0 final de cada una); Indy3 llega a 355 en el arranque y a ~1.155 con el dialogo de guardar y cargar (fase 9). Desbordado: E_RANGE
 MAX_STRLEN = 255             # longitud maxima de una cadena (con su 0 final)
 MSG_MAX = 320                # bufer de texto del mensaje (MSGBUF): el mensaje convertido y su 0 final caben en 320 bytes; mas: E_RANGE (ScummVM: 2048)
 MSG_DEPTH = 4                # niveles de anidamiento de un mensaje (verbo, nombre o cadena dentro de otro): mas: E_RANGE
@@ -73,8 +73,9 @@ E_HALT = 12            # systemOps de reinicio o salida (solo en modo nucleo: el
 # --- sucesos para el "back-end" (video, sonido, disco): puerto $F2 en el Z80. Los 1-8 son los de v2.
 EV_SOUND_START, EV_SOUND_STOP, EV_SOUND_STOPALL, EV_SOUND_QUERY, EV_TEXT, EV_ROOM_LOAD, EV_SENTENCE, EV_OBJSTATE = 1, 2, 3, 4, 5, 6, 7, 8
 EV_DRAWOBJ, EV_CAMERA, EV_VERB, EV_ACTOR = 9, 10, 11, 12
+EV_PALETTE = 13          # fase 8: cambia _roomPalette o _shadowPalette (roomOps 2 y 4); sin operandos
 EV_ARGC = {EV_SOUND_START: 1, EV_SOUND_STOP: 1, EV_SOUND_STOPALL: 0, EV_SOUND_QUERY: 1, EV_TEXT: 3, EV_ROOM_LOAD: 1,
-           EV_SENTENCE: 3, EV_OBJSTATE: 2, EV_DRAWOBJ: 4, EV_CAMERA: 1, EV_VERB: 2, EV_ACTOR: 3}
+           EV_SENTENCE: 3, EV_OBJSTATE: 2, EV_DRAWOBJ: 4, EV_CAMERA: 1, EV_VERB: 2, EV_ACTOR: 3, EV_PALETTE: 0}
 
 
 class VMError(Exception):

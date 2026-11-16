@@ -8,7 +8,7 @@
 ;
 ;  Teclas (ZX81): letras y cifras = la tecla de SCUMM (los verbos de Indy3 usan las letras en minuscula); Intro = clic izquierdo con el cursor activo; ESPACIO = pausa;
 ;  SHIFT + 5 6 7 8 = mover el cursor (izquierda, abajo, arriba, derecha); SHIFT + ESPACIO = ESC (salir de la escena cortada / boton derecho); SHIFT + X = salir al BASIC;
-;  SHIFT + R = reiniciar el juego. Con raton Bluetooth (mouse.asm) mueve el cursor y los botones son los clics.
+;  SHIFT + R = reiniciar el juego. SHIFT + S = F5 (guardar y cargar). Con raton Bluetooth (mouse.asm) mueve el cursor y los botones son los clics.
 ; =====================================================================
 UIVB            equ $9900               ; 8 filas x 40 columnas de codigos de glifo (0 = vacio)
 UIV             equ $9A80               ; variables (UIV..UIV+63)
@@ -43,7 +43,7 @@ ARROW_UP        equ 208
 ARROW_DN        equ 209
 TILES           equ font_tiles-ARROW_UP*8
 
-                include "mouse.asm"
+                include "../../COMMON/mouse.asm"
 
 ; ---------------------------------------------------------------------
 ;  Puesta en marcha y fotograma
@@ -329,8 +329,11 @@ ui_text_ev:     ld a,1
                 cp 255
                 jr z,ut_clr
                 or a
-                ret nz                  ; el texto suelto de print (ranura 1) no se pinta
-                ld a,1
+                jr z,ut_msg
+                cp 1
+                ret nz
+                jp ov_text_add          ; fase 9: el texto suelto de print (ranura 1) va a la capa de texto
+ut_msg:         ld a,1
                 ld (tx_on),a
                 ld hl,(EVARGS+4)        ; color EGA del que habla -> tinta Chroma
                 ld a,l
@@ -687,6 +690,23 @@ in_conv:        ld a,(cur_y)
                 ld (INEV+3),hl
                 ld a,(cur_x)
                 ld l,a
+                ld a,(pan_on)           ; fase 9: la ventana movil: el cursor es de la pantalla y la x de SCUMM suma lo que esta corrida DE VERDAD (la camara del hardware, no la
+                ld de,(pan_px)          ; logica: el scroll tarda unos fotogramas y se pincha donde se ve el boton)
+                or d
+                or e
+                jr z,ic_np
+                push hl
+                call gf_campx           ; HL = la camara del hardware en pixeles
+                ld de,(ov_left)
+                or a
+                sbc hl,de               ; menos la de SCUMM: lo que esta corrida ahora
+                bit 7,h
+                jr z,ic_pp
+                ld hl,0
+ic_pp:          pop de
+                add hl,de
+                ld de,0
+ic_np:          add hl,de
                 ld (INEV+1),hl
                 ret
 ic_if:          add a,8
@@ -842,6 +862,10 @@ ip_kn:          ld d,a                  ; D = tecla nueva (0 si es la misma que 
                 jp z,sc_quit_key
                 cp 'r'
                 jp z,restart
+                cp 's'
+                jr z,ip_f5
+                cp '0'
+                jr z,ip_bs
                 ld d,0
 ip_nosh:        pop hl                  ; posicion de antes: si ha cambiado, el cursor se ha movido
                 ld a,(cur_x)
@@ -877,6 +901,16 @@ ip_rc:          ld a,2
                 jp ip_set
 ip_esc:         pop hl
                 ld a,4
+                jp ip_set
+ip_bs:          pop hl                  ; fase 9: SHIFT + 0 (el RUBOUT del ZX81) = borrar (8) en el dialogo de guardar
+                ld hl,8
+                ld (INEV+5),hl
+                ld a,3
+                jp ip_set
+ip_f5:          pop hl                  ; fase 9: SHIFT + S = F5 (la tecla 319 que abre el dialogo de guardar y cargar de Indy3: el script 8 la manda al 9)
+                ld hl,319
+                ld (INEV+5),hl
+                ld a,3
                 jp ip_set
 ip_key:         ld l,d
                 ld h,0

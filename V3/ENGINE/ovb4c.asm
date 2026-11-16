@@ -131,7 +131,12 @@ sd_l:           or a
 
 ; ranura 1 de print: EV_TEXT [1, xpos, ypos, color, center | overhead * 2, str_value(texto convertido)] sin tocar el bufer del mensaje.
 ; HL = la cadena del script
-print_free:     ld a,1
+print_free:
+                IF PROGRAM
+                ld a,2                  ; fase 9: el programa pinta el texto suelto (txtlayer.asm): se convierte a UIBUF
+                ELSE
+                ld a,1
+                ENDIF
                 call convert_all
                 ld hl,1
                 ld (EVARGS),hl
@@ -150,12 +155,16 @@ print_free:     ld a,1
                 ld l,a
                 ld h,0
                 ld (EVARGS+8),hl
+                IF PROGRAM
+                ld hl,(CM_LEN)          ; (programa) la longitud del texto de UIBUF
+                ELSE
                 ld hl,(CM_SUM)          ; valor = suma + longitud * 257
                 ld de,(CM_LEN)
                 add hl,de
                 ld a,h
                 add a,e
                 ld h,a
+                ENDIF
                 ld (EVARGS+10),hl
                 ld a,EV_TEXT
                 jp ev_emit

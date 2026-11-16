@@ -50,6 +50,7 @@ EV_OBJSTATE     equ 8
 EV_DRAWOBJ      equ 9
 EV_CAMERA       equ 10
 EV_VERB         equ 11
+EV_PALETTE      equ 13          ; fase 8: roomOps 2 y 4 han cambiado ROOMPAL o SHADOWPAL
 E_BADROOM       equ 6
 CAM_NORMAL      equ 1           ; CameraMode
 CAM_FOLLOW      equ 2
@@ -133,6 +134,8 @@ P3Y             equ RMV_END+8   ; NACT palabras
 GW              equ P3Y+2*NACT  ; 260 B (geom.asm, walk.asm)
 GW_END          equ GW+260
 CLS_PG          equ 47          ; pagina fisica fria con OBJCLS (3 bytes por objeto desde el principio); la fase 9 la saca de la cache de paginas
+ROOMPAL         equ $F520       ; fase 8: _roomPalette y _shadowPalette (16 bytes cada una, identidad al empezar; roomOps 2 y 4); las lee el programa para reprogramar la paleta de la FPGA
+SHADOWPAL       equ ROOMPAL+16
 OB_SZ           equ 14          ; registro de un objeto de la sala (blob): id (2), x/8, y/8, ancho/8, alto/8, padre, estado del padre, x e y de acercamiento
 OB_ID           equ 0           ;   (s16), direccion del actor (0-7), banderas (bit 0: imagen propia)
 OB_X            equ 2
@@ -220,9 +223,9 @@ NBOXES          equ VMV+131     ; cajas cargadas de la sala en uso (load_room_st
 INVSL           equ VMV+132     ; NINV palabras: el objeto de cada ranura de inventario (0: libre)
 VMV_END         equ INVSL+2*NINV ; $FF04
 SC              equ VMV_END     ; 24 B de variables temporales de los manejadores de B (no sobreviven a un script anidado)
-NSTR            equ 32          ; ids de cadena (vmcommon3.NUM_STRINGS)
-STRMAX          equ 480         ; bytes del monton (vmcommon3.STR_HEAP)
-NVERB           equ 36          ; ranuras de verbo, la 0 incluida (vmcommon3.NUM_VERBS)
+NSTR            equ 40          ; ids de cadena (vmcommon3.NUM_STRINGS). Fase 9: el dialogo de guardar llega a la 33
+STRMAX          equ 1248        ; bytes del monton (vmcommon3.STR_HEAP): fase 9, el dialogo de guardar y cargar de Indy3 (sala 14) pide ~1.155 B (15 nombres de 51 B...); el monton se fue de $93C9 a $9B20-$9FFF
+NVERB           equ 52          ; ranuras de verbo, la 0 incluida (vmcommon3.NUM_VERBS). Fase 9: la escena del vestuario (sala 73) llega a 38 verbos vivos; antes 36
 ; fase 4b-1: cursor, pantalla principal y cadenas (bloque 7; vm_init los pone a 0 menos MAINTOP/MAINH)
 USERPUT         equ SC+24       ; palabra con signo: _userPut (cursorCommand 3, 4, 7, 8)
 CURSTATE        equ SC+26       ; palabra con signo: _cursor.state (cursorCommand 1, 2, 5, 6)
@@ -270,11 +273,11 @@ V_TOP           equ 13          ; palabra
 V_NPG           equ 15          ; nombre: pagina (0 = sin nombre) y direccion (palabra) de la cadena en el script
 V_NAD           equ 16
 V_LEN           equ 18          ; fase 7: columnas del texto la ultima vez que se dibujo (vd_draw, overlay B): el rectangulo es [left, left + 8 * V_LEN)
-STRHEAP         equ VERBS+NVERB*VSZ     ; STRMAX bytes
+STRHEAP         equ $9B20               ; STRMAX bytes ($9B20-$9FFF; antes iba detras de VERBS, con 480 B). Hasta el bloque 5 del bitmap ($A000)
 UIBUF           equ $9A40       ; fase 7: el nombre convertido de un verbo (ovb_vname, 48 bytes) para dibujarlo (programa: ui3.asm)
 FAKESL          equ $9AB0       ; fase 7: una ranura falsa (16 bytes) para convertir el nombre de un verbo fuera de un script: solo importa SL_PAGE (ovb_vname)
 PGBUF           equ $9AC0       ; fase 7: el texto de la pagina de mensaje que escribe displayDialog (96 bytes; el programa lo pinta arriba)
-HOLE_END        equ STRHEAP+STRMAX      ; hasta $9484 (donde acababa ODIRBUF)
+HOLE_END        equ VERBS+NVERB*VSZ     ; fin del hueco de ODIRBUF que se guarda (actores, nombres, verbos); el monton de cadenas (STRHEAP) va aparte
 
                 include "vars_v3.inc"
 
@@ -323,6 +326,15 @@ vm_init:        ld (TOPSP),sp
                 ld (CAMDEST),hl
                 ld hl,ev_null
                 ld (EVVEC),hl
+                ld hl,ROOMPAL           ; fase 8: paletas de la sala y de la pantalla = identidad
+                ld de,ROOMPAL+1
+                xor a
+                ld b,32
+vi_pal:         ld (hl),a
+                inc hl
+                inc a
+                and 15
+                djnz vi_pal
                 call cls_open           ; sin clases de actor (OBJCLS esta en la pagina fria CLS_PG)
                 ld hl,WINDOW
                 ld de,WINDOW+1

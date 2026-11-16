@@ -351,6 +351,8 @@ static std::string walk_trace() {               // CoreVM.walk_trace (fase 6): n
   return t.empty() ? "-" : t;
 }
 static std::string digest() {
+  std::vector<uint8_t> pal(32);                         // fase 8: _roomPalette y _shadowPalette
+  for (int i = 0; i < 32; i++) pal[i] = rd(S("ROOMPAL") + i);
   std::vector<uint8_t> v(512), l(NSLOT * NLOCAL * 2), k;
   for (int i = 0; i < 512; i++) v[i] = rd(VARS + i);
   for (size_t i = 0; i < l.size(); i++) l[i] = rd(LOCALS + (int)i);
@@ -374,13 +376,13 @@ static std::string digest() {
   std::vector<uint8_t> rm;
   for (int i = 0; i < 128; i++) rm.push_back(rd(RESMAP + i));
   char b[1000];
-  snprintf(b, sizeof b, "D f=%d V=%04X L=%04X K=%d,%04X A=%04X O=%04X I=%04X N=%04X M=%d,%d,%d,%d,%d X=%d,%d,%d,%d,%04X,%04X C=%d,%d,%d,%d,%d U=%d,%d,%d,%d W=%04X T=%04X P=%04X Q=%d,%04X R=%d,%d,%04X,%d,%04X G=%s S=", frame,
+  snprintf(b, sizeof b, "D f=%d V=%04X L=%04X K=%d,%04X A=%04X O=%04X I=%04X N=%04X M=%d,%d,%d,%d,%d X=%d,%d,%d,%d,%04X,%04X C=%d,%d,%d,%d,%d U=%d,%d,%d,%d W=%04X T=%04X P=%04X Q=%d,%04X R=%d,%d,%04X,%d,%04X Y=%04X G=%s S=", frame,
            crc16(v.data(), v.size()), crc16(l.data(), l.size()), rd(CUTSP), crc16(k.data(), k.size()), crc16(a.data(), a.size()),
            crc16(o.data(), o.size()), crc16(inv.data(), inv.size()), crc16(nn.data(), nn.size()), rd(HAVEMSG), (int16_t)rd16(TALKDLY), rd(KEEPTXT),
            rd(CURROOM), (int16_t)rd16(LASTSND), rd(USETALK), rd16(MSGCNT), rd16(MSGPTR) - MSGBUF, rd(CHARCOL), crc16(mb.data(), mb.size()),
            crc16(sl.data(), sl.size()), (int16_t)rd16(CAMCUR), (int16_t)rd16(CAMDEST), rd(CAMMODE), rd(CAMFOL), rd(CAMMOV),
            (int16_t)rd16(USERPUT), (int16_t)rd16(CURSTATE), (int16_t)rd16(MAINTOP), (int16_t)rd16(MAINH), verbs_crc(), strings_crc(), actor_names_crc(),
-           ns, crc16(sq.data(), sq.size()), nb, no, crc16(rb.data(), rb.size()), rd(S("EGOPOS")), crc16(rm.data(), rm.size()), walk_trace().c_str());
+           ns, crc16(sq.data(), sq.size()), nb, no, crc16(rb.data(), rb.size()), rd(S("EGOPOS")), crc16(rm.data(), rm.size()), crc16(pal.data(), pal.size()), walk_trace().c_str());
   std::string s = b;
   bool first = true;
   for (int i = 0; i < NSLOT; i++) {

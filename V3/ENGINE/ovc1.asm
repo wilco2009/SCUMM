@@ -63,11 +63,37 @@ rb_0:           ld a,(ARGN)
                 ld hl,(SC+18)
                 ld (ARGS),hl
                 jp host_call
-ro_24:          ld hl,(ARGS)            ; 0..256
+ro_24:          ld hl,(ARGS)            ; a: 0..256 y, en la pantalla de 16 colores, 0..15 (b tambien)
                 ld de,257
                 or a
                 sbc hl,de
                 jp nc,err_range
+                ld hl,(ARGS)
+                ld a,h
+                or a
+                jp nz,err_range
+                ld a,l
+                cp 16
+                jp nc,err_range
+                ld c,a                  ; C = a
+                ld hl,(ARGS+2)
+                ld a,h
+                or a
+                jp nz,err_range
+                ld a,l
+                cp 16
+                jp nc,err_range
+                ld e,a
+                ld d,0                  ; DE = b
+                ld a,(ARGS+4)
+                ld hl,ROOMPAL
+                cp 2
+                jr z,ro_pw
+                ld hl,SHADOWPAL
+ro_pw:          add hl,de
+                ld (hl),c               ; _roomPalette[b] = a  /  _shadowPalette[b] = a
+                ld a,EV_PALETTE
+                call ev_emit
                 ld a,(ARGS+4)
                 jp ro_fix
 ro_3:           ld hl,(ARGS)
@@ -180,6 +206,13 @@ b_saveLoadGame: ld a,(OPC)
                 call rd_vb1
                 ld (SPTR),de
                 ld (ARGS),bc
+                IF PROGRAM
+                ld a,c                  ; fase 9 (programa): guardar y cargar de verdad (ovc9.asm); HL = el resultado
+                call sl_main
+                ld b,h
+                ld c,l
+                jp set_res
+                ENDIF
                 ld a,c
                 and $E0
                 ld hl,100

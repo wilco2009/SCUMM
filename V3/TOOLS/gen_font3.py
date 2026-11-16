@@ -12,7 +12,7 @@ FONT_ASC = ' 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ/:.,?-"!\''
 
 
 def main():
-    f6 = open(os.path.join(HERE, '..', 'ENGINE', 'font6.bin'), 'rb').read()
+    f6 = open(os.path.join(HERE, '..', '..', 'COMMON', 'font6.bin'), 'rb').read()
     out = bytearray(ARROWS)
     for c in FONT_ASC:
         k = (ord(c) - 32) * 8

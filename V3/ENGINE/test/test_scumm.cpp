@@ -87,11 +87,16 @@ static void motor_tick(bool frame_end) {
 }
 
 static int g_fr = 0, w_lo = -1, w_hi = -1, w_from = 0;   // TS_WATCH=lo-hi[,desde fotograma]: imprime las escrituras
+static uint8_t x0[0x400]; static int x_base = 0, x_m = 0; static uint8_t p16[32]; static int p16_ptr = 0, p16_lo = 0, p16_on = 0;     // fase 8: sprites extra (POKE 2129, 2131) y su hoja en $0000-$03FF
 static inline void wr(int a, uint8_t v) {
   a &= 0xFFFF;
   if (a >= w_lo && a <= w_hi && g_fr >= w_from) { printf("W f=%d pc=%04X b0=%d [%04X]=%02X%c", g_fr, z80.pc.w, blk[0], a, v, 10);
     if (getenv("TS_WATCHBRK")) { printf("  af=%04X bc=%04X de=%04X hl=%04X ix=%04X sp=%04X; pila: %02X%02X %02X%02X %02X%02X %02X%02X%c", z80.af.w, z80.bc.w, z80.de.w, z80.hl.w, z80.ix.w, z80.sp.w, rd(z80.sp.w + 1), rd(z80.sp.w), rd(z80.sp.w + 3), rd(z80.sp.w + 2), rd(z80.sp.w + 5), rd(z80.sp.w + 4), rd(z80.sp.w + 7), rd(z80.sp.w + 6), 10); exit(0); } }
   if (a < 0x2000) {                                  // bloque 0: ROM; los puertos mapeados en memoria de la FPGA
+    if (a < 0x400) x0[a] = v;                        // fase 8: entradas de los sprites extra (hoja 0, 32 B por extra) escritas por el programa
+    if (a == 2129) x_base = v; else if (a == 2131) x_m = v;
+    else if (a == 2063) p16_ptr = v; else if (a == 2064) p16_lo = v; else if (a == 2067) p16_on = v & 1;
+    else if (a == 2066) { p16[(p16_ptr & 15) * 2] = p16_lo; p16[(p16_ptr & 15) * 2 + 1] = v; p16_ptr++; }       // fase 8: paleta de 16
     if (a == 2100) sel = v & 63;
     else if (a == 2101) spr[sel].on = v & 1;
     else if (a == 2102) spr[sel].x = (spr[sel].x & 0x100) | v;
@@ -274,6 +279,7 @@ static void dump(const char* path) {
   }
   uint8_t t[8] = {(uint8_t)fine, (uint8_t)rows[0], (uint8_t)rows[1], (uint8_t)rows[2], z80.i, (uint8_t)chroma, (uint8_t)sfast, (uint8_t)(hfile >> 8)};
   fwrite(t, 1, 8, f);
+  { uint8_t xt[2] = {(uint8_t)x_base, (uint8_t)x_m}; fwrite(xt, 1, 2, f); fwrite(x0, 1, 0x400, f); fputc(p16_on, f); fwrite(p16, 1, 32, f); }
   fclose(f);
 }
 
@@ -411,6 +417,8 @@ int main(int argc, char** argv) {
   while (!finished) {
     if (z80.pc.w == main_loop_addr || (wait_frame_addr && z80.pc.w == wait_frame_addr)) {
       motor_tick(true);
+      { static const char* ts_dumps = getenv("TS_DUMPS"); static int last_dumped = -1;       // TS_DUMPS=f1,f2,...: ademas del volcado final, uno al empezar la vuelta que sigue a esos fotogramas (fase 8: los sprites de los actores); el fichero lleva el numero detras
+        if (ts_dumps && frames_done != last_dumped) { const char* q = ts_dumps; while (*q) { char* e; long v = strtol(q, &e, 10); if (e == q) break; if (v == frames_done) { char nm[512]; snprintf(nm, sizeof nm, "%s.%ld", argv[5], v); dump(nm); last_dumped = frames_done; } q = *e ? e + 1 : e; } } }
       if (prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi) { prof_loops.push_back(prof_work); }
       if (ts_vm && prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi) vm_n_loops.push_back(vm_loop_n);
       vm_loop_n = 0; vm_stack.clear(); vm_pro_acc = 0;

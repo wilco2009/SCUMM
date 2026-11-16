@@ -12,6 +12,8 @@
 /V2/45/
 /V3/Indy*/
 /V3/Monkey*/
+/V3/preview*
+/V3/SDOUT/
 
 # Salidas de montaje y de pruebas
 *.bin

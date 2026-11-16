@@ -712,18 +712,72 @@ b_getStringWidth:
                 call rd_vb1
                 ld (SPTR),de
                 call str_chk_exist
-                ld b,(hl)               ; longitud
+                ld b,(hl)               ; longitud (con el 0 final)
                 call str_ptr
-                ld de,0                 ; letras visibles (no 0 ni $FF)
-gw_l:           ld a,(hl)
-                inc hl
+                ld de,0                 ; caracteres (CharsetRenderer::getStringWidth: hasta el primer 0; ni '@' ni los codigos $FF / $FE)
+gw_l:           ld a,b
                 or a
-                jr z,gw_n
-                inc a
-                jr z,gw_n
-                inc de
-gw_n:           djnz gw_l
-                ex de,hl
+                jr z,gw_e
+                ld a,(hl)
+                inc hl
+                dec b
+                or a
+                jr z,gw_e
+                cp 10
+                jr z,gw_e
+                cp 13
+                jr z,gw_e
+                cp '@'
+                jr z,gw_l
+                cp 255
+                jr z,gw_c
+                cp 254
+                jr nz,gw_n
+gw_c:           ld a,b                  ; un codigo: el byte siguiente
+                or a
+                jr z,gw_e
+                ld a,(hl)
+                inc hl
+                dec b
+                cp 3
+                jr z,gw_e
+                cp 9
+                jr z,gw_e
+                cp 1
+                jr z,gw_e
+                cp 2
+                jr z,gw_e
+                cp 8
+                jr z,gw_8
+                cp 10
+                jr z,gw_2
+                cp 21
+                jr z,gw_2
+                cp 12
+                jr z,gw_2
+                cp 13
+                jr z,gw_2
+                cp 14
+                jr z,gw_2
+gw_n:           inc de                  ; otro codigo o un caracter: cuenta
+                jr gw_l
+gw_2:           ld a,b                  ; salta dos bytes
+                sub 2
+                jr c,gw_e
+                ld b,a
+                inc hl
+                inc hl
+                jr gw_l
+gw_8:           ld a,b                  ; while (text[pos++] == ' ') {}
+                or a
+                jr z,gw_e
+                ld a,(hl)
+                inc hl
+                dec b
+                cp ' '
+                jr z,gw_8
+                jr gw_l
+gw_e:           ex de,hl
                 add hl,hl
                 add hl,hl
                 add hl,hl
@@ -1514,8 +1568,13 @@ svr_s:          ld (SC+9),a
                 or a
                 jr z,svr_nx
                 ld a,(SC+9)
+                IF PROGRAM
+                ld hl,OVC_NAME1         ; fase 9: el nombre de la partida (overlay C; SC+4 = el primer id del rango)
+                call call_ovc
+                ELSE
                 call str_ptr
                 ld (hl),0
+                ENDIF
 svr_nx:         ld a,(SC+9)
                 ld hl,SC+8
                 cp (hl)

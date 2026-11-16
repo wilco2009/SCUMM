@@ -373,6 +373,11 @@ class GameMixin:
         self.snd_soundcard = soundcard
         self.last_sound = 0
         self.sound_left = {}                    # modo "timed": sonido -> jiffies que le quedan
+        self.snd_cur = None                     # modo "real" (fase 8): el sonido que suena (nr, prio, rest, left) y el que espera
+        self.snd_next = 0
+        self.room_pal = list(range(16))         # fase 8: _roomPalette (roomOps 2: el pixel b de la imagen de la sala se pinta con el color a) y _shadowPalette (roomOps 4: el color b de la pantalla sale como a)
+        self.shadow_pal = list(range(16))
+        self.snd_log = []                       # modo "real": las ordenes al MCU (STOP, LOOP, PLAY) como las imprime el arnes
         self.music_acc = 0
         self.music_ctr = 0
         self.music_timer = 0
@@ -1581,13 +1586,54 @@ class GameMixin:
             self.ev(EV_CAMERA, [self.cam['cur']])
 
     # ------------------------------------------------------------------------------------------ sonido
-    # Dos modos. "mock" (escenarios): isSoundRunning sale al anfitrion (suceso E 4) y VAR_MUSIC_TIMER no avanza, igual
-    # que en v2: asi el arnes del Z80 solo tiene que repetir la respuesta simulada. "timed" (arranque, `boot`): cada
-    # sonido dura 60 jiffies, o 3600 si es una cancion (>1000 bytes), y VAR_MUSIC_TIMER avanza como Player_V2Base:
-    # la musica corre a 236 Hz (FREQ_HZ de player_v2.cpp), cada _ticks_per_music_timer + 1 ticks suma uno al
-    # temporizador (125 cuando una cancion fija el tempo, y antes 65535), y startSound de una cancion lo pone a 0.
-    # La fase 8 sustituye esto por el temporizador real de snd.asm.
+    # Tres modos. "mock" (escenarios): isSoundRunning sale al anfitrion (suceso E 4) y VAR_MUSIC_TIMER no avanza, igual
+    # que en v2: asi el arnes del Z80 solo tiene que repetir la respuesta simulada. "timed" (fase 5b): cada sonido dura 60
+    # jiffies, o 3600 si es una cancion (>1000 bytes) y VAR_MUSIC_TIMER avanza como Player_V2Base. "real" (fase 8, el del
+    # programa): Player_V2 de ScummVM con la tabla de sonidos de DATA.BIN (prioridad, reiniciable, bucle, duracion en fotogramas,
+    # tempo): un sonido suena a la vez y otro espera en cola, y VAR_MUSIC_TIMER sale de las reglas de Player_V2Base:
+    #   - la musica corre a 236 Hz (FREQ_HZ de player_v2.cpp): cada fotograma de `delta` (a 50 Hz) suma delta * 236 / 50 ticks;
+    #   - cada _ticks_per_music_timer + 1 ticks suma uno al temporizador; _ticks_per_music_timer es 65535 hasta que algun sonido
+    #     fija el tempo (0xFF 14: en Indy3 los sonidos con la bandera 4 de la tabla, siempre en el tick 0) y 125 despues;
+    #   - chainSound (empezar un sonido, tambien el de la cola) pone el temporizador a 0 pero no el contador de ticks;
+    #   - VAR_MUSIC_TIMER = int(temporizador * 236,7052 / 240) (Sound::updateMusicTimer; aqui con el mismo producto de 20 bits que el Z80);
+    #   - el sonido actual acaba cuando se le acaban los fotogramas (65535: no acaba; un sonido sin bloque PCjr dura 0) y entonces
+    #     entra el de la cola (chainNextSound).
     SOUND_FX_JIFFIES, SOUND_SONG_JIFFIES, SOUND_SONG_BYTES = 60, 3600, 1000
+    MUSIC_K, MUSIC_SH = 14438, 20          # VAR_MUSIC_TIMER = t - ((t * 14438 + 2^20 - 1) >> 20) = floor(t * 1034138 / 2^20)
+
+    def music_var(self, t):
+        return t - ((t * self.MUSIC_K + (1 << self.MUSIC_SH) - 1) >> self.MUSIC_SH)
+
+    def snd_info(self, nr):
+        """(existe, prioridad, reiniciable, bucle, tempo, duracion) de la tabla de sonidos (DATA.BIN); None si no hay tabla o el sonido no existe."""
+        t = getattr(self.w, 'sound_table', None)
+        if not t or nr < 0 or nr > 255:
+            return None
+        prio, fl, dur = t[4 * nr], t[4 * nr + 1], t[4 * nr + 2] | (t[4 * nr + 3] << 8)
+        if not fl & 0x80:
+            return None
+        return True, prio, fl & 1, (fl >> 1) & 1, (fl >> 2) & 1, dur
+
+    def snd_chain(self, nr):
+        """Player_V2Base::chainSound: el sonido nr pasa a ser el actual (sin tabla o sin el sonido, no suena)."""
+        info = self.snd_info(nr)
+        if info is None:
+            self.snd_cur = None
+            return
+        _, prio, rest, loop, tempo, dur = info
+        self.snd_cur = dict(nr=nr, prio=prio, rest=rest, left=65535 if loop else dur)
+        self.music_timer = 0
+        if tempo:
+            self.ticks_per_music_timer = 125
+        # lo que el Z80 le pide al MCU (el arnes lo imprime): parar, bucle (0/1) y el fichero
+        self.snd_log += ['SND f=%d STOP' % self.frame, 'SND f=%d LOOP %d' % (self.frame, 1 if loop else 0),
+                         'SND f=%d PLAY DATA/SND/SOUND%03d.VGM' % (self.frame, nr)]
+
+    def snd_chain_next(self):
+        if self.snd_next:
+            nr = self.snd_next
+            self.snd_next = 0
+            self.snd_chain(nr)
 
     def start_sound(self, snd):
         self.vars[VAR_LAST_SOUND] = snd & 0xFFFF
@@ -1601,23 +1647,85 @@ class GameMixin:
                 self.ticks_per_music_timer = 125
             else:
                 self.sound_left[snd] = self.SOUND_FX_JIFFIES
+        elif self.sound_mode == 'real':
+            self.real_start(snd)
+
+    def real_start(self, nr):
+        """Player_V2::startSound."""
+        if nr < 1 or nr > 255:
+            return
+        info = self.snd_info(nr)
+        if info is None:
+            return
+        _, prio, rest, _, _, _ = info
+        cur = self.snd_cur
+        cprio = cur['prio'] if cur else 0
+        ninfo = self.snd_info(self.snd_next) if self.snd_next else None
+        nprio = ninfo[1] if ninfo else 0
+        if not cur or cprio <= prio:
+            disp = cur                                   # el que se desplaza
+            self.snd_chain(nr)
+            if disp:
+                nr, prio, rest = disp['nr'], disp['prio'], disp['rest']
+            else:
+                nr, prio, rest = 0, 0, 0
+        cur = self.snd_cur
+        if not cur:
+            nr = 0
+            self.snd_next = 0
+        if nr != (cur['nr'] if cur else 0) and rest and (not self.snd_next or nprio <= prio):
+            self.snd_next = nr
 
     def stop_sound(self, snd):
         self.ev(EV_SOUND_STOP, [snd])
         self.sound_left.pop(snd, None)
+        if self.sound_mode == 'real':
+            self.real_stop(snd)
+
+    def real_stop(self, snd):
+        """Player_V2::stopSound."""
+        if self.snd_next == snd:
+            self.snd_next = 0
+        if self.snd_cur and self.snd_cur['nr'] == snd:
+            self.snd_log.append('SND f=%d STOP' % self.frame)
+            self.snd_cur = None
+            self.snd_chain_next()
 
     def stop_all_sounds(self):
         self.last_sound = 0
         self.ev(EV_SOUND_STOPALL, [])
         self.sound_left.clear()
+        if self.sound_mode == 'real':
+            self.snd_log.append('SND f=%d STOP' % self.frame)
+        self.snd_cur = None
+        self.snd_next = 0
 
     def is_sound_running(self, snd):
         if self.sound_mode == 'timed':
             return 1 if snd in self.sound_left else 0
+        if self.sound_mode == 'real':
+            return 1 if snd and ((self.snd_cur and self.snd_cur['nr'] == snd) or self.snd_next == snd) else 0
         return self.ev(EV_SOUND_QUERY, [snd])
 
     def update_music_timer(self, delta):
-        """Sound::updateMusicTimer (solo en modo "timed")."""
+        """Sound::updateMusicTimer (solo en los modos "timed" y "real")."""
+        if self.sound_mode == 'real':
+            self.music_acc += delta * 236
+            while self.music_acc >= 50:
+                self.music_acc -= 50
+                if self.music_ctr >= self.ticks_per_music_timer:
+                    self.music_ctr = 0
+                    self.music_timer += 1
+                else:
+                    self.music_ctr += 1
+            self.vars[VAR_MUSIC_TIMER] = s16(self.music_var(self.music_timer))
+            cur = self.snd_cur
+            if cur and cur['left'] != 65535:
+                cur['left'] -= delta
+                if cur['left'] <= 0:
+                    self.snd_cur = None
+                    self.snd_chain_next()
+            return
         if self.sound_mode != 'timed':
             return
         self.music_acc += delta * 236

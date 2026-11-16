@@ -11,6 +11,17 @@
                 jp ovc_room             ; OVC_ROOM (+9): load_room_state (C = sala, B = 1: con cajas)
                 jp ovc_sentadd          ; OVC_SENTADD (+12): doSentence desde fuera (APIVERB, APIN = a, APIA = b)
                 jp ovc_movecam          ; OVC_MOVECAM (+15): moveCamera (fase 5b; cada fotograma con la sala en uso)
+                IF PROGRAM
+                jp sl_entry             ; OVC_SLOAD (+18): guardar / cargar desde fuera de un script (C = el byte a del opcode; el bucle principal con DBG_SAVE; fase 9)
+                jp sl_name1             ; OVC_NAME1 (+21): saveLoadVars 2: el nombre de una partida en una cadena (SC+9 = id; SC+4 = el primero del rango; fase 9)
+                ELSE
+                ret                     ; (el nucleo de pruebas no guarda: el resultado del opcode es el del modelo sin partidas)
+                nop
+                nop
+                ret
+                nop
+                nop
+                ENDIF
 
 ovc_op:         ld a,(OPC)
                 ld l,a
@@ -25,6 +36,9 @@ ovc_op:         ld a,(OPC)
                 include "ovc5.asm"
                 include "ovc6.asm"
                 include "ovc7.asm"
+                IF PROGRAM
+                include "ovc9.asm"      ; fase 9: guardar y cargar
+                ENDIF
 ovc_code_end:
                 include "ovctab.inc"
 ovc_end:

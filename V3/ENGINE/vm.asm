@@ -25,6 +25,8 @@ OVD_WALK        equ 0                   ; entradas del overlay D (ovld.asm; fase
 OVD_ADJUST      equ 3                   ; adjustXYToBeInBox(IX; WKX, WKY) -> WKX, WKY, WKBOX
 OVD_STARTWALK   equ 6                   ; startWalkActor(IX; WKX, WKY, WKDIR)
 OVD_CALCMF      equ 9                   ; calcMovementFactor(_walkdata.next)
+OVD_ACTORS      equ 12                  ; actores (fase 8: ovd_act.asm, solo en el programa)
+PROGRAM         equ 0                   ; 1 en el programa de la placa (scumm.asm): lo mira ovld.asm
 
                 org $4200
                 include "vm_core.asm"

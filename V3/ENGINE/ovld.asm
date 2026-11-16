@@ -11,9 +11,15 @@
                 jp adjust_xy            ; OVD_ADJUST (+3): adjustXYToBeInBox(IX; WKX, WKY) -> WKX, WKY, WKBOX
                 jp start_walk           ; OVD_STARTWALK (+6): startWalkActor(IX; WKX, WKY, WKDIR)
                 jp ovd_calcmf           ; OVD_CALCMF (+9): calcMovementFactor(_walkdata.next) (actorOps 2 con el actor en movimiento)
+                jp actors_run           ; OVD_ACTORS (+12): los sprites de los actores (fase 8; solo en el programa)
 
                 include "geom.asm"
                 include "walk.asm"
+                IF PROGRAM
+                include "ovd_act.asm"
+                ELSE
+actors_run:     ret
+                ENDIF
 ovd_end:
                 IF $ > $2000
                 defb EL_OVERLAY_D_NO_CABE_EN_8_KB

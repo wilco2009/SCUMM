@@ -208,7 +208,7 @@ hm_o:           ld a,(hv_ndl)
                 ld b,a
                 ld a,(hv_j)
                 cp b
-                ret nc
+                jp nc,ov_apply          ; fase 9: acabados los objetos, la capa de texto y cajas (txtlayer.asm) encima
                 ld e,a
                 ld d,0
                 ld hl,HR_DLIST
@@ -429,7 +429,7 @@ hr_mkdl:        xor a
                 ld (hv_i),a
 hd_l:           ld a,(hv_i)
                 or a
-                ret z
+                jp z,ov_zadd            ; fase 9: acabados los de la sala, los que ha dibujado un drawObject, encima y en su orden
                 dec a
                 ld (hv_i),a
                 call obj_drawn
@@ -442,7 +442,10 @@ hd_l:           ld a,(hv_i)
                 ld hl,HR_NFLAGS
                 add hl,de
                 ld (hl),1
-hd_nf:          ld a,(hv_ndl)
+hd_nf:          ld a,(hv_i)
+                call ov_inzl            ; los de drawObject van al final de la lista (ov_zadd)
+                jr z,hd_l
+                ld a,(hv_ndl)
                 ld e,a
                 ld d,0
                 ld hl,HR_DLIST
@@ -456,7 +459,8 @@ hd_nf:          ld a,(hv_ndl)
 ; ---------------------------------------------------------------------
 ;  Puesta en marcha y borrado de la pantalla
 ; ---------------------------------------------------------------------
-hr_init:        xor a
+hr_init:        call hr_pal16           ; fase 8: la paleta de 16 con los colores del EGA (el marron)
+                xor a
                 ld (2043),a
                 ld a,HR_BM>>8
                 ld (2044),a             ; HFILE = bitmap
@@ -1099,3 +1103,55 @@ gf_campx:       ld hl,(hv_cam)
                 ld d,0
                 add hl,de
                 ret
+
+; ---------------------------------------------------------------------------------------------------------------------------------
+;  Paleta de 16 de la FPGA (POKE 2063 puntero, 2064 byte bajo {G, B}, 2066 byte alto {BRIGHT, R} y avanza, 2067 = 1 la activa; densidades 0-15): los 16 colores del EGA. El codigo
+;  de Chroma de cada color del EGA es el mismo indice salvo el marron (6): el amarillo oscuro de Chroma no es el marron del EGA (170, 85, 0) y lfl2gfx.chroma_rgb ya
+;  cuenta con esta paleta (como la 5b de v2, `ov_pal16` de V2/ENGINE/overlay.asm: la v3 la habia perdido). pal16_tab: lo, hi por color.
+; ---------------------------------------------------------------------------------------------------------------------------------
+hr_pal16:       xor a
+                ld (2063),a
+                ld hl,pal16_tab
+                ld b,16
+p16_l:          ld a,(hl)
+                inc hl
+                ld (2064),a
+                ld a,(hl)
+                inc hl
+                ld (2066),a
+                djnz p16_l
+                ld a,1
+                ld (2067),a
+                ret
+
+; la paleta de 16 segun _roomPalette y _shadowPalette: el pixel k de la imagen (el codigo de Chroma k = el color k del EGA) sale como el color SHADOWPAL[ROOMPAL[k]] del EGA.
+; Los trajes usan los mismos 16 codigos: su color k sale igual que el del fondo (en ScummVM los trajes no pasan por _roomPalette; solo se nota si una sala remapea un color que
+; tambien llevan los personajes)
+hr_pal_apply:   xor a
+                ld (2063),a
+                ld b,16
+                ld c,0
+hpa_l:          ld e,c
+                ld d,0
+                ld hl,ROOMPAL
+                add hl,de
+                ld a,(hl)
+                ld e,a
+                ld hl,SHADOWPAL
+                add hl,de
+                ld a,(hl)               ; color del EGA
+                add a,a                 ; 2 bytes por color en pal16_tab
+                ld e,a
+                ld hl,pal16_tab
+                add hl,de
+                ld a,(hl)
+                ld (2064),a
+                inc hl
+                ld a,(hl)
+                ld (2066),a             ; pal16[k] y el puntero avanza
+                inc c
+                djnz hpa_l
+                ret
+
+pal16_tab:      defb $00,$00,$0F,$00,$00,$0F,$0F,$0F,$F0,$00,$FF,$00,$70,$1F,$FF,$0F
+                defb $00,$F0,$0F,$F0,$00,$FF,$0F,$FF,$F0,$F0,$FF,$F0,$F0,$FF,$FF,$FF

@@ -19,6 +19,14 @@ for ln in open(sys.argv[1]):
         out.append('%d:%X:%X' % (f, sym['DBG_ROOM'], a[0] & 255))
         out.append('%d:%X:%X' % (f, sym['DBG_ROOM'] + 1, a[0] >> 8))
         continue
+    if kind == 'snd':                                    # fase 8: un sonido de depuracion (DBG_SND de scumm.asm): operacion (1 empezar, 2 parar, 3 parar todo) y sonido
+        out.append('%d:%X:%X' % (f, sym['DBG_SND'], a[1] & 255))
+        out.append('%d:%X:%X' % (f, sym['DBG_SND'] + 1, a[0]))
+        continue
+    if kind in ('save', 'load'):                         # fase 9: guardar / cargar la ranura a[0] (DBG_SAVE de scumm.asm): operacion (1 guardar, 2 cargar) y ranura
+        out.append('%d:%X:%X' % (f, sym['DBG_SAVE'], a[0] & 31))
+        out.append('%d:%X:%X' % (f, sym['DBG_SAVE'] + 1, 1 if kind == 'save' else 2))
+        continue
     if kind == 'script':                                 # un script global (DBG_START de scumm.asm)
         out.append('%d:%X:%X' % (f, sym['DBG_START'], a[0] & 255))
         out.append('%d:%X:%X' % (f, sym['DBG_START'] + 1, a[0] >> 8))

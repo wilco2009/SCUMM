@@ -43,20 +43,25 @@ OVC_START       equ 6                   ; startScene (C = sala)
 OVC_ROOM        equ 9                   ; load_room_state (C = sala, B = 1: con cajas)
 OVC_SENTADD     equ 12                  ; doSentence desde fuera
 OVC_MOVECAM     equ 15                  ; moveCamera (fase 5b)
+OVC_SLOAD       equ 18                  ; fase 9: guardar / cargar (C = el byte a del opcode saveLoadGame; ovc9.asm)
+OVC_NAME1       equ 21                  ; fase 9: el nombre de una partida en una cadena (saveLoadVars 2)
 OVD_WALK        equ 0                   ; overlay D
 OVD_ADJUST      equ 3
 OVD_STARTWALK   equ 6
 OVD_CALCMF      equ 9
+OVD_ACTORS      equ 12                  ; fase 8: los actores (ovd_act.asm)
+PROGRAM         equ 1                   ; 1 en el programa de la placa; ovld.asm incluye ovd_act.asm
 OVLA_PG         equ SV+176              ; pagina del bloque 0 fuera de los overlays B, C y D: la ROM (0). vm_core.asm la lee como variable (ld a,(OVLA_PG))
 OVL_DARK        equ 27                  ; (overlay A, fase 8: la linterna; hv_dark es siempre 0 mientras no exista)
 OVL_DKMASK      equ 33
 
                 org $4200
                 include "vm_core.asm"
-                include "mcu.asm"
+                include "../../COMMON/mcu.asm"
                 include "loader.asm"
                 include "hr.asm"
                 include "ui3.asm"       ; fase 7: interfaz, mensajes, cursor, teclado y raton
+                include "ac_vars.inc"   ; fase 8: variables de los actores (ovd_act.asm, overlay D)
 
 ; ---- variables
 sv_sp           equ SV+0
@@ -78,10 +83,10 @@ snd_mt          equ SV+154              ; palabra: music_timer
 snd_tpm         equ SV+156              ; palabra: ticks_per_music_timer (65535 hasta que una cancion fija el tempo)
 snd_ctr         equ SV+158              ; palabra: music_ctr
 snd_acc         equ SV+160              ; palabra: music_acc
-snd_slots       equ SV+162              ; 8 x (id (2), jiffies que le quedan (2)): los sonidos que suenan (modo "timed" del modelo; 0 jiffies = libre)
-NSND            equ 8
 DBG_START       equ SV+194              ; palabra de depuracion: numero de script a arrancar (la escribe el usuario desde el emulador)
 DBG_ROOM        equ SV+196              ; palabra de depuracion: sala a cargar
+DBG_SND         equ SV+198              ; palabra de depuracion (fase 8): un sonido sin pasar por un script; el byte alto es la operacion (1 empezar, 2 parar, 3 parar todo) y el bajo el sonido
+DBG_SAVE        equ SV+200              ; palabra de depuracion (fase 9): guardar / cargar sin pasar por un script; el byte alto es la operacion (1 guardar, 2 cargar) y el bajo la ranura (SAVEnn.SAV)
 
 ; ---------------------------------------------------------------------
 ;  Arranque
@@ -101,6 +106,7 @@ scumm_main:     di
                 ld l,a
                 ld (DBG_START),hl
                 ld (DBG_ROOM),hl
+                ld (DBG_SAVE),hl
                 ld a,CMD_FULLPAGING
                 call mcu_send
                 ld b,6                  ; bloques 6 y 7 a sus paginas ($C000 son los atributos de video)
@@ -127,7 +133,11 @@ scumm_main:     di
                 call vm_init
                 ld hl,ev_handler
                 ld (EVVEC),hl
+                ld hl,prog_host         ; fase 9: drawBox
+                ld (HOSTVEC),hl
+                call ov_clear
                 call snd_init
+                call aq_init
                 call ov_load_all
                 jr nc,sm_ov_ok
                 ld a,1
@@ -197,14 +207,55 @@ ml_nd:          ld hl,(DBG_ROOM)
                 ld hl,0
                 ld (DBG_ROOM),hl
                 call vm_load_room
-ml_nr:          call protection_hook
+ml_nr:          ld hl,(DBG_SND)
+                ld a,h
+                or a
+                jr z,ml_ns
+                ld b,a                  ; B = operacion
+                ld h,0
+                ld (EVARGS),hl          ; el sonido, como lo deja el nucleo
+                ld hl,0
+                ld (DBG_SND),hl
+                ld a,b
+                cp 1
+                jr nz,ml_s2
+                call snd_start
+                jr ml_ns
+ml_s2:          cp 2
+                jr nz,ml_s3
+                call snd_stop
+                jr ml_ns
+ml_s3:          call snd_stopall
+ml_ns:          ld hl,(DBG_SAVE)        ; fase 9: guardar (1) o cargar (2) la ranura entre dos fotogramas (el arnes lo prueba asi; el juego usa el opcode saveLoadGame)
+                ld a,h
+                or a
+                jr z,ml_nv
+                ld b,a
+                ld a,l
+                and $1F
+                ld c,a
+                ld hl,0
+                ld (DBG_SAVE),hl
+                ld a,b
+                cp 1
+                ld a,$80
+                jr z,ml_sv
+                ld a,$40
+ml_sv:          or c
+                ld c,a
+                ld hl,OVC_SLOAD
+                call call_ovc
+ml_nv:          call protection_hook
 ml_vm:          call in_poll            ; fase 7: el suceso de entrada del fotograma (INEV)
+                call pan_update         ; fase 9: la ventana movil sigue al cursor
                 call vm_frame
 frame_done:     ld a,(ERR)
                 or a
                 jr nz,sm_err
                 call cam_update
                 call gd_update
+                ld hl,OVD_ACTORS        ; fase 8: los sprites de los actores (despues de la camara y de los objetos: usan la camara del hardware)
+                call call_ovd
                 call ui_frame           ; fase 7: verbos, mensajes y cursor
                 call hr_end             ; si el motor de scroll tiene una orden, se cierra ahora (hr.asm)
                 jp main_loop
@@ -217,6 +268,12 @@ sc_quit:        call dp_close           ; el DATA.BIN se cierra
                 ld a,CMD_STOPVGM        ; el sonido que suene se para
                 call mcu_send
                 call sc_hide_sprites
+                xor a                   ; fase 8: sin sprites extra y la hoja en su bloque de siempre
+                ld (2131),a
+                ld a,2
+                ld (2129),a
+                xor a                   ; paleta de 16 desactivada otra vez
+                ld (2067),a
                 ld b,0                  ; el bloque 0 vuelve a la ROM (la usa SLOW_FAST)
                 xor a
                 call sc_map
@@ -290,7 +347,12 @@ restart:        ld sp,STACK             ; el juego empieza de nuevo (SHIFT + R):
                 call vm_init
                 ld hl,ev_handler
                 ld (EVVEC),hl
+                ld hl,prog_host
+                ld (HOSTVEC),hl
+                call ov_clear
                 call snd_init
+                call aq_init
+                call sd_stopvgm         ; el sonido del juego anterior
                 xor a
                 ld (gf_have),a
                 ld (in92),a
@@ -437,6 +499,8 @@ ev_handler:     push af
                 jr z,evh_text
                 cp EV_VERB
                 jr z,evh_verb
+                cp EV_PALETTE
+                jr z,evh_pal
                 cp EV_ROOM_LOAD
                 jr z,evh_room
                 cp EV_SOUND_START
@@ -450,7 +514,15 @@ ev_handler:     push af
                 cp EV_OBJSTATE
                 jr z,evh_obj
                 cp EV_DRAWOBJ
-                jr nz,evh_end
+                jr z,evh_draw
+                jr evh_end
+evh_draw:       ld hl,(EVARGS)          ; fase 9: drawObject: el objeto pasa a lo mas alto de lo que se dibuja (el orden de las llamadas, como la cola de ScummVM)
+                ld b,h
+                ld c,l
+                call obj_index
+                jr nz,evh_obj
+                dec a
+                call ov_zpush
 evh_obj:        ld a,1                  ; cambia el estado de un objeto: la sala se vuelve a componer (una vez por fotograma, gd_update)
                 ld (gd_pending),a
                 jr evh_end
@@ -459,17 +531,18 @@ evh_text:       call ui_text_ev
 evh_verb:       ld a,1
                 ld (ui_dirty),a
                 jr evh_end
-evh_room:       call gf_load_room
+evh_pal:        call hr_pal_apply       ; fase 8: roomOps 2 y 4
+                jr evh_end
+evh_room:       call ov_clear           ; fase 9: el texto suelto y las cajas de la sala anterior
+                call gf_load_room
+                ld a,2                  ; los actores siguen apagados dos fotogramas: la camara del hardware aun va a su sitio
+                ld (aq_hold),a
                 jr evh_end
 evh_sstart:     call snd_start
                 jr evh_end
 evh_sstop:      call snd_stop
                 jr evh_end
-evh_sall:       ld hl,snd_slots
-                ld de,snd_slots+1
-                ld bc,NSND*4-1
-                ld (hl),0
-                ldir
+evh_sall:       call snd_stopall
                 jr evh_end
 evh_sq:         call snd_query
 evh_end:        pop iy
@@ -481,155 +554,26 @@ evh_end:        pop iy
                 ret
 
 ; ---------------------------------------------------------------------
-;  Sonido simulado (modo "timed" de vmgame3.py): cada sonido dura 60 jiffies, 3600 si es una cancion (SNDF bit 3), y VAR_MUSIC_TIMER avanza como Player_V2Base.
-;  La fase 8 lo sustituye por el reproductor real (snd.asm). Maximo NSND sonidos a la vez (si no hay hueco, el nuevo no suena).
+;  Sonido: snd3.asm (fase 8)
 ; ---------------------------------------------------------------------
-snd_init:       ld hl,snd_slots
-                ld de,snd_slots+1
-                ld bc,NSND*4-1
+; fase 8: a 0 las variables de los actores (lista, cache de firma, contadores de poses)
+aq_init:        ld hl,ACV
+                ld de,ACV+1
+                ld bc,AC_ZERO-1
                 ld (hl),0
                 ldir
-                ld hl,0
-                ld (snd_mt),hl
-                ld (snd_ctr),hl
-                ld (snd_acc),hl
-                dec hl
-                ld (snd_tpm),hl         ; 65535
-                ret
-
-; IX = ranura del sonido EVARGS+0 (si suena: Z), o NZ si no suena
-snd_find:       ld bc,(EVARGS)
-                ld ix,snd_slots
-                ld d,NSND
-sf_l:           ld a,(ix+0)
-                cp c
-                jr nz,sf_n
-                ld a,(ix+1)
-                cp b
-                jr nz,sf_n
-                ld a,(ix+2)
-                or (ix+3)
-                jr z,sf_n               ; 0 jiffies: libre
-                xor a                   ; Z
-                ret
-sf_n:           inc ix
-                inc ix
-                inc ix
-                inc ix
-                dec d
-                jr nz,sf_l
-                or 1                    ; NZ
-                ret
-
-snd_start:      call snd_find
-                jr z,ss_have
-                ld ix,snd_slots         ; un hueco: jiffies = 0
-                ld d,NSND
-ss_f:           ld a,(ix+2)
-                or (ix+3)
-                jr z,ss_have
-                inc ix
-                inc ix
-                inc ix
-                inc ix
-                dec d
-                jr nz,ss_f
-                ret                     ; sin hueco
-ss_have:        ld bc,(EVARGS)
-                ld (ix+0),c
-                ld (ix+1),b
-                ld de,60                ; efecto
-                ld a,b
-                or a
-                jr nz,ss_fx             ; (id > 255: no esta en la tabla)
-                ld hl,SNDF
-                ld e,c
-                ld d,0
-                add hl,de
-                ld a,(hl)
-                ld de,60
-                bit 3,a
-                jr z,ss_fx
-                ld de,3600              ; cancion: music_timer a 0 y tempo de 125 ticks por unidad
-                ld hl,0
-                ld (snd_mt),hl
-                ld hl,125
-                ld (snd_tpm),hl
-ss_fx:          ld (ix+2),e
-                ld (ix+3),d
-                ret
-
-snd_stop:       call snd_find
-                ret nz
+                ld hl,AC2V              ; fase 8: las variables de los sprites extra
+                ld de,AC2V+1
+                ld bc,15
+                ld (hl),0
+                ldir
                 xor a
-                ld (ix+2),a
-                ld (ix+3),a
+                ld (2129),a             ; las hojas (y las entradas de los sprites extra) en el bloque 0 de la sombra: $0000-$07DF
+                ld (2131),a
                 ret
 
-snd_query:      call snd_find           ; HRES = 1 si suena
-                ld hl,0
-                jr nz,sq_set
-                inc hl
-sq_set:         ld (HRES),hl
-                ret
-
-; Sound::updateMusicTimer: una vez por fotograma (desde vm_frame, antes de runAllScripts), con el delta sin recortar (DELTA)
-snd_tick:       ld a,(DELTA)
-                ld c,a
-                ld hl,(snd_acc)
-                ld de,236
-                or a
-                jr z,st_w
-st_mul:         add hl,de               ; music_acc += delta * 236
-                dec c
-                jr nz,st_mul
-                ld (snd_acc),hl
-st_w:           ld hl,(snd_acc)
-                ld de,60
-                or a
-                sbc hl,de
-                jr c,st_t
-                ld (snd_acc),hl         ; while music_acc >= 60: -= 60
-                ld hl,(snd_ctr)
-                ld de,(snd_tpm)
-                or a
-                sbc hl,de               ; music_ctr >= ticks_per_music_timer ?
-                jr c,st_inc
-                ld hl,0
-                ld (snd_ctr),hl
-                ld hl,(snd_mt)
-                inc hl
-                ld (snd_mt),hl
-                jr st_w
-st_inc:         ld hl,(snd_ctr)
-                inc hl
-                ld (snd_ctr),hl
-                jr st_w
-st_t:           ld hl,(snd_mt)
-                ld (VAR_MUSIC_TIMER),hl
-                ld a,(DELTA)            ; a los sonidos que suenan se les quitan los jiffies
-                ld e,a
-                ld d,0
-                ld ix,snd_slots
-                ld b,NSND
-st_s:           ld l,(ix+2)
-                ld h,(ix+3)
-                ld a,h
-                or l
-                jr z,st_nx              ; libre
-                or a
-                sbc hl,de
-                jr z,st_gone
-                jr nc,st_keep
-st_gone:        ld hl,0
-st_keep:        ld (ix+2),l
-                ld (ix+3),h
-st_nx:          inc ix
-                inc ix
-                inc ix
-                inc ix
-                djnz st_s
-                ret
+                include "snd3.asm"
+                include "txtlayer.asm"  ; fase 9: texto suelto y cajas encima de la sala, y la ventana movil
 
 ; ---------------------------------------------------------------------
 ;  Camara: la posicion logica (gf_cam, gf_fine) sale de CAMCUR (x del centro de la pantalla; v3: la izquierda es cur - 160), acotada a la sala. El hardware la sigue
@@ -652,13 +596,33 @@ cu_pos:         ex de,hl                ; DE = izquierda en pixeles
 cu_mx:          add hl,hl
                 add hl,hl
                 add hl,hl
+                ld (cu_max),hl
                 push hl
                 or a
                 sbc hl,de               ; maximo - izquierda
                 pop hl
                 jr nc,cu_ok
                 ex de,hl                ; DE = maximo
-cu_ok:          ld a,e
+cu_ok:          ld (ov_left),de         ; fase 9: el borde izquierdo de SCUMM (sin la ventana movil)
+                ld a,(pan_on)
+                or a
+                jr z,cu_np
+                ld hl,64                ; la ventana corrida 64 pixeles (acotada al maximo)
+                add hl,de
+                ex de,hl
+                ld hl,(cu_max)
+                or a
+                sbc hl,de
+                jr nc,cu_np
+                ld de,(cu_max)
+cu_np:          ld hl,(ov_left)
+                ex de,hl
+                push hl                 ; la izquierda con la ventana
+                or a
+                sbc hl,de               ; menos la de SCUMM: lo que esta corrida
+                ld (pan_px),hl
+                pop de
+                ld a,e
                 and 7
                 ld (gf_fine),a
                 srl d
