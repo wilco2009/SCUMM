@@ -55,6 +55,8 @@ ov_cx           equ SV+235              ; palabra: x del primer pixel de la colu
 ov_lo           equ SV+237
 ov_hi           equ SV+238
 ov_msk          equ SV+239
+ov_dc0          equ SV+240              ; columnas sucias de la capa: la primera ($FF: ninguna) y la ultima
+ov_dc1          equ SV+241
 ov_rr2          equ SV+230              ; el ultimo texto que se sustituyo (por turnos)
 ov_rr           equ SV+229              ; la ultima caja que se sustituyo (por turnos)
 
@@ -69,7 +71,10 @@ ov_clear:       ld hl,OV_TXT
                 ld bc,OV_NB*8-1
                 ld (hl),0
                 ldir
+                ld a,$FF
+                ld (ov_dc0),a
                 xor a
+                ld (ov_dc1),a
                 ld (pan_on),a
                 ld (OV_ZN),a
                 ld hl,0
@@ -174,10 +179,39 @@ oz_n:           pop hl
                 djnz oz_l
                 ret
 
-; la sala se vuelve a componer entera
-ov_redraw:      ld a,1
+; columnas sucias (ov_dc0 .. ov_dc1): A = la primera, B = la ultima. Las recompone hr_objupd (ov_merge) en el siguiente fotograma
+ov_mark:        ld hl,ov_dc0
+                cp (hl)
+                jr nc,omk_a
+                ld (hl),a
+omk_a:          ld a,b
+                ld hl,ov_dc1
+                cp (hl)
+                jr c,omk_b
+                ld (hl),a
+omk_b:          ld a,1
                 ld (gd_pending),a
-                ld (gd_full),a
+                ret
+
+; hr_objupd: las columnas sucias de la capa pasan a las que recompone (hv_c0 .. hv_c1) y se borran
+ov_merge:       ld a,(ov_dc0)
+                cp $FF
+                ret z
+                ld hl,hv_c0
+                cp (hl)
+                jr nc,omg_a
+                ld (hl),a
+omg_a:          ld a,(ov_dc1)
+                ld hl,hv_c1
+                cp (hl)
+                jr c,omg_b
+                ld (hl),a
+omg_b:          ld a,1
+                ld (hv_ch),a
+                ld a,$FF
+                ld (ov_dc0),a
+                xor a
+                ld (ov_dc1),a
                 ret
 
 ; ---------------------------------------------------------------------
@@ -198,22 +232,20 @@ ota_ok:         ld (ov_tl),a
                 add hl,de
                 ld a,(EVARGS+8)
                 and 1
-                jr z,ota_lf
-                ld a,(ov_tl)            ; centrado: x - 3 * longitud
-                ld e,a
+                jr z,ota_nc
+                ld a,(ov_tl)            ; centrado: x - 4 * longitud
                 add a,a
-                add a,e
+                add a,a
                 ld e,a
                 ld d,0
                 or a
                 sbc hl,de
-                jr ota_nc
-ota_lf:         ld de,7                 ; a la izquierda: empieza en una celda de 8 pixeles (x redondeada hacia arriba): una celda solo lleva dos colores y el texto
-                add hl,de               ; no puede compartirla con el borde de la cuadricula de la lista (x = 8), que se perdia
+ota_nc:         ld de,4                 ; el texto empieza en la celda de 8 pixeles mas cercana: cada caracter ocupa una celda (glifo de 6 pixeles y 2 de hueco, como los 8 del
+                add hl,de               ; original) y no comparte celda con el borde de la cuadricula de la lista (x = 8), que se perdia
                 ld a,l
                 and $F8
                 ld l,a
-ota_nc:         ld (ov_tx),hl
+                ld (ov_tx),hl
                 ld hl,(EVARGS+4)
                 ld a,h
                 or a
@@ -275,7 +307,17 @@ ota_put:        ld a,(ov_tl)
                 ld c,a
                 ld b,0
                 ldir
-                jp ov_redraw
+                ld hl,(ov_tx)           ; sucias: sus columnas
+                call ov_col
+                ld c,a
+                ld a,(ov_tl)            ; ultima columna: (x + 8 * longitud - 1) / 8 = x / 8 + longitud - 1
+                ld b,a
+                ld a,c
+                add a,b
+                dec a
+                ld b,a
+                ld a,c
+                jp ov_mark
 
 ; ---------------------------------------------------------------------
 ;  Caja (drawBox): ARGS = [x, y, x2, y2, color] (palabras; x2 e y2 incluidos)
@@ -353,10 +395,9 @@ obb_t:          ld a,(ix+OVT_LEN)
                 pop hl
                 jr c,obb_tn             ; x < x0
                 ld a,(ix+OVT_LEN)
-                ld c,a
                 add a,a
-                add a,c
-                add a,a                 ; 6 * longitud
+                add a,a
+                add a,a                 ; 8 * longitud
                 ld e,a
                 ld d,0
                 add hl,de
@@ -453,7 +494,15 @@ obb_set:        ld (iy+OVB_USED),1
                 ld (iy+OVB_Y1),a
                 ld a,(ov_ink)
                 ld (iy+OVB_C),a
-                jp ov_redraw
+                ld hl,(ov_bx0)
+                call ov_col
+                ld c,a
+                ld hl,(ov_bx1)
+                dec hl
+                call ov_col
+                ld b,a
+                ld a,c
+                jp ov_mark
 
 ; HL = x en pixeles (con signo) -> A = su columna (x / 8; 0 si es negativo, 255 como mucho)
 ov_col:         bit 7,h
@@ -661,90 +710,27 @@ ov_ul:          defb 0,0,0,0,0,0,0,$3F  ; subrayado: la ultima linea del glifo d
 
 ; IX = texto; ov_xx = columna. Pinta en HR_COLBUF las 8 lineas del texto que caen en esa columna
 ov_text_col:    ld l,(ix+OVT_X)
-                ld h,(ix+OVT_X+1)       ; HL = x del texto
-                push hl
+                ld h,(ix+OVT_X+1)
+                srl h
+                rr l
+                srl h
+                rr l
+                srl h
+                rr l                    ; columna del primer caracter
                 ld a,(ov_xx)
-                ld l,a
-                ld h,0
-                add hl,hl
-                add hl,hl
-                add hl,hl               ; HL = X0 de la columna
-                pop de                  ; DE = x del texto
-                push hl
-                or a
-                sbc hl,de               ; HL = rel = X0 - x (con signo)
-                ex (sp),hl              ; (sp) = rel; HL = X0
-                ld de,8
-                add hl,de               ; X0 + 8
-                ld e,(ix+OVT_X)
-                ld d,(ix+OVT_X+1)
-                or a
-                sbc hl,de               ; X0 + 8 - x
-                jp z,otc_no
-                jp c,otc_no             ; la columna acaba antes de que empiece el texto
-                pop hl                  ; rel
-                push hl
-                ld a,(ix+OVT_LEN)
-                ld c,a
-                add a,a
-                add a,c
-                add a,a                 ; 6 * longitud
-                ld e,a
-                ld d,0
-                or a
-                sbc hl,de               ; rel - 6 * longitud
-                bit 7,h
-                jp z,otc_no             ; el texto acaba antes de la columna (rel >= 6 * longitud)
-                pop hl                  ; HL = rel
-                ; primer caracter k0 = rel / 6 (0 si rel < 0) y su desplazamiento d0 = 6 * k0 - rel
-                ld c,0                  ; k0
-                bit 7,h
-                jr nz,otc_k0
-otc_dv:         ld de,6
-                or a
-                sbc hl,de
-                jr c,otc_dr
-                inc c
-                jr otc_dv
-otc_dr:         add hl,de               ; HL = rel mod 6 (0-5); d0 = -(rel mod 6)
-                ld a,l
-                neg
-                jr otc_dd
-otc_k0:         ld a,l
-                neg                     ; d0 = -rel (1-7)
-otc_dd:         ld e,a                  ; E = d0 (con signo)
-                ; hasta 3 caracteres: k0, k0 + 1, k0 + 2 (los que existen y empiezan antes de la columna siguiente: d < 8)
-                ld a,(ix+OVT_LEN)
-                ld b,a
-                ld iy,ov_g
-                ld hl,ov_d
-                xor a
-                ld (ov_n),a
-                ld d,3
-otc_c:          ld a,c
-                cp b
-                jr nc,otc_cd            ; no quedan caracteres
-                ld a,e
-                cp 8
-                jr z,otc_cd
-                bit 7,a
-                jr nz,otc_ok
-                cp 8
-                jr nc,otc_cd
-otc_ok:         ld (hl),a               ; desplazamiento
-                inc hl
-                push hl
-                push bc
-                push de
-                ld a,c
-                ld e,a
-                ld d,0
+                sub l
+                ret c                   ; la columna esta antes del texto
+                ld c,a                  ; k = el caracter que cae en esta columna
+                cp (ix+OVT_LEN)
+                ret nc                  ; o despues
                 push ix
                 pop hl
+                ld e,c
+                ld d,0
                 add hl,de
                 ld de,OVT_CH
                 add hl,de
-                ld a,(hl)               ; el caracter
+                ld a,(hl)
                 cp '_'
                 ld hl,ov_ul
                 jr z,otc_gl             ; el subrayado (el cursor del dialogo de guardar) no esta en la fuente
@@ -757,23 +743,11 @@ otc_ok:         ld (hl),a               ; desplazamiento
                 add hl,hl
                 ld de,TILES
                 add hl,de
-otc_gl:
-                ld (iy+0),l
-                ld (iy+1),h
-                inc iy
-                inc iy
-                pop de
-                pop bc
-                pop hl
-                ld a,(ov_n)
+otc_gl:         ld (ov_g),hl
+                xor a
+                ld (ov_d),a             ; sin desplazamiento: el caracter es la celda
                 inc a
                 ld (ov_n),a
-                inc c
-                ld a,e
-                add a,6
-                ld e,a
-                dec d
-                jr nz,otc_c
 otc_cd:         ld a,(ov_n)
                 or a
                 ret z

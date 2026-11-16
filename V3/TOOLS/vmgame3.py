@@ -1475,6 +1475,10 @@ class GameMixin:
             buf = self.convert_message_to_string(raw)
             self.ev(EV_TEXT, [1, s['xpos'], s['ypos'], s['color'],
                               (1 if s['center'] else 0) | (2 if s['overhead'] else 0), str_value(self._strip0(buf))])
+            # ScummVM (drawString): despues de pintar, xpos = el final del texto, y el siguiente print sin `at` sigue desde ahi (el dialogo de guardar de Indy3
+            # pone el cursor "_" asi, detras del nombre). 8 pixeles por byte del texto convertido; centrado: el texto se extiende la mitad hacia cada lado
+            n = len(self._strip0(buf))
+            s['xpos'] = s16(s['xpos'] + (4 * n if s['center'] else 8 * n))
         # slots 2 y 3: mensajes de depuracion y cuadros de dialogo: no hay nada en el juego real
 
     # ------------------------------------------------------------------------------------------ camara

@@ -959,7 +959,8 @@ hou_a:          ld a,c
 hou_n:          ld hl,hv_i
                 inc (hl)
                 jr hou_l
-hou_cmp:        ld a,(hv_ch)
+hou_cmp:        call ov_merge           ; fase 9: las columnas que ha tocado la capa de texto y cajas (txtlayer.asm)
+                ld a,(hv_ch)
                 or a
                 jr z,hou_cp
                 xor a
