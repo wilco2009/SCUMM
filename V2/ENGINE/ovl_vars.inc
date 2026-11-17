@@ -94,3 +94,14 @@ ACTNAME         equ NAMEOV+NNAMES*NM_SIZE ; nombre de cada actor (actorOps 3): p
 MS_BUF          equ $8831               ; raton (mouse.asm): lectura del puerto de la FPGA (8 bytes: x, y, botones, rueda, rawx, rawy, seq, estado)
 MS_LX           equ $8839               ; ultima posicion leida (el teclado puede mover el cursor mientras el raton esta quieto)
 MS_LY           equ $883A
+ac_wb           equ $DC80           ; palabra: ventana de campos del sprite que se escribe (2101 si es normal; la entrada si es extra)
+ac_xd           equ SPRX+30           ; XD_MARK: se han usado sprites extra, que pisan las variables del sistema del ZX81 ($4000-$41FF); al salir, reset
+XD_MARK         equ $5A
+SPRX            equ $4000               ; entradas de los sprites extra (POKE 2129 = 2 -> bloque $4000; entrada j = SPRX + 32 * j)
+AC_MAX          equ 78                  ; ranuras de sprite de los personajes: 63 normales (el 63 es el cursor) y 15 extra (entradas 0 y 2-15)
+AC_OVF          equ $9490           ; NACTORS bytes: el fotograma de overlay de cada actor (0: ninguno): el ultimo que no es caminar, parado, inicio ni hablar
+AC_LF           equ $94B0           ; NACTORS bytes: el fotograma (ix+10) de cada actor la ultima vez que se miro
+AC_LC           equ $94D0           ; NACTORS bytes: su traje la ultima vez
+; ac_wb: $DC80, en el bloque de atributos (sitio libre tras HR_LATT = $DC00 + 128; hr_clear lo pone a cero en cada sala, no importa). AC_OVF, AC_LF y AC_LC:
+; entre INVSL y BACKBUF ($9484-$94FF, libre): van dentro de lo que guarda save.asm (SV_LEN_I) y no los borra hr_clear. ac_xd: el byte +30 de la entrada 0 de los
+; sprites extra (la FPGA no lo mira; no lo toca hr_clear)

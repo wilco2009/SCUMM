@@ -1,5 +1,6 @@
 NOCACHE        equ 0                   ; 1: sin cache (para comparar sprites con y sin ella)
-actors_update:  ld a,(gf_have)
+actors_update:  call ac_track
+                ld a,(gf_have)
                 or a
                 ret z
                 call gf_campx
@@ -15,7 +16,8 @@ actors_update:  ld a,(gf_have)
                 dec a
                 ld (ac_hold),a
                 jr au_hide
-au_run:         xor a                   ; los personajes se dibujan de arriba a abajo (como processActors de ScummVM): el sprite de mas indice va delante
+au_run:         xor a                   ; la lista AL esta ordenada de arriba a abajo (como processActors de ScummVM) y se recorre al reves: el primero que se
+                                        ; dibuja (el de mas abajo, que va delante) recibe las ranuras de mas prioridad (ver ac_slot)
                 ld (ac_cnt),a
                 ld b,1
 ao_l:           ld a,b
@@ -68,7 +70,11 @@ ao_next:        inc b
                 or a
                 jr z,au_hide
                 ld b,a
-                ld hl,AL
+                dec a
+                add a,a
+                add a,AL mod 256
+                ld l,a
+                ld h,AL / 256
 ad_l:           push bc
                 push hl
                 inc hl
@@ -77,8 +83,8 @@ ad_l:           push bc
                 call actor_addr
                 call ac_cdraw
                 pop hl
-                inc hl
-                inc hl
+                dec hl
+                dec hl
                 pop bc
                 djnz ad_l
 au_hide:        ld a,(ac_n)             ; los sprites que sobran del fotograma anterior se apagan
@@ -89,13 +95,115 @@ au_hide:        ld a,(ac_n)             ; los sprites que sobran del fotograma a
                 ld (ac_used),a
 ac_off:         ld a,b
                 cp c
-                ret nc
-                ld (2100),a
+                jr nc,ac_ext
+                push bc
+                ld a,b
+                call ac_slot
                 xor a
-                ld (2101),a
+                ld (hl),a               ; activo = 0 (normal) y Y = 0 (extra: sin bit de activo, Y = 0 no se ve)
+                inc hl
+                inc hl
+                inc hl
+                ld (hl),a
+                pop bc
                 inc b
                 jr ac_off
+ac_ext:         ld a,(ac_n)             ; POKE 2131: los extra en uso (la entrada 1 va aparte: ver ac_slot)
+                sub 63
+                jr nc,ace_1
+                xor a
+                jr ace_2
+ace_1:          cp 2
+                jr c,ace_2
+                inc a
+ace_2:          ld (2131),a
+                or a
+                ret z
+                ld a,XD_MARK
+                ld (ac_xd),a
+                ret
 
+; Las ranuras de sprite, de mayor a menor prioridad: 0-62 son los sprites 62-0 de la placa (el 63 es el cursor); 63-77 son los extra (POKE 2131), cuya
+; entrada de 32 bytes esta en SPRX + 32 * j (bloque 2 de POKE 2129): menos prioridad que todos los normales y, entre ellos, gana el numero mas bajo.
+; La entrada 1 ($4020-$403F) lleva CDFLAG ($403B) del ZX81: no se usa (la ranura 64 es la entrada 2).
+; A = ranura -> HL = ventana de campos (la de POKE 2101 si es un normal, que queda seleccionado; la entrada si es un extra)
+ac_slot:        cp 63
+                jr nc,acs_x
+                ld c,a
+                ld a,62
+                sub c
+                ld (2100),a
+                ld hl,2101
+                ret
+acs_x:          sub 63
+                cp 1
+                jr c,acs_0
+                inc a
+acs_0:          ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld a,h
+                add a,SPRX / 256
+                ld h,a
+                ret
+
+; DE = (ac_wb) + A: la direccion de un campo de la ventana del sprite que se escribe
+ac_wbo:         ld de,(ac_wb)
+                add a,e
+                ld e,a
+                ret nc
+                inc d
+                ret
+
+
+; Fotogramas de overlay: animateActor con un fotograma que no es caminar (0), parado (1), inicio (2) ni hablar (4, 5) deja puestos los miembros que
+; nombra encima de la pose de reposo (ScummVM: cada animacion solo cambia sus miembros). El motor solo guarda el ultimo fotograma (ix+10); aqui se
+; recuerda el ultimo de overlay: el 3 y los de 6 en adelante lo ponen; el inicio (2), caminar (0) y cambiar de traje lo quitan.
+ac_track:       ld b,1
+act_l:          ld a,b
+                call actor_addr
+                ld e,b
+                ld d,0
+                ld hl,AC_LC
+                add hl,de
+                ld a,(ix+5)
+                cp (hl)
+                jr z,act_c
+                ld (hl),a               ; traje nuevo: sin overlay y se vuelve a mirar el fotograma
+                ld hl,AC_OVF
+                add hl,de
+                ld (hl),0
+                ld hl,AC_LF
+                add hl,de
+                ld (hl),$FF
+act_c:          ld hl,AC_LF
+                add hl,de
+                ld a,(ix+10)
+                cp (hl)
+                jr z,act_n
+                ld (hl),a
+                ld hl,AC_OVF
+                add hl,de
+                or a
+                jr z,act_0              ; caminar: quita el overlay
+                cp INIT_FRAME
+                jr z,act_0              ; inicio: tambien
+                cp 3
+                jr z,act_s
+                cp 6
+                jr c,act_n              ; parado, hablar: no cambian el overlay
+act_s:          ld (hl),a
+                jr act_n
+act_0:          ld (hl),0
+act_n:          inc b
+                ld a,b
+                cp NACTORS
+                jr c,act_l
+                ret
 
 ; ---------------------------------------------------------------------------------------------------------------------------------
 ;  Cache de sprites: si un actor tiene la misma firma (posicion, traje, pose, direccion, camara, quien habla) y los mismos sprites que en el
@@ -223,6 +331,15 @@ ac_hash:        ld hl,(ac_cam)
                 call ach
                 ld a,(VAR_TALK_ACTOR)
                 call ach
+                ld a,(ac_id)
+                ld e,a
+                ld d,0
+                push hl
+                ld hl,AC_OVF
+                add hl,de
+                ld a,(hl)
+                pop hl
+                call ach
                 ex de,hl
                 ret
 ach:            ld d,h                  ; HL = HL * 31 + A
@@ -266,7 +383,30 @@ aod_dn:         ld a,2
                 ret
 
 ; IX = actor: sus sprites segun los fotogramas de su traje (TOOLS/costume2.py)
-ac_draw:        xor a                   ; mascara de profundidad: solo si la sala la tiene y la caja del personaje tiene mascara
+ac_bptr:        ld a,(ac_id)            ; HL = la entrada del actor en ACB (input.asm: el rectangulo que dibuja, para actorFromPos); carry si no tiene
+                cp ACB_N+1
+                ccf
+                ret c
+                dec a
+                add a,a
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,ACB
+                add hl,de
+                ret
+
+ac_draw:        call ac_bptr            ; sin rectangulo hasta que se sepa cual es
+                xor a
+                jr c,acd_nb0
+                ld (hl),a
+                inc hl
+                ld (hl),a
+                inc hl
+                ld (hl),a
+                inc hl
+                ld (hl),a
+acd_nb0:        xor a                   ; mascara de profundidad: solo si la sala la tiene y la caja del personaje tiene mascara
                 ld (ac_mk),a
                 ld a,(SS_REAL)          ; los datos de la sala cargada (la real si la actual es pseudo)
                 ld l,a
@@ -324,7 +464,42 @@ acd_nomk:       ld a,(ix+5)             ; traje
                 ld h,(ix+7)
                 call ac_olddir
                 ld c,a                  ; C = direccion
-                ld a,(HAVEMSG)          ; hablando: la animacion 4 + direccion (la boca), si el traje la tiene
+                ld a,(ac_id)            ; un fotograma de overlay puesto y el actor parado: su pose, si el traje la tiene (animacion 4 * fotograma + direccion)
+                ld e,a
+                ld d,0
+                ld hl,AC_OVF
+                add hl,de
+                ld a,(hl)
+                or a
+                jr z,acd_noov
+                ld b,a
+                ld a,(ix+10)
+                or a
+                jr z,acd_noov           ; caminando no
+                ld a,b
+                add a,a
+                add a,a
+                add a,c
+                ld b,a
+                ld hl,(ac_blob)
+                cp (hl)
+                jr nc,acd_noov
+                inc hl
+                inc hl
+                inc hl
+                ld e,b
+                ld d,0
+                add hl,de
+                add hl,de
+                ld a,(hl)
+                inc hl
+                or (hl)
+                jr z,acd_noov
+                ld c,b
+                xor a
+                ld (ix+45),a
+                jr acd_anim
+acd_noov:       ld a,(HAVEMSG)          ; hablando: la animacion 4 + direccion (la boca), si el traje la tiene
                 or a
                 jr z,acd_nt
                 ld a,(ac_id)
@@ -443,10 +618,36 @@ acd_dx:         add hl,de
                 dec d
 acd_dy:         add hl,de
                 ld (ac_y),hl
+                call ac_bptr            ; su rectangulo: izquierda, derecha, arriba y abajo respecto de x * 8 e y * 2 (con la elevacion), con signo
+                jr c,acd_nb
+                ld a,(iy+0)
+                ld (hl),a
+                inc hl
+                ld a,(iy+2)
+                add a,a
+                add a,a
+                add a,a
+                add a,(iy+0)
+                ld (hl),a
+                inc hl
+                ld a,(ix+17)
+                add a,a
+                neg
+                add a,(iy+1)
+                ld d,a
+                ld (hl),a
+                inc hl
+                ld a,(iy+3)
+                add a,a
+                add a,a
+                add a,a
+                add a,d
+                ld (hl),a
+acd_nb:
                 ld b,(iy+4)
-                ld a,(ac_n)             ; si no caben todos sus sprites (63 como mucho; el 63 es el cursor) no se dibuja a medias
+                ld a,(ac_n)             ; si no caben todos sus sprites (AC_MAX ranuras) no se dibuja a medias
                 add a,b
-                cp 64
+                cp AC_MAX+1
                 ret nc
                 ld a,(ac_mk)
                 or a
@@ -532,21 +733,31 @@ acd_cell:       ld a,b
                 ld a,l
                 ld (ac_cy),a
                 ld a,(ac_n)
-                cp 63                   ; el 63 es el cursor
+                cp AC_MAX
                 jp nc,acd_skip
-                ld (2100),a
+                call ac_slot
+                ld (ac_wb),hl
+                ld a,(ac_n)
                 inc a
                 ld (ac_n),a
-                ld hl,(ac_cx)
-                ld (2102),hl
+                ld (hl),1               ; activo (en un extra no hace nada)
+                inc hl
+                ld de,(ac_cx)
+                ld (hl),e
+                inc hl
+                ld (hl),d               ; X bit 8 (el nibble alto, el color transparente, a 0: formato A)
+                inc hl
                 ld a,(ac_cy)
-                ld (2104),a
-                ld a,1
-                ld (2101),a
+                ld (hl),a
+                ld a,29
+                call ac_wbo
+                xor a
+                ld (de),a               ; pagina 0: formato A
+                ld a,12
+                call ac_wbo             ; forma
                 ld hl,(ac_cp)
                 inc hl
                 inc hl
-                ld de,2113              ; forma
                 ld bc,8
                 ldir
                 ld a,(ac_fl)
@@ -568,14 +779,17 @@ acd_m1:         ld de,ac_mt
 acd_c0:         ld a,(ac_fl)
                 bit 1,a
                 jr z,acd_c1
-                ld a,(hl)               ; color uniforme
-                ld hl,2105
+                ld c,(hl)               ; color uniforme
+                ld a,4
+                call ac_wbo
+                ex de,hl
                 ld b,8
-acd_c2:         ld (hl),a
+acd_c2:         ld (hl),c
                 inc hl
                 djnz acd_c2
                 jp acd_skip
-acd_c1:         ld de,2105
+acd_c1:         ld a,4
+                call ac_wbo
                 ld bc,8
                 ldir
 acd_skip:       ld hl,(ac_nx)

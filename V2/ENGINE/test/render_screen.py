@@ -56,10 +56,21 @@ def main():
                     px.append(L.CHROMA[ink if (shape >> (7 - k)) & 1 else paper])
             for x in range(W):
                 img[r * 8 + y][x] = px[x + off]
-    for i in range(64):
-        on, sx, sy, col, pix, mask = spr[i]
-        if not on:
-            continue
+    # sprites extra (POKE 2131 = M, el byte 9 tras la tabla de la FPGA): entrada j = 32 bytes en $4000 + 32 * j; sin bit de activo (Y = 0: no se ve);
+    # menos prioridad que los 64 normales y, entre ellos, gana el numero mas bajo: se dibujan primero y del ultimo al primero
+    nx = t[8] if len(t) > 8 else 0
+    ext = []
+    for j in range(nx):
+        b = d[65536 + 0x4000 + 32 * j:65536 + 0x4000 + 32 * j + 32]
+        if b[3]:
+            ext.append((1, b[1] | ((b[2] & 1) << 8), b[3], b[4:12], b[12:20], b[20:28]))
+    per_line = [0] * 256
+    for e in ext + [x for x in spr if x[0]]:
+        for y in range(8):
+            if 0 <= e[2] - 32 + y < H and any(e[5]):
+                per_line[e[2] - 32 + y] += 1
+    print('sprites: %d normales, %d extra, maximo por linea %d%s' % (sum(1 for x in spr if x[0]), len(ext), max(per_line), ' (SUPERA 12)' if max(per_line) > 12 else ''))
+    for on, sx, sy, col, pix, mask in list(reversed(ext)) + [x for x in spr if x[0]]:
         for y in range(8):
             for k in range(8):
                 if (mask[y] >> (7 - k)) & 1:

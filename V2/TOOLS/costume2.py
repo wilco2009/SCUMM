@@ -227,21 +227,45 @@ def cells_of(parts, emap):
     return gx, gy, cw, ch, cells
 
 
-def costume_blob(cost, emap, talk=True, two=True, walk=2):
+def overlay_frames(cost):
+    """Fotogramas del traje que el motor puede dejar puestos encima de la pose de reposo (animateActor con un fotograma que no es caminar, parado, inicio
+    ni hablar): el 3 y del 6 en adelante. En ScummVM cada animacion solo cambia los miembros que nombra y los demas siguen como estaban (el pelo y el
+    sombrero del vendedor de la Phone Company son el miembro 7 del fotograma 6, que el script de la sala pone al entrar)."""
+    return [f for f in (3,) + tuple(range(6, cost.num_anim // 4 + 1)) if 4 * f <= cost.num_anim]
+
+
+def overlay_wanted(cost):
+    """Los fotogramas de overlay que son un detalle del personaje (nombran uno o dos miembros y al menos uno se dibuja: el pelo y el sombrero, una cara...)
+    y no una pose entera: sin ellos el personaje sale a medias, asi que el traje se hace mas pequeno (escala menor, menos poses) hasta que quepan."""
+    out = []
+    for f in overlay_frames(cost):
+        n = [len([v for v in cost.anim_limbs(4 * f + dr).values() if v is not None]) for dr in range(4) if 4 * f + dr <= cost.num_anim]
+        if n and max(n) <= 2 and max(n) >= 1:
+            out.append(f)
+    return out
+
+
+def costume_blob(cost, emap, talk=True, two=True, walk=2, ovl=0):
     """Datos de un traje para el Z80. Cabecera: u8 numero de animaciones, u16 offset de la tabla del fondo de celdas y, por animacion, u16 offset de
     su lista (0: no existe). La lista: u8 pasos y, por paso, u16 offset del fotograma. Fotograma: s8 dx, s8 dy, u8 cw, u8 ch, u8 n y n referencias
     (u8 cx | cy << 4, u8 indice en el fondo). El fondo de celdas (comun a todos los fotogramas del traje: una celda repetida se guarda una vez):
     tabla de u16 offsets y, por celda, u8 banderas (bit 0: mascara completa, no se guarda; bit 1: color uniforme, un solo byte), pix[8], [mascara[8]], color (1 u 8 bytes).
-    `walk` = poses de caminar por direccion como mucho (se reparten por igual entre los pasos del original)."""
+    `walk` = poses de caminar por direccion como mucho (se reparten por igual entre los pasos del original).
+    `ovl` = cuantos fotogramas de overlay_frames() se incluyen (los primeros) o la lista de los que se incluyen: la pose de reposo con los miembros de ese fotograma encima; van en el
+    numero de animacion 4 * fotograma + direccion (el motor la usa si el actor tiene ese fotograma puesto y esta parado)."""
     # 0-3 caminar (quieto = la primera pose); 4-7 hablando (cabeza de inicio + quieto + TALK_START = anim 20 + dir; segunda pose con TALK_STOP), si el traje lo tiene
     na = 8 if talk and cost.num_anim >= 20 else min(cost.num_anim + 1, 4)
+    ofr = list(ovl) if isinstance(ovl, (list, tuple)) else overlay_frames(cost)[:ovl]
+    if ofr:
+        na = max(na, 4 * max(ofr) + 4)
     head_len = 3 + 2 * na
     body = bytearray()
     frames = {}
     pool, pool_idx = bytearray(), {}
     pool_off = []
     lists = {}
-    for anim in range(na):
+    rest_key = {}
+    for anim in range(min(na, 8)):
         if anim >= 4:
             if 16 + anim > cost.num_anim:
                 continue
@@ -274,6 +298,8 @@ def costume_blob(cost, emap, talk=True, two=True, walk=2):
                 continue
             gx, gy, cw, ch, cells = fr
             key = (gx, gy, cw, ch, tuple((p, tuple(a), tuple(m), tuple(c)) for p, a, m, c in cells))
+            if anim < 4 and not offs:
+                rest_key[anim] = key
             if key not in frames:
                 frames[key] = len(body)
                 body += struct.pack('<bbBBB', max(-128, min(127, gx)), max(-128, min(127, gy)), cw, ch, len(cells))
@@ -288,6 +314,39 @@ def costume_blob(cost, emap, talk=True, two=True, walk=2):
                     body += bytes([p, pool_idx[rec]])
             offs.append(frames[key])
         lists[anim] = offs
+    for f in ofr:                                      # los fotogramas de overlay: reposo + talk stop + los miembros del fotograma
+        for dr in range(4):
+            anim = 4 * f + dr
+            if anim > cost.num_anim or dr not in lists:
+                continue
+            limbs = dict(cost.merged(dr))
+            if 16 + dr <= cost.num_anim:
+                limbs.update(cost.anim_limbs(16 + dr))
+            limbs.update(cost.anim_limbs(anim))
+            limbs = {k: v for k, v in limbs.items() if v}
+            seq = cost.steps(limbs) if limbs else []
+            if not seq:
+                continue
+            fr = cells_of(cost.render(limbs, seq[0], mirror=MIRROR_OLD_DIR[dr] if dr < 2 else False), emap)
+            if fr is None:
+                continue
+            gx, gy, cw, ch, cells = fr
+            key = (gx, gy, cw, ch, tuple((p, tuple(a), tuple(m), tuple(c)) for p, a, m, c in cells))
+            if key == rest_key.get(dr):                # igual que el reposo: no hace falta (el motor usa el reposo)
+                continue
+            if key not in frames:
+                frames[key] = len(body)
+                body += struct.pack('<bbBBB', max(-128, min(127, gx)), max(-128, min(127, gy)), cw, ch, len(cells))
+                for p, pix, mask, col in cells:
+                    full = all(m == 0xFF for m in mask)
+                    uni = len(set(col)) == 1
+                    rec = bytes([(1 if full else 0) | (2 if uni else 0)]) + bytes(pix) + (b'' if full else bytes(mask)) + (bytes(col[:1]) if uni else bytes(col))
+                    if rec not in pool_idx:
+                        pool_idx[rec] = len(pool_off)
+                        pool_off.append(len(pool))
+                        pool += rec
+                    body += bytes([p, pool_idx[rec]])
+            lists[anim] = [frames[key]]
     assert len(pool_off) <= 256, 'mas de 256 celdas distintas en un traje'
     body_base = head_len
     lst = bytearray()

@@ -22,6 +22,19 @@
                 jp ov_err
 
 ov_init:        call sdx_ini
+                xor a                   ; paleta de 16 de la FPGA (POKE 2063/2064/2066/2067): los 16 colores de Chroma, pero el 6 (amarillo)
+                ld (2063),a             ; es el marron del EGA (170,85,0), que Chroma no tiene y que el EGA de v2 usa en lugar del amarillo
+                ld hl,ov_pal16
+                ld b,16
+ov_pl:          ld a,(hl)
+                ld (2064),a             ; byte bajo {G,B}
+                inc hl
+                ld a,(hl)
+                ld (2066),a             ; byte alto {BRIGHT,R}: escribe la entrada y avanza el puntero
+                inc hl
+                djnz ov_pl
+                ld a,1
+                ld (2067),a             ; paleta de 16 activa
                 ld hl,NAMEOV            ; sin nombres cambiados
                 ld de,NAMEOV+1
                 ld bc,NNAMES*NM_SIZE+NACTORS*3-1
@@ -39,7 +52,24 @@ ov_init:        call sdx_ini
                 ld (cam_dest),hl
                 xor a
                 ld (ac_n),a
+                ld hl,AC_OVF            ; fotogramas de overlay a cero y trajes "ya vistos" a $FF (cualquier traje es nuevo)
+                ld de,AC_OVF+1
+                ld bc,NACTORS-1
+                ld (hl),a
+                ldir
+                ld hl,AC_LC
+                ld de,AC_LC+1
+                ld bc,NACTORS-1
+                ld (hl),$FF
+                ldir
+                xor a
+                ld (2131),a             ; sin sprites extra; la entrada 1 de los extra (SPRX + 32) no se usa: su Y a 0 por si acaso
+                ld (SPRX+35),a
                 ret
+
+; paleta de 16: por color de Chroma {BRIGHT,G,R,B}, byte bajo {G,B} y alto {BRIGHT,R} (densidades 0-15; ver claude/planning/pdm_color.md)
+ov_pal16:       defb $00,$00,$0F,$00,$00,$0F,$0F,$0F,$F0,$00,$FF,$00,$70,$1F,$FF,$0F
+                defb $00,$F0,$0F,$F0,$00,$FF,$0F,$FF,$F0,$F0,$FF,$F0,$F0,$FF,$FF,$FF
 
 ; error fatal: ERROR n A<primer operando> O<opcode> S<script>, y espera una tecla (lo llama sm_err de scumm.asm)
 ov_err:         call sc_hide_sprites
@@ -99,7 +129,7 @@ sme_k:          call sc_wait_key
                 include "snd.asm"
                 include "dark.asm"
                 include "save.asm"
-                include "mouse.asm"
+                include "../../COMMON/mouse.asm"
                 IF $ > $2000
                 defb EL_OVERLAY_NO_CABE_EN_8_KB
                 ENDIF

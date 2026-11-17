@@ -16,7 +16,7 @@ ENTRY_POINT     equ scumm_main
                 include "ovl_entries.inc"
                 include "ovl_vars.inc"          ; la primera instruccion del binario salta aqui: RAND USR 16914
                 include "vm_core.asm"
-                include "mcu.asm"
+                include "../../COMMON/mcu.asm"
                 include "loader.asm"
 
 DIAG            equ 0                   ; 1: letras de progreso (A..) en la fila de abajo, para depurar el arranque
@@ -129,6 +129,7 @@ scumm_main:     di
                 xor a
                 ld (2093),a
                 ld (2090),a
+                ld (hv_top),a           ; el texto empieza abajo (la tecla T lo sube: hrui.asm)
                 IF DEMO = 0
                 call cursor_init
                 call cursor_draw
@@ -270,6 +271,9 @@ sc_quit:        call dp_close           ; el DATA.BIN se cierra
                 ld a,(sv_i)
                 ld i,a
                 call SLOW_FAST
+                ld a,(ac_xd)            ; los sprites extra pisaron las variables del sistema del ZX81: no se puede volver a BASIC
+                cp XD_MARK
+                jp z,0
                 ld sp,(sv_sp)
                 ld bc,0
                 ret
@@ -1282,6 +1286,7 @@ sh1:            ld a,b
                 djnz sh1
                 call sc_clear_owner
                 xor a
+                ld (2131),a             ; sin sprites extra
                 ld (ac_used),a
                 ret
 
@@ -1303,4 +1308,4 @@ ac_sp:          defb 0           ; fin del programa (el resto del codigo esta en
                 org $A000               ; la imagen del overlay se carga en el area del bitmap (aun vacia): $8700-$9AFF son variables
 OVERLAY_IMAGE:  incbin "overlay.bin"
 OVERLAY_END:
-FONT6:          incbin "font6.bin"      ; la fuente de 6 pixeles (EXAMPLES/EXPLORER/specfont6.bin); solo hace falta hasta que init_font la copia a TILES
+FONT6:          incbin "../../COMMON/font6.bin"      ; la fuente de 6 pixeles (EXAMPLES/EXPLORER/specfont6.bin); solo hace falta hasta que init_font la copia a TILES

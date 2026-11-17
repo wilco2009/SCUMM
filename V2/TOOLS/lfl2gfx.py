@@ -28,6 +28,8 @@ EGA = [(0, 0, 0), (0, 0, 170), (0, 170, 0), (0, 170, 170), (170, 0, 0), (170, 0,
 def chroma_rgb(code):
     """Colores de Chroma 0-15: bit3 brillo, bit2 verde, bit1 rojo, bit0 azul (manual, Apendice H).
     SUPUESTO: el brillo se ve como en EGA (170/0 normal, 255/85 brillante). Comprobar en la placa."""
+    if code == 6:       # el motor redefine el 6 con la paleta de 16 de la FPGA (overlay.asm, ov_pal16): marron del EGA en vez de amarillo
+        return (170, 85, 0)
     br = code >> 3
     return tuple((255 if br else 170) if (code >> bit) & 1 else (85 if br else 0) for bit in (1, 2, 0))
 

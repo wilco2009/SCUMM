@@ -6,7 +6,7 @@ GAME="${1:-../../ManiacMansionDOS}"
 SEEDS="${2:-2}"
 Z80SRC="${Z80SRC:-/c/ClaudeCode/Eightyone2/src}"
 TOOLS=../../TOOLS
-B=build
+B="${B:-build}"                                # B=build_zak para correr Zak a la vez que Maniac
 mkdir -p $B
 python -I $TOOLS/gen_vmtables.py > /dev/null || exit 1
 (cd .. && pasmo vm.asm test/$B/vm.bin test/$B/vm.sym) || exit 1

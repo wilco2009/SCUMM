@@ -55,6 +55,7 @@ hv_c0            equ HV+32               ; columnas (minima y maxima) de los obj
 hv_c1            equ HV+33
 hv_ch            equ HV+34
 hv_dark         equ HV+35               ; 1: la sala esta a oscuras (dark.asm): hr_put oscurece los atributos de lo que dibuja
+hv_top          equ HV+36               ; 1: el texto de los mensajes va arriba (filas 0-3, fijas, sin scroll): hr_stride no pinta la sala en ellas
 hv_drawn        equ HV+31               ; 0: la sala aun no se ha dibujado (se dibuja ya en su sitio: el salto de la camara, o gd_update si nadie la mueve)
 
 ; ---------------------------------------------------------------------
@@ -250,7 +251,16 @@ hm_zero:        ld hl,HR_COLBUF
                 ret
 
 ; HL = origen (128 bytes), DE = destino: uno por linea (paso 32)
-hr_stride:      ld c,16
+hr_stride:      ld a,(hv_top)
+                or a
+                ld c,16
+                jr z,hs_g
+                ld a,d                  ; texto arriba: sin las 32 primeras lineas (filas 0-3)
+                add a,4
+                ld d,a
+                ld bc,32
+                add hl,bc
+                ld c,12
 hs_g:           ld b,8
 hs_l:           ld a,(hl)
                 inc hl

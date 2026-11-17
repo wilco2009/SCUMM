@@ -3,14 +3,16 @@
 ;  opcode solo hace lo que ScummVM: a = ranura + 32 * orden: 0 numero de ranuras (100), 1 unidad (3), 2 cargar (3 bien, 5 mal),
 ;  4 guardar (0 bien, 2 mal), 6 comprobar si existe (6 si, 7 no). Los ficheros SAVEnn.SAV van en la carpeta actual (la del juego).
 ;  Un fichero guarda el estado del nucleo ($E000-$FFFF: variables, ranuras de scripts, actores, objetos...), las variables del overlay
-;  ($CD00-$CF8F: interfaz, verbos, nombres, camara) y el inventario, con la cabecera de DATA.BIN (ld_hdr) para reconocer el juego.
+;  ($CD00-$CF8F: interfaz, verbos, nombres, camara) el inventario (y, tras el, los fotogramas de overlay de los actores: AC_OVF..AC_LC), con una cabecera de marcas (programa, scripts, version) para no cargar una partida cuyo formato ya no coincide.
 ;  Al cargar el script en marcha sigue por su ranura restaurada (como ScummVM: updateScriptPtr / resetScriptPointer) y la sala se pinta.
 ; =====================================================================
+                include "savestamp.inc"       ; SAVE_STAMP_LO/HI: lo genera TOOLS/savestamp.py en la compilacion
 CMD_FWRITE      equ 56
 CMD_FCREATE     equ 71
 SV_NAME         equ $9740               ; el nombre del fichero (12 bytes)
-SV_HDR          equ $9750               ; la cabecera: la de DATA.BIN (ld_hdr, 16 bytes) y la direccion de ev_handler (identifica la version del programa)
-SV_TMP          equ $9770               ; cabecera leida (18 bytes)
+SV_HDR          equ $9750               ; la cabecera (SV_HLEN bytes): marca del programa (4, savestamp.inc), marca de los scripts (3, ld_hdr+13, de pack_data.py) y version de DATA.BIN (1, ld_hdr+4)
+SV_HLEN         equ 8
+SV_TMP          equ $9770               ; cabecera leida (SV_HLEN bytes)
 SV_LIVE         equ $9800               ; el estado vivo del interprete mientras se carga: $EB00-$EB3F, los dos primeros bytes de ARGS y los vectores EVVEC / HOSTVEC (73 bytes)
 sv_h            equ $9790               ; variables (el overlay esta en una pagina de solo lectura)
 wr_err          equ $9791
@@ -58,12 +60,16 @@ sln_t:          inc b
                 ret
 sl_tpl:         defb "SAVE00.SAV",0
 
-sl_hdr:         ld hl,ld_hdr
-                ld de,SV_HDR
-                ld bc,16
+sl_hdr:         ld hl,SAVE_STAMP_LO
+                ld (SV_HDR),hl
+                ld hl,SAVE_STAMP_HI
+                ld (SV_HDR+2),hl
+                ld hl,ld_hdr+13
+                ld de,SV_HDR+4
+                ld bc,3
                 ldir
-                ld hl,ev_handler
-                ld (SV_HDR+16),hl
+                ld a,(ld_hdr+4)
+                ld (SV_HDR+7),a
                 ret
 
 sl_test:        call sl_name
@@ -89,7 +95,7 @@ sl_save:        call update_ptr         ; el puntero del script en marcha va a s
                 call sl_hdr
                 ld a,(sv_h)
                 ld hl,SV_HDR
-                ld bc,18
+                ld bc,SV_HLEN
                 call f_write_n
                 ld a,(sv_h)
                 ld hl,$E000
@@ -119,14 +125,14 @@ sl_load:        call sl_name
                 ld hl,5
                 jp z,sl_res
                 ld (sv_h),a
-                call sl_hdr             ; la cabecera tiene que ser la de este DATA.BIN y de este programa
+                call sl_hdr             ; la cabecera tiene que ser de esta disposicion del programa y de estos scripts
                 ld a,(sv_h)
                 ld hl,SV_TMP
-                ld bc,18
+                ld bc,SV_HLEN
                 call f_read_n
                 ld hl,SV_TMP
                 ld de,SV_HDR
-                ld b,18
+                ld b,SV_HLEN
 sll_c:          ld a,(de)
                 cp (hl)
                 jp nz,sll_bad

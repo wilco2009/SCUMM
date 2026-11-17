@@ -32,6 +32,7 @@ static inline uint16_t rd16(int a) { return rd(a) | (rd(a + 1) << 8); }
 
 struct Spr { int on = 0, x = 0, y = 0; uint8_t col[8], pix[8], mask[8]; };
 static Spr spr[64];
+static int xm = 0;
 static int sel = 0, fine = 0, rows[3] = {255, 255, 255}, chroma = 0, sfast = 0, hfile = 0;
 
 // ---- motor de scroll por hardware (puerto $3FEF; ver claude/planning/scroll_hardware.md): modelo en software, sobre la sombra.
@@ -87,6 +88,7 @@ static inline void wr(int a, uint8_t v) {
     else if (a >= 2105 && a <= 2112) spr[sel].col[a - 2105] = v;
     else if (a >= 2113 && a <= 2120) spr[sel].pix[a - 2113] = v;
     else if (a >= 2121 && a <= 2128) spr[sel].mask[a - 2121] = v;
+    else if (a == 2131) xm = v & 127;                 // sprites extra (los que se miran despues de los 64; sus entradas: 32 bytes en bloque * 8192 + 32 * j, bloque 2)
     else if (a == 2090) fine = v & 7;
     else if (a == 2091) rows[0] = v;
     else if (a == 2092) rows[1] = v;
@@ -228,6 +230,18 @@ static std::map<int, std::map<std::string, long long>> prof_by_loop;
 static int prof_n = 0;
 static std::vector<long long> prof_loops;
 static int prof_lo = -1, prof_hi = -1;
+// TS_VM=1 (con TS_PROF y TS_T=1): instrucciones de script ejecutadas y sus T-estados por opcode. Una instruccion de script va desde el paso por es_loop
+// (vm_core.asm: el bucle de exec_script) hasta que el manejador vuelve a es_loop; las ejecuciones anidadas (startScript...) se restan de la instruccion que las lanza.
+static unsigned a_es_loop = 0, a_es_noerr = 0, a_disp = 0, a_sptr = 0;
+static const bool ts_vm = getenv("TS_VM") != 0;
+struct VmFrame { int op; long long t0, child, pro; unsigned sp; };
+struct VmOp { long long n = 0, excl = 0, incl = 0; };
+static std::vector<VmFrame> vm_stack;
+static VmOp vm_ops[256];
+static std::vector<long long> vm_samples;                 // T exclusivos (con el prologo) de cada instruccion de script
+static long long vm_pro_acc = 0, vm_exit_oh = 0, vm_n = 0, vm_loop_n = 0;
+static std::vector<long long> vm_n_loops;                 // instrucciones de script por vuelta del bucle principal
+static bool vm_in_pro = false;
 static std::map<int, std::vector<std::pair<unsigned, std::string>>> osyms;
 static const char* sym_of(unsigned pc) {
   if (pc >= 0x2000 && pc < 0x4000) { auto& v = osyms[blk[1]]; std::pair<unsigned, std::string>* b = 0; for (auto& p : v) if (p.first <= pc && (!b || p.first >= b->first)) b = &p; if (b) return b->second.c_str(); }
@@ -249,6 +263,7 @@ static void dump(const char* path) {
   }
   uint8_t t[8] = {(uint8_t)fine, (uint8_t)rows[0], (uint8_t)rows[1], (uint8_t)rows[2], z80.i, (uint8_t)chroma, (uint8_t)sfast, (uint8_t)(hfile >> 8)};
   fwrite(t, 1, 8, f);
+  { uint8_t x = (uint8_t)xm; fwrite(&x, 1, 1, f); }     // el byte de POKE 2131: sprites extra
   fclose(f);
 }
 
@@ -311,7 +326,7 @@ int main(int argc, char** argv) {
   { FILE* s = fopen(argv[2], "r"); char line[256];
     while (s && fgets(line, sizeof line, s)) {
       char name[128]; unsigned v;
-      if (sscanf(line, "%127s EQU %xH", name, &v) == 2) { if (!strcmp(name, "main_loop")) main_loop_addr = v; if (!strcmp(name, "wait_frame")) wait_frame_addr = v; if (v >= 0x4200 && v < 0x8000) syms.push_back({v, name}); }
+      if (sscanf(line, "%127s EQU %xH", name, &v) == 2) { if (!strcmp(name, "main_loop")) main_loop_addr = v; if (!strcmp(name, "es_loop")) a_es_loop = v; if (!strcmp(name, "es_noerr")) a_es_noerr = v; if (!strcmp(name, "disp_table")) a_disp = v; if (!strcmp(name, "SPTR")) a_sptr = v; if (!strcmp(name, "wait_frame")) wait_frame_addr = v; if (v >= 0x4200 && v < 0x8000) syms.push_back({v, name}); }
     }
     if (s) fclose(s); }
   sd_dir = argv[3];
@@ -371,6 +386,8 @@ int main(int argc, char** argv) {
     if (z80.pc.w == main_loop_addr || (wait_frame_addr && z80.pc.w == wait_frame_addr)) {
       motor_tick(true);
       if (prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi) { prof_loops.push_back(prof_work); }
+      if (ts_vm && prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi) vm_n_loops.push_back(vm_loop_n);
+      vm_loop_n = 0; vm_stack.clear(); vm_pro_acc = 0;
       prof_work = 0; prof_n = frames_done;
       { static FILE* sl = getenv("TS_SPRLOG") ? fopen(getenv("TS_SPRLOG"), "w") : 0;
         if (sl) { unsigned h = 2166136261u; int n = 0; for (int i = 0; i < 64; i++) if (spr[i].on) { n++; const uint8_t q[3] = {(uint8_t)i, (uint8_t)spr[i].x, (uint8_t)((spr[i].x >> 8) ^ spr[i].y)}; for (int k = 0; k < 3; k++) h = (h ^ q[k]) * 16777619u; for (int k = 0; k < 8; k++) { h = (h ^ spr[i].col[k]) * 16777619u; h = (h ^ spr[i].pix[k]) * 16777619u; h = (h ^ spr[i].mask[k]) * 16777619u; } }
@@ -413,8 +430,31 @@ int main(int argc, char** argv) {
     }
     hist[hi++ & 255] = z80.pc.w;
     int ts0 = tstates;
+    unsigned vm_pc0 = z80.pc.w, vm_sp0 = z80.sp.w;
+    const bool vm_on = ts_vm && a_es_noerr && prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi;
+    if (vm_on) {
+      if (vm_pc0 == a_es_loop) {                                   // vuelve el manejador: cierra la instruccion abierta en este nivel
+        while (!vm_stack.empty() && vm_stack.back().sp < vm_sp0) vm_stack.pop_back();   // restos de un nivel que no volvio por es_loop
+        if (!vm_stack.empty() && vm_stack.back().sp == vm_sp0) {
+          VmFrame f = vm_stack.back(); vm_stack.pop_back();
+          long long incl = prof_total - f.t0 + f.pro, ex = incl - f.child;
+          vm_ops[f.op].n++; vm_ops[f.op].excl += ex; vm_ops[f.op].incl += incl; vm_samples.push_back(ex);
+          if (!vm_stack.empty()) vm_stack.back().child += incl;
+        }
+      }
+      if (vm_pc0 == a_es_noerr + 6) {                              // ld hl,(SPTR): empieza una instruccion de script
+        while (!vm_stack.empty() && vm_stack.back().sp < vm_sp0) vm_stack.pop_back();
+        VmFrame f; f.op = rd(rd16(a_sptr)); f.t0 = prof_total; f.child = 0; f.pro = vm_pro_acc; f.sp = vm_sp0;
+        vm_pro_acc = 0; vm_n++; vm_loop_n++;
+        vm_stack.push_back(f);
+      }
+    }
     z80_do_opcode();
     if (prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi) { const char* sn = sym_of(hist[(hi - 1) & 255]); if (strcmp(sn, "hs_w")) { { static const bool ts_t = getenv("TS_T") != 0; int dt = ts_t ? tstates : 1; prof[sn] += dt; prof_by_loop[prof_n][sn] += dt; prof_total += dt; prof_work += dt; } } }
+    if (vm_on && vm_pc0 >= a_es_loop && vm_pc0 < a_es_noerr + 6) {   // prologo del bucle (comprobar ERR y CUR): se carga a la instruccion que sigue o a la salida
+      vm_pro_acc += tstates;
+      if (z80.pc.w < a_es_loop || z80.pc.w > a_es_noerr + 6) { vm_exit_oh += vm_pro_acc; vm_pro_acc = 0; }
+    }
     steps_g++;
     if (cmd_pend) motor_tick(false);
     static const char* ts_ns = getenv("TS_NOSTOP"); if (steps > 50000000LL && !ts_ns) { printf("atascado; ultimos PC:%c", 10); for (int k = 120; k > 0; k--) printf("%04X ", hist[(hi - k) & 255]); printf("%c", 10); break; }
@@ -433,7 +473,22 @@ int main(int argc, char** argv) {
         printf("  vuelta %d: %lld;", w[i].second, w[i].first); for (size_t k = 0; k < 3 && k < t.size(); k++) printf(" %s=%lld", t[k].second.c_str(), t[k].first); printf("%c", 10);
       } }
     std::sort(prof_loops.begin(), prof_loops.end());
-    if (!prof_loops.empty()) printf("instrucciones por vuelta: mediana %lld, p90 %lld, maxima %lld (un fotograma de 50 Hz son unas 8000 instrucciones a 3,25 MHz)%c", prof_loops[prof_loops.size() / 2], prof_loops[prof_loops.size() * 9 / 10], prof_loops.back(), 10);
+    if (!prof_loops.empty()) { long long sm = 0; for (auto x : prof_loops) sm += x; printf("%s por vuelta: media %.0f, mediana %lld, p90 %lld, maxima %lld (un fotograma de 50 Hz son 65000 T a 3,25 MHz o unas 8000 instrucciones)%c", getenv("TS_T") ? "T-estados" : "instrucciones", (double)sm / prof_loops.size(), prof_loops[prof_loops.size() / 2], prof_loops[prof_loops.size() * 9 / 10], prof_loops.back(), 10); }
+  }
+  if (ts_vm && prof_lo >= 0) {
+    std::sort(vm_samples.begin(), vm_samples.end());
+    long long tot = 0; for (auto x : vm_samples) tot += x;
+    printf("INSTRUCCIONES DE SCRIPT (fotogramas %d-%d): %lld ejecutadas (%lld cerradas), %lld T-estados en ellas + %lld de salidas de exec_script; %.0f%% del total medido%c", prof_lo, prof_hi, vm_n, (long long)vm_samples.size(), tot, vm_exit_oh, prof_total ? 100.0 * (tot + vm_exit_oh) / prof_total : 0.0, 10);
+    if (!vm_samples.empty()) printf("  T por instruccion (decodificacion + manejador, sin anidadas, con el prologo del bucle): media %.1f, mediana %lld, p90 %lld, p99 %lld, maximo %lld%c", (double)tot / vm_samples.size(), vm_samples[vm_samples.size() / 2], vm_samples[vm_samples.size() * 9 / 10], vm_samples[vm_samples.size() * 99 / 100], vm_samples.back(), 10);
+    std::sort(vm_n_loops.begin(), vm_n_loops.end());
+    if (!vm_n_loops.empty()) { long long sm = 0; for (auto x : vm_n_loops) sm += x; printf("  instrucciones de script por vuelta: media %.1f, mediana %lld, p90 %lld, maxima %lld%c", (double)sm / vm_n_loops.size(), vm_n_loops[vm_n_loops.size() / 2], vm_n_loops[vm_n_loops.size() * 9 / 10], vm_n_loops.back(), 10); }
+    std::vector<std::pair<long long, int>> o; for (int i = 0; i < 256; i++) if (vm_ops[i].n) o.push_back({vm_ops[i].excl, i});
+    std::sort(o.rbegin(), o.rend());
+    printf("  por opcode (ordenado por T exclusivos): opcode, manejador, n, T medio exclusivo, T medio con anidadas, T totales%c", 10);
+    for (size_t i = 0; i < o.size() && i < (getenv("TS_TOP") ? (size_t)atoi(getenv("TS_TOP")) : 25); i++) {
+      int op = o[i].second; unsigned h = a_disp ? (unsigned)(rd(a_disp + 4 * op + 2) | (rd(a_disp + 4 * op + 3) << 8)) : 0;
+      printf("   %02X %-28s %8lld %8.1f %8.1f %10lld%c", op, sym_of(h), vm_ops[op].n, (double)vm_ops[op].excl / vm_ops[op].n, (double)vm_ops[op].incl / vm_ops[op].n, vm_ops[op].excl, 10);
+    }
   }
   printf("fotogramas: %d, instrucciones: %lld, ERR=%d, sala=%d%c", frames_done, steps, rd(0xEB0B), rd(0xEB40), 10);
   dump(argv[5]);

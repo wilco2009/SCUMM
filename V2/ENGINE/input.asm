@@ -186,7 +186,12 @@ h_o2_findObject:                        ; ARGS: resultado, x, y (x * 8 e y * 2 s
                 ld a,(ARGS)
                 jp write_var
 
-; getActorFromPos aproximado: el primer actor visible de la sala cuyo rectangulo de 16 x 32 contiene el punto
+; getActorFromPos aproximado: el primer actor visible de la sala cuyo rectangulo contiene el punto. El rectangulo es el que dibuja el actor
+; (ACB: lo que escribe ac_draw en el overlay; en ScummVM, _top / _bottom y las columnas usadas) o, si no lo ha dibujado (ACB a cero, tambien en las
+; pruebas sin overlay) o es un actor de numero alto, uno de 16 x 32 alrededor de sus pies.
+ACB             equ ACTORS+NACTORS*ASIZE        ; 4 bytes por actor 1..ACB_N: desplazamientos con signo (izquierda, derecha, arriba, abajo) respecto de x * 8 e y * 2; 0 = sin dato
+ACB_N           equ 18
+AFP_W           equ ACB+4*ACB_N                 ; 4 palabras: los mismos desplazamientos ya con signo de 16 bits
 h_o2_actorFromPos:
                 ld hl,(ARGS+2)
                 add hl,hl
@@ -202,55 +207,30 @@ h_o2_actorFromPos:
 afp_l:          push bc
                 ld a,(CURROOM)
                 cp (ix+0)
-                jp nz,afp_next
+                jr nz,afp_next
                 ld a,(ix+9)
                 or a
-                jp z,afp_next
-                ld l,(ix+1)             ; x * 8 - 8 <= x < x * 8 + 8
+                jr z,afp_next
+                call afp_off
+                ld l,(ix+1)             ; x * 8 + izquierda <= x < x * 8 + derecha
                 ld h,(ix+2)
                 add hl,hl
                 add hl,hl
                 add hl,hl
-                ld de,8
-                or a
-                sbc hl,de
-                ex de,hl                ; DE = izquierda
-                ld hl,(FO_X)
-                call sless              ; x < izquierda ?
-                jp c,afp_next
-                ld l,(ix+1)
-                ld h,(ix+2)
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                ld de,8
-                add hl,de               ; derecha
                 ld de,(FO_X)
-                call sless              ; derecha < x ?
-                jp c,afp_next
-                jp z,afp_next           ; derecha = x: fuera
-                ld l,(ix+3)             ; y * 2 - 32 <= y < y * 2
-                ld h,(ix+4)
-                add hl,hl
-                ld de,32
-                or a
-                sbc hl,de
-                ex de,hl
-                ld hl,(FO_Y)
-                call sless
-                jp c,afp_next
-                ld l,(ix+3)
+                ld bc,AFP_W
+                call afp_in
+                jr nc,afp_next
+                ld l,(ix+3)             ; y * 2 + arriba <= y < y * 2 + abajo
                 ld h,(ix+4)
                 add hl,hl
                 ld de,(FO_Y)
-                call sless              ; abajo < y ?
-                jp c,afp_next
-                jp z,afp_next
+                ld bc,AFP_W+4
+                call afp_in
+                jr nc,afp_next
                 pop bc
-                ld a,c
-                ld c,a
                 ld b,0
-                jp afp_w
+                jr afp_w
 afp_next:       ld de,ASIZE
                 add ix,de
                 pop bc
@@ -259,6 +239,65 @@ afp_next:       ld de,ASIZE
                 ld bc,0
 afp_w:          ld a,(ARGS)
                 jp write_var
+
+; HL = base, DE = punto, BC -> dos palabras (desde, hasta) -> carry si base + desde <= punto < base + hasta (con signo)
+afp_in:         ex de,hl
+                or a
+                sbc hl,de               ; HL = punto - base
+                push hl
+                call afp_ld
+                pop hl
+                push hl
+                call sless
+                jr c,afi_out            ; antes del principio
+                call afp_ld
+                pop hl
+                jp sless                ; carry si antes del final
+afi_out:        pop hl
+                or a
+                ret
+afp_ld:         ld a,(bc)
+                ld e,a
+                inc bc
+                ld a,(bc)
+                ld d,a
+                inc bc
+                ret
+
+; C = actor -> AFP_W: los cuatro desplazamientos (los de ACB, con signo, o 16 x 32 si no hay dato)
+afp_off:        ld a,c
+                cp ACB_N+1
+                jr nc,afo_d
+                dec a
+                add a,a
+                add a,a
+                ld e,a
+                ld d,0
+                ld hl,ACB
+                add hl,de
+                inc hl
+                ld a,(hl)               ; derecha: 0 = el actor no ha dibujado nada
+                dec hl
+                or a
+                jr z,afo_d
+                ld de,AFP_W
+                ld b,4
+afo_l:          ld a,(hl)
+                ld (de),a
+                inc hl
+                inc de
+                rla
+                sbc a,a
+                ld (de),a
+                inc de
+                djnz afo_l
+                ret
+afo_d:          ld hl,afo_dflt
+                ld de,AFP_W
+                ld bc,8
+                ldir
+                ret
+afo_dflt:       defw -8, 8, -32, 0
 
 ; ---------------------------------------------------------------------------------------------- objetos: codigo y verbos
 ; DE = objeto, ROS_VERB = verbo -> A = offset del verbo en su bloque (0 = no hay); APIA = direccion del bloque con su

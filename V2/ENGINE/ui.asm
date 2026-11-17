@@ -271,10 +271,13 @@ uu_e:           ld a,(UI_DIRTY)
                 pop bc
                 bit 2,b
                 jr z,uu_blit
+                ld a,(hv_top)           ; con el texto arriba el inventario no se tapa nunca
+                or a
+                jr nz,uu_i
                 ld a,(tx_on)            ; mientras hay un mensaje el inventario espera (el texto ocupa las filas 20-23)
                 or a
                 jr nz,uu_w
-                call ui_draw_inv
+uu_i:           call ui_draw_inv
                 jr uu_blit
 uu_w:           ld a,(UI_DIRTY)
                 or 4

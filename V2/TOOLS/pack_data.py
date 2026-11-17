@@ -16,8 +16,8 @@ Formato (little endian; las cuatro tablas son tal cual se copian en memoria, ver
   +6      u8   primera pagina
   +7      u8   0
   +8      u16  bytes de cada pagina (6144: lo que cabe en la ventana de datos $2000-$37FF)
-  +10     pagina y direccion de la tabla de sonidos (0: no hay; ver sound2vgm.py), 3 bytes sin uso
-  +16     SCRDIR  256 x 3   pagina (0 = no hay), direccion
+  +10     pagina y direccion de la tabla de sonidos (0: no hay; ver sound2vgm.py), marca de los scripts (+13, 3 bytes: hash de SCRDIR, ODIR y el codigo de entrada/salida de las salas; la usa save.asm)
+  +16    SCRDIR  256 x 3   pagina (0 = no hay), direccion
   +784    OBJOWN  780       dueno de cada objeto
   +1564   OBJST   780       estado de cada objeto
   +2344   ROOMDIR 64 x 16   por sala: pagina y direccion del codigo de entrada, id. de salida, ancho (u16),
@@ -32,6 +32,7 @@ Formato (little endian; las cuatro tablas son tal cual se copian en memoria, ver
 import os
 import struct
 import sys
+import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vmmodel as M
@@ -46,19 +47,45 @@ SYNTH_ROOM = 60
 COST_MAX = 6100                                  # lo que cabe en una pagina de datos
 
 
-def best_costume(costume2, cost, emap):
+def best_costume(costume2, cost, emap, must=()):
     """El traje mas completo que cabe en una pagina: primero las dos poses de la boca, luego solo la abierta, luego sin boca; con cada una, las
-    poses de caminar (4, 3 o 2 por direccion). Si ni asi cabe devuelve el mas pequeno (el que llama lo descarta)."""
+    poses de caminar (4, 3, 2 o 1 por direccion). Siempre con los fotogramas de overlay `must` (el pelo y el sombrero del vendedor: sin ellos sale a
+    medias); luego se anaden los demas que quepan. Si no cabe devuelve el mas pequeno (el que llama lo descarta) o, con `must`, None."""
     blob = None
     for talk, two in ((True, True), (True, False), (False, False)):
-        for walk in (4, 3, 2):
+        for walk in (4, 3, 2, 1):
             try:
-                blob = costume2.costume_blob(cost, emap, talk=talk, two=two, walk=walk)
+                blob = costume2.costume_blob(cost, emap, talk=talk, two=two, walk=walk, ovl=list(must))
             except (AssertionError, ValueError):       # mas de 256 celdas distintas
                 continue
             if len(blob) <= COST_MAX:
+                got = list(must)
+                for f in costume2.overlay_frames(cost):          # los demas fotogramas de overlay, mientras quepan
+                    if f in got:
+                        continue
+                    try:
+                        big = costume2.costume_blob(cost, emap, talk=talk, two=two, walk=walk, ovl=sorted(got + [f]))
+                    except (AssertionError, ValueError):
+                        continue
+                    if len(big) <= COST_MAX:
+                        got.append(f)
+                        blob = big
                 return blob
-    return blob
+    return None if must else blob
+
+
+def scaled_costume(costume2, cost, emap, scales):
+    """El traje con la primera escala de la lista (de mayor a menor) en la que caben sus fotogramas de overlay imprescindibles; si en ninguna, con la
+    primera sin ellos."""
+    must = costume2.overlay_wanted(cost)
+    for sc in scales:
+        costume2.SCALE = sc
+        blob = best_costume(costume2, cost, emap, must)
+        if blob is not None:
+            return blob
+    costume2.SCALE = scales[0]
+    return best_costume(costume2, cost, emap)
+
 
 def room_mask(world, rn):
     import lfl2gfx
@@ -126,13 +153,11 @@ def build(world, game, first_page=16, include_test=False, sounds=None):
         if ixd is not None:
             emap = lfl2gfx.default_map({})
             tr = gameprofile.parse(game).get('trajes', {})            # [trajes] escala = n/d (por omision 3/4)
-            if 'escala' in tr:
-                costume2.SCALE = tuple(int(x) for x in tr['escala'].split('/'))
             for cid in range(1, 64):                          # los trajes que existan en el juego (hasta los 64 del COSTDIR)
                 try:
-                    costume2.SCALE = tuple(int(x) for x in tr.get('escala_%d' % cid, tr.get('escala', '3/4')).split('/'))     # escala_N = n/d: un traje concreto
+                    scales = [tuple(int(x) for x in e.split('/')) for e in tr.get('escala_%d' % cid, tr.get('escala', '3/4')).split(',')]     # escala_N = n/d[,n/d...]: un traje concreto; con varias, la primera en la que quepa entero
                     cost = costume2.Costume(scumm2.resource(world.dir, ixd, 'costume', cid))
-                    blob = best_costume(costume2, cost, emap)
+                    blob = scaled_costume(costume2, cost, emap, scales)
                 except Exception:
                     continue
                 if len(blob) > 6100:                      # no cabe en una pagina: ese traje se queda con el rectangulo
@@ -140,7 +165,12 @@ def build(world, game, first_page=16, include_test=False, sounds=None):
                 costdir[3 * cid:3 * cid + 3] = struct.pack('<BH', *pk.add(blob))
     snd_ref = struct.pack('<BH', *pk.add(sound_table(sounds))) if sounds else bytes(3)
     npages = len(pk.pages)
-    head = b'SDAT' + struct.pack('<BBBBH', 2, npages, first_page, 0, M.PAGE_USABLE) + snd_ref + bytes(3)
+    # marca de los scripts (+13..+15): hash de donde esta cada script en las paginas (SCRDIR, ODIR y el codigo de entrada y salida de las salas),
+    # que es lo unico de DATA.BIN a lo que apuntan las partidas guardadas (save.asm). Graficos, paleta, trajes, mascaras y sonidos no la cambian
+    # salvo que desplacen los scripts (las mascaras van entre los codigos de entrada de las salas).
+    sig = bytes(scrdir) + bytes(odir) + b''.join(bytes(roomdir[16 * i:16 * i + 6]) for i in range(64)) + struct.pack('<B', first_page)
+    stamp = struct.pack('<I', zlib.crc32(sig) & 0xFFFFFFFF)[:3]
+    head = b'SDAT' + struct.pack('<BBBBH', 2, npages, first_page, 0, M.PAGE_USABLE) + snd_ref + stamp
     tables = head + bytes(scrdir) + bytes(world.owner) + bytes(world.state) + bytes(roomdir) + bytes(odir) + bytes(costdir) + gameprofile.build(game)
     assert len(tables) <= TABLES, len(tables)
     out = bytearray(tables + bytes(TABLES - len(tables)))

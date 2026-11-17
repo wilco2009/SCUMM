@@ -1,0 +1,10 @@
+WARNING: Switching to 3 pass mode on line 5 of file vm.asm
+nucleo: 12878 bytes
+mundo: 23 paginas de datos, 179 scripts, 761 objetos
+3742 escenarios, 446 acaban en error, ranuras simultaneas maximas: 11
+vm.bin: 12878 bytes en $4200
+3672 escenarios; instrucciones del Z80: 785711369; instrucciones de script: 2703292; Z80 por instruccion de script: 291
+T-states: total 8396039966, en vm_frame 7619514473; fotogramas: 247846; T-states por fotograma 30743
+fotogramas sin ninguna instruccion de script: 11696, 10110 T-states cada uno (coste fijo de recorrer las ranuras)
+fotogramas con script: 236032, 2409604 instrucciones de script; sin el coste fijo: 2122 T-states por instruccion de script
+escenarios: 3672, iguales: 3672, distintos: 0

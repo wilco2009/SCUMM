@@ -27,3 +27,4 @@ __pycache__/
 # Datos originales de Sierra (AGI v3, SCI): no se redistribuyen
 /AGI/V3/*/
 /SCI/SQ3/
+V2/ENGINE/savestamp.inc

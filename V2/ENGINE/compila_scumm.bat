@@ -21,6 +21,8 @@ echo Juego: %G% (datos de %P%)
 rem montaje en tres pasos: el overlay (overlay.asm) necesita las direcciones del programa (scumm.sym) y el programa incluye overlay.bin al final
 if not exist overlay.bin type nul > overlay.bin
 pasmo scumm.asm scumm.bin scumm.sym || goto error
+python ..\TOOLS\savestamp.py scumm.sym save.asm > savestamp.inc || goto error
+rem (savestamp.inc: marca de las partidas guardadas, solo variables de datos; no caducan al recompilar)
 pasmo overlay.asm overlay.bin overlay.sym || goto error
 pasmo scumm.asm scumm.bin scumm.sym || goto error
 set S=%BASE%\SCUMM\V2

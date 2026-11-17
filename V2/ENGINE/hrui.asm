@@ -10,12 +10,36 @@ HU_GL           equ HR_ATT+$1900        ; 4 glifos x 8 lineas (el buffer de abaj
 hu_r            equ ACSIG+157           ; fila (0-7) y grupo (0-9) que se pintan
 hu_g            equ ACSIG+158
 hu_src          equ ACSIG+159           ; palabra: detras de los 4 caracteres del grupo
+; texto arriba (tecla T, hv_top): una segunda pasada pinta MSGB en las filas 0-3 (la banda fija, que no hace scroll)
+TOPPREV         equ $DD00               ; 4 filas x 40: lo pintado en la banda (bloque de atributos: sitio libre)
+hu_pass         equ ACSIG+170           ; 0: la zona de la interfaz, 1: la banda de arriba
+hu_rb           equ ACSIG+171           ; fila de pantalla de la fila 0 de la pasada
+hu_n            equ ACSIG+172           ; filas de la pasada
+hu_pv           equ ACSIG+173           ; palabra: lo pintado de la pasada
+hu_bk           equ ACSIG+176           ; la tecla B en el fotograma anterior (bit 4 del puerto $7F)
+hu_tk           equ ACSIG+175           ; la tecla T en el fotograma anterior (bit 4 del puerto $FB: 0 = pulsada)
 
 hr_ui:          push ix
+                call hu_tkey
+                xor a
+                ld (hu_pass),a
+                ld a,UI_R0
+                ld (hu_rb),a
+                ld a,24-UI_R0
+                ld (hu_n),a
+                ld hl,HRUI_PREV
+                ld (hu_pv),hl
                 xor a
                 ld (hu_r),a
 hu_row:         ld a,(hu_r)             ; HL = origen de la fila
                 ld c,a
+                ld a,(hu_pass)
+                or a
+                ld a,c
+                jr nz,hu_ms             ; la banda de arriba: siempre MSGB
+                ld a,(hv_top)
+                or a
+                jr nz,hu_vb             ; con el texto arriba la interfaz no se tapa
                 ld a,(tx_on)
                 or a
                 jr z,hu_vb
@@ -23,7 +47,7 @@ hu_row:         ld a,(hu_r)             ; HL = origen de la fila
                 cp TXT_ROW-UI_R0
                 jr c,hu_vb
                 sub TXT_ROW-UI_R0
-                call hu_mul40
+hu_ms:          call hu_mul40
                 ld de,MSGB
                 jr hu_sr
 hu_vb:          ld a,c
@@ -33,7 +57,7 @@ hu_sr:          add hl,de
                 push hl                 ; origen
                 ld a,(hu_r)
                 call hu_mul40
-                ld de,HRUI_PREV
+                ld de,(hu_pv)
                 add hl,de
                 ex de,hl                ; DE = lo pintado
                 pop hl
@@ -77,9 +101,90 @@ hu_next:        ld a,(hu_g)
                 ld a,(hu_r)
                 inc a
                 ld (hu_r),a
-                cp 24-UI_R0
-                jr nz,hu_row
-                pop ix
+                ld hl,hu_n
+                cp (hl)
+                jp nz,hu_row
+                ld a,(hu_pass)
+                or a
+                jr nz,hu_end
+                ld a,(hv_top)
+                or a
+                jr z,hu_end
+                ld a,1                  ; segunda pasada: la banda de arriba
+                ld (hu_pass),a
+                xor a
+                ld (hu_rb),a
+                ld (hu_r),a
+                ld a,TXT_ROWS
+                ld (hu_n),a
+                ld hl,TOPPREV
+                ld (hu_pv),hl
+                jp hu_row
+hu_end:         pop ix
+                ret
+
+; la tecla T (flanco) alterna la posicion del texto: abajo (filas 20-23, imagen entera) o arriba (filas 0-3 fijas; la sala pierde esas filas)
+hu_tkey:        ld a,$7F                ; B (flanco): salta el mensaje en pantalla (como el '.' de ScummVM: se acaba la espera, el nucleo pasa al siguiente trozo o lo da por terminado)
+                in a,(254)
+                and $10
+                ld hl,hu_bk
+                ld c,(hl)
+                ld (hl),a
+                or a
+                jr nz,ht_nb
+                ld a,c
+                or a
+                jr z,ht_nb
+                ld hl,0
+                ld (TALKDLY),hl
+ht_nb:          ld a,$FB
+                in a,(254)
+                and $10
+                ld hl,hu_tk
+                ld c,(hl)
+                ld (hl),a
+                or a
+                ret nz                  ; no esta pulsada
+                ld a,c
+                or a
+                ret z                   ; ya lo estaba
+                ld a,(hv_top)
+                xor 1
+                ld (hv_top),a
+                ld hl,HRUI_PREV         ; todo se vuelve a pintar
+                ld de,HRUI_PREV+1
+                ld bc,8*40-1
+                ld (hl),$FF
+                ldir
+                ld hl,TOPPREV
+                ld de,TOPPREV+1
+                ld bc,TXT_ROWS*40-1
+                ld (hl),$FF
+                ldir
+                ld a,(UI_DIRTY)         ; el inventario se vuelve a dibujar
+                or 4
+                ld (UI_DIRTY),a
+                ld a,(hv_top)
+                or a
+                jr z,ht_dn
+                ld hl,HR_BM             ; arriba: las filas 0-3 (bitmap y atributos) en negro y fuera del scroll
+                ld de,HR_BM+1
+                ld bc,1023
+                ld (hl),0
+                ldir
+                ld hl,HR_ATT
+                ld de,HR_ATT+1
+                ld bc,1023
+                ld (hl),0
+                ldir
+                ld a,$F0
+                ld (2091),a
+                ret
+ht_dn:          ld a,255                ; abajo: otra vez todas las filas 0-15 con scroll, y la sala se vuelve a dibujar entera
+                ld (2091),a
+                ld a,1
+                ld (gd_pending),a
+                ld (gd_full),a
                 ret
 
 hu_mul40:       ld l,a                  ; A * 40 -> HL
@@ -128,8 +233,11 @@ hg_cp:          ld bc,8
                 add a,c
                 inc a
                 ld l,a
+                ld a,(hu_rb)
+                ld c,a
                 ld a,(hu_r)
-                add a,(HR_BM>>8)+UI_R0
+                add a,c
+                add a,HR_BM>>8
                 ld h,a
                 ld ix,HU_GL
                 ld b,8
@@ -174,8 +282,11 @@ hg_l:           ld a,(ix+0)             ; x1 << 2 | x2 >> 4
                 add a,c
                 inc a
                 ld l,a
+                ld a,(hu_rb)
+                ld c,a
                 ld a,(hu_r)
-                add a,(HR_ATT>>8)+UI_R0
+                add a,c
+                add a,HR_ATT>>8
                 ld h,a
                 ld b,8
                 call hu_clr
@@ -192,10 +303,16 @@ hg_a:           ld (hl),a
 hu_clr:         ld a,(tx_on)
                 or a
                 jr z,hc_w
+                ld a,(hu_pass)
+                or a
+                jr nz,hc_t              ; la banda: el color del mensaje
+                ld a,(hv_top)
+                or a
+                jr nz,hc_w
                 ld a,(hu_r)
                 cp TXT_ROW-UI_R0
                 jr c,hc_w
-                ld a,(tx_clr)
+hc_t:           ld a,(tx_clr)
                 ret
 hc_w:           ld a,$0F
                 ret

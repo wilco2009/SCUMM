@@ -3,8 +3,9 @@ acd_mput:       ld a,(ac_mk)
                 or a
                 call nz,ac_mask_px
                 push hl
+                ld a,20
+                call ac_wbo
                 ld hl,ac_mt
-                ld de,2121
                 ld bc,8
                 ldir
                 pop hl
