@@ -459,6 +459,7 @@ int main(int argc, char** argv) {
     static const char* ts_bp = getenv("TS_BP"); if (ts_bp && z80.pc.w == (unsigned)strtol(ts_bp, 0, 16) && (!getenv("TS_BPA") || (z80.af.w >> 8) == (unsigned)strtol(getenv("TS_BPA"), 0, 16))) {   // TS_BP=direccion (hex): para ahi e imprime los ultimos PC, SP y la pila
       printf("TS_BP pc=%04X sp=%04X af=%04X bc=%04X de=%04X hl=%04X ix=%04X iy=%04X; pila:", z80.pc.w, z80.sp.w, z80.af.w, z80.bc.w, z80.de.w, z80.hl.w, z80.ix.w, z80.iy.w);
       for (int k = 0; k < 6; k++) printf(" %04X", rd16(z80.sp.w + 2 * k));
+      { unsigned cs = rd16(S("CURSLOT")); printf("%cCUR=%d slot=%04X num=%d where=%d", 10, rd(S("CUR")), cs, rd16(cs + 2), rd(cs + 3)); printf(" RESMAP:"); for (int q = 0; q < 12; q++) printf(" %d", rd(S("RESMAP") + q)); printf("%c", 10); }
       printf("%cultimos PC:", 10);
       for (int k = 40; k > 0; k--) printf(" %04X", hist[(hi - k) & 255]);
       printf("%c", 10);

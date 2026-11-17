@@ -961,3 +961,35 @@ Ademas de lo de `savetest.sh`, cada prueba **compara los `SAVE*.SAV`** (nombres 
 - Las equivalentes no se han pasado (`MUT_EQUIV=1`): son por razonamiento sobre el codigo y los datos.
 
 Sin commit.
+
+## Fase 10f: los dos fallos de la 10e y repaso contra ScummVM (2026-11-17; solo arnes y modelo, el Z80 no cambia)
+
+### Fallo A: `actscen.sh 1 20 12`, `ERR=6` en el fotograma 55 (arreglado, era del arnes)
+- `ERR=6` = `E_BADROOM`: el script 60 (`loadRoom $84`) llega a una sala sin asignar. Causa doble: (1) el arnes salta el arranque y **`RESMAP` (pseudoRoom) estaba a cero**; ScummVM (`room.cpp`, `ensureResourceLoaded`) tambien manda `$84` a `_resourceMapper[4]`, asi que el Z80 y el modelo hacen lo que toca; (2) la sala 20 lanza al entrar una **cutscene** (script 77 -> 58: el guardia camina hasta Indy, 64 -> 60 = la prision, sala 132). Con la caminata de la 10d (mas rapida) el guardia llega a tiempo dentro de las 12 escenas; antes no llegaba.
+- Arreglo (`mk_actscen.py`): se ponen los `PSEUDO` que deja el arranque (`boot_snapshot`) y, en la sala 20, se matan las 24 ranuras de scripts al acabar la carga. `actscen.sh` ahora cuenta aparte las escenas "no validas" por cambio de sala (la sala del volcado no es ninguna de las pedidas) en vez de dar diferencias falsas.
+- Resultado: `actscen.sh 1 20 12`: 23 escenas, 0 diferencias.
+
+### Fallo B: `ev_dialogo2.txt` se separa desde el fotograma 2.250 (arreglado, era del arnes)
+- No era `findObject`: los dos clics eran el mismo (230, 128), pero el modelo lo resolvia en x = 294 (objeto 168) y el Z80 en x = 230 (167). Causa: **`in_poll` copia `IT_X/IT_Y` a `cur_x/cur_y` con cualquier suceso de prueba**, y `mk_events.py` ponia (0, 0) a las teclas: el F5 del fotograma 2.100 llevaba el cursor a x = 0, `pan_update` (cursor < 100) apagaba la ventana movil y el clic caia en x = 230. El modelo (como el raton real) no mueve el cursor con una tecla y seguia con la ventana corrida +64 desde el `move 240` del 1.900.
+- Arreglo: `mk_events.py` da a las teclas la ultima posicion del raton. Ademas el modelo apaga la ventana movil al cambiar de sala (`VM.start_scene` -> `pan_on = False`), como hace `ov_clear` (`evh_room`) del Z80 (diferencia real, aunque aqui no era la causa).
+- Resultado: `build_boot.sh 2400 "" ev_dialogo2.txt` **2.401/2.401** y 63 ordenes de sonido iguales; `ev_save.txt` 701/701. Hay que **borrar `build/sdboot/SAVE*.SAV` antes** de cada prueba con guardado (una partida vieja en la SD cambia el primer dialogo).
+- **"El dialogo corta el nombre a 22 letras"** (anotado en la 10e) sigue sin mirar: no es de esta subtarea.
+
+### Diferencias que quedan con ScummVM en lo que usa Indy3 (sin arreglar)
+1. **`oldRoomEffect`** (25 usos): el cambio de sala es un corte; ScummVM hace barridos/disolvencias (`_switchRoomEffect`, `fadeIn`).
+2. **Puntos IQ** (`saveLoadVars` 1 y 2, cadenas 7 y 9): sin fichero; harian falta `IQ.DAT` (73 B).
+3. **El sonido no se guarda**: tras cargar, la musica vuelve a empezar.
+4. **Estado de los padres en `findObject`**: el modelo y el Z80 leen el estado vivo; ScummVM usa la copia `objs[].state` que refresca una vez por fotograma (solo difiere si cambia el estado y se llama en el mismo fotograma).
+5. **Escala de los actores y sprites extra (D6)**: reparto aproximado de sprites (hasta 63 + extra de la FPGA), postura por contador (no por el reloj de ScummVM), sin escala por caja.
+6. **Variable indexada de 16 bits** (ScummVM suma en 32; solo difiere en casos sin sentido) y `getNextBox` de la sala 46 con pseudosalas.
+7. **Ventana movil** (256 de 320 px): no existe en ScummVM; las coordenadas del raton se corrigen con `pan_px`.
+8. **Cargar dentro de un script anidado** sin probar; el dialogo de guardar corta el nombre a 22 letras.
+9. **Mutaciones de guardar (`mut_fase9.py`)** pendientes de la validacion final.
+
+### Lo que faltaria para Loom EGA (no hay ficheros: lista de riesgos)
+- **Interfaz de notas/bastón** en vez de verbos: los scripts de su interfaz usan `drawObject`/`verbOps` de otra forma; hay que medir verbos vivos, objetos dibujados y sprites antes de dar nada por bueno.
+- **Reproduccion de "drafts"**: sonido de las notas (AdLib/Roland, no el PC speaker de Indy3) y tabla de sonidos distinta; `sound3vgm.py` solo cubre los de Indy3.
+- **Charset propio** (fuente y anchos) y `printString` con codigos que Indy3 no usa.
+- **Pseudosalas, `oldRoomEffect` y `cursorCommand`** con mas peso (Loom usa mucho los efectos de sala); el corte seco se veria.
+- **Limites del Z80** medidos solo con Indy3 (ranuras 24, verbos 52, objetos locales, 63 sprites): repetir `sprbudget3.py` y `medir_recursos.py` con los datos de Loom.
+- **Workarounds de ScummVM especificos de Loom** (p. ej. `o5_loadRoom` sala 29) que no se han copiado.

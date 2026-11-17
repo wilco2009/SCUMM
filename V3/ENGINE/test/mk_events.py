@@ -10,6 +10,7 @@ for ln in open(sys.argv[2]):
     if len(p) == 3 and p[1] == 'EQU':
         sym[p[0]] = int(p[2].rstrip('Hh'), 16)
 out = []
+last = (0, 0)                                            # 10f: una tecla no mueve el raton (in_poll copia IT_X/IT_Y a cur_x/cur_y con cualquier suceso)
 for ln in open(sys.argv[1]):
     if not ln.strip() or ln.startswith('#'):
         continue
@@ -31,7 +32,9 @@ for ln in open(sys.argv[1]):
         out.append('%d:%X:%X' % (f, sym['DBG_START'], a[0] & 255))
         out.append('%d:%X:%X' % (f, sym['DBG_START'] + 1, a[0] >> 8))
         continue
-    x, y = (a + [0, 0])[:2] if kind in ('click', 'move') else (0, 0)
+    if kind in ('click', 'move'):
+        last = tuple((a + [0, 0])[:2])
+    x, y = last
     key = a[0] if kind == 'key' else 0
     for off, val in ((sym['IT_X'], x & 255), (sym['IT_X'] + 1, x >> 8), (sym['IT_Y'], y & 255), (sym['IT_Y'] + 1, y >> 8),
                      (sym['IT_KEY'], key & 255), (sym['IT_KEY'] + 1, key >> 8), (sym['IT_KIND'], KIND[kind])):

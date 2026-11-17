@@ -1650,6 +1650,13 @@ class VM(GameMixin):
     # frases, paletas, cajas y sala en uso, el reproductor de sonido y su temporizador). Lo que NO: el fotograma, los sucesos de entrada
     # y el raton, el resultado en curso (_resultVarNumber), la pila de expression, las ordenes de sonido ni lo que sea del anfitrion.
     # fase 9: la ventana movil del programa (el ZX81 ensena 256 de los 320 pixeles de SCUMM): no es estado de la partida
+    def start_scene(self, room):
+        """10f: el Z80 llama a ov_clear al cambiar de sala (scumm.asm evh_room), que apaga la ventana movil (pan_on, pan_px); el modelo la dejaba corrida y el clic siguiente
+        del segundo dialogo de guardar caia 64 pixeles a la derecha (objeto 168 en vez del 167)."""
+        GameMixin.start_scene(self, room)
+        self.pan_on = False
+        self.pan_px = 0
+
     def pan_event(self, px):
         if px >= 232:
             self.pan_on = True

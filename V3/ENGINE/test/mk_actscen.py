@@ -338,6 +338,12 @@ def frame_hdr(c, o):
     return dx, dy, b[fo + 2], b[fo + 3], b[fo + 4]
 
 
+# 10f: el arnes salta el arranque, asi que RESMAP (pseudoRoom) estaba a cero y el script 60 de la sala 20 (loadRoom $84) daba E_BADROOM; se pone el que deja el arranque
+import vmmodel3 as M                                            # noqa: E402
+for ln in M.boot_snapshot(M.World(os.path.join(HERE, '..', '..', 'Indy Last Crusade'))):
+    if ln.startswith('PSEUDO '):
+        _, k_, v_ = ln.split()
+        poke(1, sym['RESMAP'] + int(k_), int(v_))
 f = 2
 for room in rooms:
     ent = data.tab('ROOMDIR', room, P3.ROOM_ENTRY)
@@ -352,6 +358,10 @@ for room in rooms:
     out.append('%d:%X:%X' % (f, sym['DBG_ROOM'], room))
     out.append('%d:%X:0' % (f, sym['DBG_ROOM'] + 1))
     f += 14
+    if room == 20:                                               # 10f: la sala 20 lanza al entrar una cutscene (script 77 -> 58: el guardia camina hasta Indy y 60 hace loadRoom $84, la prision); sin esto
+        for i in range(24):                                      # la escena que cae despues de ese momento se hace en la sala 132. Se matan todas las ranuras (NSLOT x 16 en SLOTS)
+            poke(f, sym['SLOTS'] + 16 * i, 0)
+        f += 2
     big = sorted(costs, key=lambda c: -maxcells(c))[:10]
     # puntos tapados por la mascara de la sala (para poner actores detras) y cajas con mascara
     mp, ma = struct.unpack_from('<BH', ent, 15)
@@ -401,13 +411,14 @@ for room in rooms:
             poke(f, base + 0, 0 if other else room)
             ax, ay = rng.choice(spots) if spots and rng.random() < 0.7 else (None, None)
             if ax is not None and camx <= ax < camx + 250:       # detras de un trozo de la mascara de la sala
-                poke16(f, base + 1, ax + rng.randrange(-6, 7))
-                poke16(f, base + 3, ay + rng.randrange(0, 20))
+                px, py = ax + rng.randrange(-6, 7), ay + rng.randrange(0, 20)
                 if mbox:
                     bnr = rng.choice(mbox)
             else:
-                poke16(f, base + 1, camx + rng.randrange(0, 250))
-                poke16(f, base + 3, ys if rng.random() < 0.3 else rng.randrange(40, max(60, min(height, 144))))     # algunos con la misma y
+                px = camx + rng.randrange(0, 250)
+                py = ys if rng.random() < 0.3 else rng.randrange(40, max(60, min(height, 144)))     # algunos con la misma y
+            poke16(f, base + 1, px)
+            poke16(f, base + 3, py)
             nocost = rng.random() < 0.06 and not crowd
             poke16(f, base + 5, 0 if nocost else cost)                                                       # alguno sin traje
             poke16(f, base + 7, (270, 90, 180, 0)[bestpose(cost)[2]] if crowd else rng.choice(angles))
