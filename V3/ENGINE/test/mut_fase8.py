@@ -25,32 +25,32 @@ M8 = [
     ('actores: el fotograma de quieto no se usa', 'act', 'ovd_act.asm', '                ld a,(ix+A_STAND)       ; el fotograma pedido no esta en el traje: el de quieto', '                ld a,(ix+A_FRAME)       ; el fotograma pedido no esta en el traje: el de quieto'),
     ('actores: el contador no se reinicia', 'act', 'ovd_act.asm', '                ld (hl),a\n                inc hl\n                ld (hl),0\n                jr as_cnt', '                ld (hl),a\n                inc hl\n                jr as_cnt'),
     ('actores: la postura no usa los pasos', 'act', 'ovd_act.asm', '                srl h\n                rr l\n                srl h\n                rr l\n                srl h\n                rr l\n                ld a,l                  ; (el limite', '                srl h\n                rr l\n                srl h\n                rr l\n                ld a,l                  ; (el limite'),
-    ('actores: no busca en el blob extra', 'act', 'ovd_act.asm', '                ld hl,COLD_COSTDIR2\nac_cd:', '                scf\n                ret\nac_cd:'),
+    ('actores: no busca en el blob extra', 'act', 'ovd_act.asm', '                ret nc\n                ld hl,COLD_COSTDIR2\naq_cd:', '                ret\n                ld hl,COLD_COSTDIR2\naq_cd:'),
     ('actores: la animacion no suma la direccion', 'act', 'ovd_act.asm', '                ld a,(aq_dir)\n                ld e,a\n                ld d,0\n                add hl,de\n                ld (aq_anim),hl', '                ld e,0\n                ld d,0\n                add hl,de\n                ld (aq_anim),hl'),
     ('actores: x sin la camara', 'act', 'ovd_act.asm', '                ld de,(aq_cam)\n                or a\n                sbc hl,de\n                ld e,(iy+0)', '                ld de,0\n                or a\n                sbc hl,de\n                ld e,(iy+0)'),
     ('actores: y con la elevacion sumada', 'act', 'ovd_act.asm', '                ld e,(ix+A_ELEV)\n                ld d,(ix+A_ELEV+1)\n                or a\n                sbc hl,de', '                ld e,(ix+A_ELEV)\n                ld d,(ix+A_ELEV+1)\n                add hl,de'),
     ('actores: y sin HR_TOP', 'act', 'ovd_act.asm', '                ld de,HR_TOP+32\n                add hl,de', '                ld de,32\n                add hl,de'),
-    ('actores: y sin ytop', 'act', 'ovd_act.asm', '                ld a,(hv_ytop)\n                ld e,a\n                ld d,0\n                or a\n                sbc hl,de\n                bit 7,h', '                ld a,0\n                ld e,a\n                ld d,0\n                or a\n                sbc hl,de\n                bit 7,h'),
+    ('actores: y sin ytop', 'act', 'ovd_act.asm', '                ld a,(hv_ytop)\n                ld e,a\n                ld d,0\n                or a\n                sbc hl,de\n                ld (aq_y32),hl', '                ld a,0\n                ld e,a\n                ld d,0\n                or a\n                sbc hl,de\n                ld (aq_y32),hl'),
     ('actores: dx sin signo', 'act', 'ovd_act.asm', '                ld e,(iy+0)\n                ld d,0\n                bit 7,e\n                jr z,acd_dx\n                dec d', '                ld e,(iy+0)\n                ld d,0\n                bit 7,e\n                jr z,acd_dx'),
     ('actores: el sprite 63 (cursor) se usa', 'act', 'ac_vars.inc', 'AC_MAXSPR       equ 63', 'AC_MAXSPR       equ 64'),
     ('actores: un actor que no cabe se dibuja a medias', 'act', 'ovd_act.asm', '                cp AC_MAXSPR+1\n                ret nc', '                cp AC_MAXSPR+9\n                ret nc'),
-    ('actores: celda a la izquierda de la pantalla', 'act', 'ovd_act.asm', '                add hl,de\n                bit 7,h\n                jp nz,acd_skip\n                ld (aq_cx),hl', '                add hl,de\n                ld (aq_cx),hl'),
-    ('actores: celda a la derecha de la pantalla', 'act', 'ovd_act.asm', '                ld de,319\n                or a\n                sbc hl,de\n                jp nc,acd_skip', '                ld de,400\n                or a\n                sbc hl,de\n                jp nc,acd_skip'),
-    ('actores: la mascara completa no es FF', 'act', 'ovd_act.asm', 'acd_m0:         ld (hl),$FF', 'acd_m0:         ld (hl),$7F'),
-    ('actores: color uniforme solo en 7 filas', 'act', 'ovd_act.asm', 'acd_c2:         ld (hl),a\n                inc hl\n                djnz acd_c2', 'acd_c2:         ld (hl),a\n                inc hl\n                dec b\n                dec b\n                jr nz,acd_c2'),
+    ('actores: celda a la izquierda de la pantalla', 'act', 'ovd_act.asm', '                add hl,de\n                bit 7,h\n                jp nz,acd_skp2\n                ld (aq_cx),hl', '                add hl,de\n                ld (aq_cx),hl'),
+    ('actores: celda a la derecha de la pantalla', 'act', 'ovd_act.asm', '                ld de,319\n                or a\n                sbc hl,de\n                jp nc,acd_skp2', '                ld de,400\n                or a\n                sbc hl,de\n                jp nc,acd_skp2'),
+    ('actores: la mascara completa no es FF', 'act', 'ovd_act.asm', 'acd_ff:         ld a,$FF', 'acd_ff:         ld a,$7F'),
+    ('actores: color uniforme solo en 7 filas', 'act', 'ovd_act.asm', '                call acd_fa\n                jr acd_skip', '                call acd_fa\n                ld (hl),0\n                jr acd_skip'),
     ('actores: sin recorte por arriba', 'act', 'ovd_act.asm', 'acl_neg:        neg', 'acl_neg:        ret\n                neg'),
     ('actores: sin recorte por abajo', 'act', 'ovd_act.asm', '                cp AC_YMAX-7\n                ret c', '                cp AC_YMAX-7\n                ret'),
     ('actores: el recorte de abajo deja una fila de mas', 'act', 'ovd_act.asm', '                sub AC_YMAX-8           ; A = 1..7: filas dentro = 8 - A', '                sub AC_YMAX-9           ; A = 1..7: filas dentro = 8 - A'),
     ('actores: el recorte de arriba deja una fila de mas', 'act', 'ovd_act.asm', 'acl_top:        ld b,a\n                ld a,AC_YMIN\n                sub b', 'acl_top:        ld b,a\n                ld a,AC_YMIN-1\n                sub b'),
     ('mascara: sin mascara de la sala', 'act', 'ovd_act.asm', '                ld a,(CURRD+15)\n                or a\n                ret z', '                ret'),
     ('mascara: ignora la mascara de la caja', 'act', 'ovd_act.asm', '                ld a,(hl)               ; mascara de la caja\n                or a\n                ret z', '                ld a,(hl)               ; mascara de la caja'),
-    ('mascara: desplazamiento sin aplicar', 'act', 'ovd_act.asm', '                ld a,l\n                and 7\n                ld (aq_sh),a', '                ld a,l\n                and 0\n                ld (aq_sh),a'),
-    ('mascara: la tira de la sala empieza una antes', 'act', 'ovd_act.asm', '                ld a,l\n                ld (aq_s0),a\n                ld a,(aq_mpg)', '                ld a,l\n                dec a\n                ld (aq_s0),a\n                ld a,(aq_mpg)'),
+    ('mascara: desplazamiento sin aplicar', 'act', 'ovd_act.asm', '                and 7                   ; antes se quitaba', '                and 0                   ; antes se quitaba'),
+    ('mascara: la tira de la sala empieza una antes', 'act', 'ovd_act.asm', 'mk_s0:          ld (aq_s0),a', 'mk_s0:          dec a\n                ld (aq_s0),a'),
     ('mascara: la ventana no resta la fila del fotograma', 'act', 'ovd_act.asm', '                ld hl,(aq_ry)\n                ld a,h                  ; fila de la ventana por la que va el decodificador = -ry', '                ld hl,0\n                ld a,h                  ; fila de la ventana por la que va el decodificador = -ry'),
     ('mascara: un tramo de valor 0 se rellena', 'act', 'ovd_act.asm', '                ld a,c\n                or a\n                jr z,mk_run             ; valor 0: ya esta a ceros', '                ld a,c'),
     ('mascara: el fin del tramo no se acota a la ventana', 'act', 'ovd_act.asm', '                ld a,(aq_rh)\n                cp l\n                jr nc,mk_e1\nmk_cap:         ld a,(aq_rh)\n                ld l,a', '                jr mk_e1\nmk_cap:         ld a,(aq_rh)\n                ld l,a'),
     ('mascara: el inicio negativo no se acota', 'act', 'ovd_act.asm', '                bit 7,d\n                jr z,mk_s1\n                ld de,0                 ; inicio = max(inicio, 0)', '                bit 7,d\n                jr z,mk_s1'),
-    ('mascara: la celda no usa la tira siguiente', 'act', 'ovd_act.asm', '                ld bc,64\n                add hl,bc\n                ld c,(hl)               ; byte de la tira siguiente', '                ld bc,0\n                add hl,bc\n                ld c,(hl)               ; byte de la tira siguiente'),
+    ('mascara: la celda no usa la tira siguiente', 'act', 'ovd_act.asm', '                pop iy\n                ld bc,64\n                add iy,bc', '                pop iy\n                ld bc,0\n                add iy,bc'),
     ('mascara: la fila de la celda no cuenta', 'act', 'ovd_act.asm', '                add a,a                 ; fila de la celda en la ventana\n', ''),
     ('cache: la firma no incluye la camara', 'act', 'ovd_act.asm', 'aq_hash:        ld hl,(aq_cam)', 'aq_hash:        ld hl,0'),
     ('cache: la firma no incluye la x', 'act', 'ovd_act.asm', '                ld a,(ix+A_X)\n                call ach\n                ld a,(ix+A_X+1)\n                call ach', '                ld a,0\n                call ach\n                ld a,0\n                call ach'),
@@ -75,6 +75,16 @@ M8 = [
     ('sonido: stopAllSounds no vacia la cola', 'snd', 'snd3.asm', '                ld (sd_cur),a\n                ld (sd_next),a\n                ret', '                ld (sd_cur),a\n                ret'),
     ('sonido: el bucle no se avisa al MCU', 'snd', 'snd3.asm', 'sc_l0:          call mcu_send\n                ld hl,(PF_SNDTPL)', 'sc_l0:          ld hl,(PF_SNDTPL)'),
 ]
+
+# 10e: mutaciones equivalentes (no pueden cambiar nada que se vea): nombre -> motivo. No se pasan salvo con MUT_EQUIV=1.
+EQUIV8 = {
+    'actores: un actor que no cabe se dibuja a medias':
+        'la pasada 1 ya reparte: los normales suman aq_tot <= 63 y la pasada 2 dibuja solo esos, asi que aq_n + celdas <= aq_tot <= 63 siempre (la comprobacion de aq_draw es de defensa)',
+    'mascara: un tramo de valor 0 se rellena':
+        'mk_strip ya deja a cero las aq_rh filas de cada tira y el relleno no sale de [inicio, min(fin, aq_rh)): rellenar con 0 no cambia nada',
+    'actores: celda a la izquierda de la pantalla':
+        'una x de celda negativa (bit 7 de H) es >= 319 sin signo y la salta igual la comprobacion siguiente (sbc hl,319 / jp nc,acd_skp2)',
+}
 
 
 def run(cmd, cwd, env=None):
@@ -145,6 +155,15 @@ def main():
     for w in range(nw):
         free.put(w)
     todo = [m for m in M8 if not filt or any(x in m[0] for x in filt.split(','))]
+    neq = 0
+    if os.environ.get('MUT_EQUIV') != '1':                  # 10e: las equivalentes no se pasan (MUT_EQUIV=1 para pasarlas)
+        for m in todo:
+            if m[0] in EQUIV8:
+                print('%-70s equivalente: %s' % (m[0], EQUIV8[m[0]]), flush=True)
+                neq += 1
+        todo = [m for m in todo if m[0] not in EQUIV8]
+    kinds = sorted(set(m[1] for m in todo))
+    todo = [('(sin mutar, %s: tiene que salir sin detectar)' % k, k, 'ovd_act.asm', '', '') for k in kinds] + todo   # 10e: control
 
     def job(m):
         w = free.get()
@@ -158,10 +177,13 @@ def main():
             if caught is None:
                 print('NO ENCUENTRO: %s' % desc, flush=True)
                 continue
+            if desc.startswith('(sin mutar'):
+                print('%-70s %s' % (desc, 'BIEN' if not caught else '*** LA PRUEBA FALLA SIN MUTAR: las cifras no valen ***'), flush=True)
+                continue
             tot += 1
             det += 1 if caught else 0
             print('%-70s %s' % (desc, 'detectada' if caught else '*** SIN DETECTAR ***'), flush=True)
-    print('mutaciones de la fase 8: %d detectadas de %d' % (det, tot))
+    print('mutaciones de la fase 8: %d detectadas de %d (equivalentes, sin pasar: %d)' % (det, tot, neq))
     for w in DIRS:
         shutil.rmtree(DIRS[w], ignore_errors=True)
 

@@ -164,8 +164,9 @@ static void mcu_byte(uint8_t b) {
     else if (mcu_cnt == 2) { mcu_n |= b << 8; mcu_cnt = 3; if (mcu_n == 0) { mcu_out.push_back(0); mcu_cmd = -1; } }
     else {
       FILE* f = mcu_files[mcu_h];
-      if (f) fputc(b, f);
-      if (++mcu_cnt - 3 == mcu_n) { if (f) fflush(f); mcu_out.push_back(f ? 0 : 255); mcu_cmd = -1; }
+      static const bool wrfail = getenv("TS_WRFAIL") != nullptr;                              // 10e: TS_WRFAIL=1: la SD rechaza las escrituras (llena)
+      if (f && !wrfail) fputc(b, f);
+      if (++mcu_cnt - 3 == mcu_n) { if (f) fflush(f); mcu_out.push_back(f && !wrfail ? 0 : 255); mcu_cmd = -1; }
     }
     return;
   }

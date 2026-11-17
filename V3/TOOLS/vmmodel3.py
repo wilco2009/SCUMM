@@ -336,6 +336,10 @@ class VM(GameMixin):
         if not rec:
             self.stop_script(script)
         if script < NUM_GLOBAL_SCRIPTS:
+            synth = getattr(self, 'synth_codes', {})
+            if script in synth:                         # 10e: ordenes CODER y SYNTH (scripts globales sinteticos que se pueden arrancar desde el bytecode)
+                self.start_slot(script, WIO_GLOBAL, synth[script], 0, args, fr, rec)
+                return
             if script not in self.w.scripts:
                 raise VMError(E_NOSCRIPT, 'script %d' % script)
             self.start_slot(script, WIO_GLOBAL, self.w.scripts[script], 0, args, fr, rec, base=0)
@@ -1713,6 +1717,8 @@ class VM(GameMixin):
         if sub == 0x20:
             return 3
         if sub == 0x80:
+            if os.environ.get('TS_WRFAIL'):                     # 10e (pruebas): la SD rechaza las escrituras: saveState falla (2) y la partida no queda
+                return 2
             self.save_game(slot)
             return 0
         if sub == 0x40:
@@ -2529,9 +2535,15 @@ def run_scenario_core(world, lines):
                 vm.pending.append({'CLICK': ('click', int(p[1]) if len(p) > 1 else 0, int(p[2]) if len(p) > 2 else 0),
                                    'MOVE': ('mouse', int(p[1]) if len(p) > 1 else 0, int(p[2]) if len(p) > 2 else 0),
                                    'RCLICK': ('rclick',), 'KEY': ('key', int(p[1]) if len(p) > 1 else 0), 'ESC': ('esc',)}[cmd])
-            elif cmd == 'CODE':                         # bytecode sintetico (vmsynth3.py) como un script global
+            elif cmd in ('CODE', 'CODER'):              # bytecode sintetico (vmsynth3.py) como un script global; CODER (10e): ademas, startScript(199) lo vuelve a arrancar
                 vm.cur = 0xFF
+                if cmd == 'CODER':
+                    vm.synth_codes = getattr(vm, 'synth_codes', {})
+                    vm.synth_codes[SYNTH_SCRIPT] = bytes.fromhex(p[1])
                 vm.start_slot(SYNTH_SCRIPT, WIO_GLOBAL, bytes.fromhex(p[1]), 0)
+            elif cmd == 'SYNTH':                        # SYNTH n <hex> (10e): el script global n pasa a ser ese bytecode (solo en este escenario; no lo arranca)
+                vm.synth_codes = getattr(vm, 'synth_codes', {})
+                vm.synth_codes[int(p[1])] = bytes.fromhex(p[2])
             elif cmd == 'FRAMES':
                 delta, n = int(p[1]), int(p[2])
                 for _ in range(n):
@@ -2546,7 +2558,7 @@ def run_scenario_core(world, lines):
             return out, vm
         out += vm.trace
         vm.trace = []
-        if cmd in ('SCRIPT', 'ENTRY', 'EXIT', 'OBJ', 'ABORT', 'CODE', 'LOADROOM', 'SENTENCE', 'INPUT'):
+        if cmd in ('SCRIPT', 'ENTRY', 'EXIT', 'OBJ', 'ABORT', 'CODE', 'CODER', 'LOADROOM', 'SENTENCE', 'INPUT'):
             out.append(vm.digest())
     return out, vm
 
@@ -2788,6 +2800,52 @@ def make_scenarios_core(world, seeds=1, rooms=None, scripts=True, objects=True):
             sc.append(('cinpdot.s%d' % seed, init_lines_core(wf_, world, 1, False) + ['SETVAR %d 1' % VAR_EGO, 'ROOM 1 1', 'SCRIPT 96', 'USERPUT 1 1', 'SCRIPT 3',
                                                                                     'FRAMES 6 2', 'KEY 46', 'FRAMES 6 3', 'SCRIPT 3', 'FRAMES 6 1', 'KEY 46', 'FRAMES 6 1',
                                                                                     'KEY 46', 'FRAMES 6 30']))
+        # 10e: huecos del nucleo que los scripts de Indy3 no recorren (mutaciones sin detectar). Bytecode fijo, sin azar (no cambia los demas escenarios):
+        #  - cgapidx: indice constante de 0x2000 >= 0x800 (readVar suma a & 0xFFF): escribe y lee el bit 0x8C80 + 0x805 (variable 72, bit 5)
+        #  - cgapdiv: divide con los dos operandos negativos (-7 / -2 = 3) y con uno (7 / -2 = -3)
+        #  - cgapnest: stopScript de un script anidado. runScriptNested (ScummVM) solo vuelve al padre si su ranura sigue con el mismo numero, viva y sin
+        #    congelar, asi que limpiar vm.nest solo se nota si el script parado se vuelve a arrancar en la misma ranura antes de volver: el 199 (CODER)
+        #    arranca el 198 (SYNTH), que arranca el 199 (no recursivo: stopScript(199) mata al de fuera); el nuevo 199 cede el turno (breakHere) y al
+        #    acabar el 198 el padre no sigue: el nuevo 199 pone la variable 252 en el fotograma siguiente, no en este
+        gl = ['INIT'] + [ln for ln in boot_snapshot(world) if ln.startswith(('SETVAR ', 'PSEUDO '))]
+        sc.append(('cgapidx.s%d' % seed, gl + ['SETVAR 72 0', 'SETVAR 200 0', 'SETVAR 252 0',
+                                              'CODE 1a80ac050801009afc0080ac050800', 'FRAMES 3 1']))
+        sc.append(('cgapdiv.s%d' % seed, gl + ['CODE 1afd00f9ff5bfd00feff1afe0007005bfe00feff00', 'FRAMES 3 1']))
+        sc.append(('cgapnest.s%d' % seed, gl + ['SETVAR 250 0', 'SETVAR 251 0', 'SETVAR 252 0', 'SETVAR 253 0', 'SYNTH 198 0ac7ff1afd00010000',
+                                               'CODER 48fa0000000e001afa0001000ac6ff1afb00010000' + '801afc00010000', 'FRAMES 3 2']))
+        #  - cgapcam (moveCamera, sala 1, 960 de ancho): setCameraAt(100) deja el destino por debajo del minimo (moveCamera lo acota); roomOps 1 (400, 500) deja
+        #    la camara por debajo del minimo (avanza de 8 en 8) y roomOps 1 (160, 200) por encima del maximo (retrocede); despues, con la camara en 400
+        #    (_screenStartStrip = 30), el actor 1 en x = 316 (columna 39: t = 9, justo por debajo de _leftTrigger = 10) y actorFollowCamera(1)
+        if 1 in world.rooms and world.rooms[1].width == 960:
+            sc.append(('cgapcam.s%d' % seed, gl + ['SETVAR %d 0' % VAR_CAMERA_FAST_X, 'SETVAR %d 1' % VAR_EGO, 'ROOM 1 1', 'FRAMES 3 2',
+                                                  'CODE 32640000', 'FRAMES 3 3',
+                                                  'CODE 339001f4010100', 'FRAMES 3 34',
+                                                  'CODE 33a000c8000100', 'FRAMES 3 6',
+                                                  'CODE 33a0002003010032900100', 'FRAMES 3 2',
+                                                  'ACTORSET 1 1 316 100 0 1 1', 'CODE 520100', 'FRAMES 3 6']))
+        #  - cgapverb (fase 7): un verbo centrado (verbOps 19; Indy3 no los usa) y un clic 4 px a la izquierda de su left (findVerbAtPos: dentro si es centrado);
+        #    un verbo con el nombre "A" + $FF 4 (la variable 250) se guarda (saveRestoreVerbs 1), la variable cambia y se restaura (2): drawVerb le vuelve
+        #    a calcular el rectangulo (de 2 columnas a 6)
+        sc.append(('cgapverb.s%d' % seed, gl + ['SETVAR %d 1' % VAR_EGO, 'ROOM 1 1', 'USERPUT 1 1', 'SETVAR 250 5', 'FRAMES 6 1',
+                                               'CODE 7a65090241420005500098000613ff' + '7a66090241ff04fa0000050001b80006ff00', 'FRAMES 6 1',
+                                               'CODE ab01666601' + '1afa003930' + 'ab0266660100', 'FRAMES 6 1',
+                                               'CLICK 76 156', 'FRAMES 6 3', 'CLICK 300 188', 'FRAMES 6 3']))
+        #  - cgapibx<sala>: isActorInBox con el actor justo dentro de la caja junto a su 4.a esquina (ll), en las cajas en que esa esquina es la unica
+        #    con la x (o la y) mas pequena o mas grande (suelos en trapecio): el rechazo rapido por el rectangulo de las 4 esquinas tiene que contarla
+        for rn in rlist:
+            bxs = world.rooms[rn].boxes()[0]
+            lines = []
+            for k, b0 in enumerate(bxs):
+                xs, ys = b0[0:8:2], b0[1:8:2]
+                cx_, cy_ = sum(xs) // 4, sum(ys) // 4
+                px, py = xs[3] + (cx_ - xs[3]) // 4, ys[3] + (cy_ - ys[3]) // 4
+                if not ((px < min(xs[:3]) or px > max(xs[:3])) or (py < min(ys[:3]) or py > max(ys[:3]))):
+                    continue
+                lines += ['ACTORSET 3 %d %d %d 1 1 1' % (rn, px, py), 'CODE 1f03%02x05001a%02x00070000' % (k, 224 + len(lines) // 3 % 32), 'FRAMES 3 1']
+                if len(lines) >= 12:
+                    break
+            if lines:
+                sc.append(('cgapibx%02d.s%d' % (rn, seed), gl + ['ROOM %d 1' % rn] + lines))
         # D5: los scripts de mas de una pagina (en Indy3, el 95: un dialogo que espera a la variable 114). Con 114 cambiando
         # en cada fotograma, el script recorre el arbol y cruza la frontera de 4 KB de sus paginas en los dos sentidos
         for sid in (sorted(s for s, c in world.scripts.items() if len(c) > 6144) if scripts else ()):

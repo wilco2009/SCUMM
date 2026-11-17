@@ -25,8 +25,7 @@ M = [
     ('increment resta', 'vm_ops.asm', 'call var_rd\n                inc bc\n                jp set_res',
      'call var_rd\n                dec bc\n                jp set_res'),
     ('comparacion sin signo', 'vm_core.asm', 'scmp:           ld a,h\n                xor $80', 'scmp:           ld a,h\n                xor $00'),
-    ('local sin doblar el indice', 'vm_core.asm', '                ld a,l\n                add a,a\n                ld l,a\n                ld h,0\n                push de\n                ld de,(LOCP)',
-     '                ld a,l\n                ld l,a\n                ld h,0\n                push de\n                ld de,(LOCP)'),
+    ('local sin doblar el indice', 'vm_core.asm', '                jp nc,err_range\n                add a,a\n                ld l,a\n                ld a,(CUR)', '                jp nc,err_range\n                ld l,a\n                ld a,(CUR)'),
     ('bit de variable: byte alto desde el 9', 'vm_core.asm', '                cp 8\n                jr c,ba_lo', '                cp 9\n                jr c,ba_lo'),
     ('indice 0x2000 de 3 bits', 'vm_core.asm', 'ri_c:           ld a,h\n                and $0F', 'ri_c:           ld a,h\n                and $07'),
     ('retardo se decrementa de mas', 'vm_core.asm', '                ld a,(ix+SL_DELAY)\n                sub c',
@@ -63,7 +62,7 @@ M = [
      '                ld hl,(SC+0)\n                nop\n                ld (SC+0),hl\n                ld bc,(SC+2)'),
     ('setStringChar no limita el crecimiento', 'ovb4b.asm', '                ret nc                  ; b >= longitud + 2: nada', '                nop                     ; b >= longitud + 2: nada'),
     ('str_resize no corre las demas cadenas', 'ovb4b.asm', '                jr nc,sr_up\n                ld hl,(SC+14)', '                jr sr_up\n                ld hl,(SC+14)'),
-    ('getStringWidth cuenta el 0', 'ovb4b.asm', 'gw_l:           ld a,(hl)\n                inc hl\n                or a\n                jr z,gw_n', 'gw_l:           ld a,(hl)\n                inc hl\n                or a\n                jr z,gw_x\ngw_x:'),
+    ('getStringWidth cuenta el 0', 'ovb4b.asm', '                dec b\n                or a\n                jr z,gw_e\n                cp 10', '                dec b\n                or a\n                jr z,gw_n\n                cp 10'),
     ('cursor: sumar como restar', 'ovb4b.asm', '                bit 0,a\n                jr nz,cc_dec', '                bit 0,a\n                jr z,cc_dec'),
     ('verbo nuevo sin color', 'ovb4b.asm', '                ld (ix+V_COL),2\n                ld (ix+V_HI),14', '                ld (ix+V_COL),3\n                ld (ix+V_HI),14'),
     ('restaurar verbos deja el saveid', 'ovb4b.asm', '                call verb_ix\n                ld (ix+V_SAVE),0\n                call vd_draw', '                call verb_ix\n                ld (ix+V_SAVE),1\n                call vd_draw'),
@@ -108,7 +107,7 @@ M = [
     ('startScene: pseudosala mal enmascarada', 'ovc5.asm', 'and $7F                 ; _resourceMapper', 'and $3F                 ; _resourceMapper'),
     ('loadRoomWithEgo: direccion al reves', 'ovc5.asm', 'lw_dirs:        defw 90,270,0,180', 'lw_dirs:        defw 270,90,0,180'),
     ('isActorInBox: desigualdad al reves (positivos)', 'ovc5.asm', 'ld a,1\n                ret nc\n                xor a\n                ret\neo_neg:', 'ld a,1\n                ret c\n                xor a\n                ret\neo_neg:'),
-    ('isActorInBox: rechazo rapido con 3 esquinas', 'ovc5.asm', 'ld a,(SC+13)\n                cp 4\n                jr z,ar_y', 'ld a,(SC+13)\n                cp 3\n                jr z,ar_y'),
+    ('isActorInBox: rechazo rapido con 3 esquinas', 'ovc5.asm', '                call arj_mm\n                ld l,(iy+12)\n                ld a,(iy+13)\n                xor $80\n                ld h,a\n                call arj_mm\n                pop hl', '                call arj_mm\n                pop hl'),
     ('setBoxFlags: escribe en el byte 16', 'ovc5.asm', 'ld de,17\n                add hl,de\n                pop af\n                ld (hl),a', 'ld de,16\n                add hl,de\n                pop af\n                ld (hl),a'),
     ('nombre de objeto: desplazamiento de 15', 'ovb4c.asm', 'ld de,16\n                add hl,de\n                ld e,(hl)               ; el desplazamiento del nombre', 'ld de,15\n                add hl,de\n                ld e,(hl)               ; el desplazamiento del nombre'),
     ('getObjectXYPos: x e y de acercamiento cruzadas', 'ovb4.asm', 'walk_x, walk_y)\n                ld de,OB_WX', 'walk_x, walk_y)\n                ld de,OB_WY'),
@@ -116,13 +115,13 @@ M = [
     # ---- fase 6 (geom.asm y walk.asm en el overlay D, ovc6.asm, walk_frame de vm_core.asm, ovb4.asm, ovb4b.asm): caminata
     ('closestPtOnLine: eje mayor al reves', 'geom.asm', 'ld a,0\n                jr c,cpl_ns', 'ld a,0\n                jr nc,cpl_ns'),
     ('closestPtOnLine: no recorta al inicio del segmento', 'geom.asm', 'jr c,cpl_rs\n                ld hl,(LNE)\n                ld de,(LNR)', 'jr c,cpl_done\n                ld hl,(LNE)\n                ld de,(LNR)'),
-    ('closestPtOnLine: pv se resta', 'geom.asm', 'ld hl,LNP+2\n                call gpush16\n                call gadd', 'ld hl,LNP+2\n                call gpush16\n                call gsub'),
+    ('closestPtOnLine: pv se resta', 'geom.asm', 'ld bc,(LNP+2)\n                call adds16', 'ld bc,(LNP+2)\n                call subs16'),
     # (el tope de 0x1000 de sqrDist no se puede mutar a mas: con una diferencia de 0x1000 la suma ya pasa de 0xFFFFFF y da lo mismo)
     ('sqrDist: no suma dy', 'geom.asm', 'call mul16u             ; dx * dx\n                pop bc\n                add hl,bc', 'call mul16u             ; dx * dx\n                pop bc\n                or a'),
-    ('getClosestPtOnBox: solo 3 aristas', 'geom.asm', 'cpb_n:          ld a,(CBK)\n                inc a\n                cp 4', 'cpb_n:          ld a,(CBK)\n                inc a\n                cp 3'),
+    ('getClosestPtOnBox: solo 3 aristas', 'geom.asm', 'cpb_n:          ld a,(CBK)\n                inc a\n                ld b,a\n                and 3\n                ld a,b\n                jr nz,cpb_l', 'cpb_n:          ld a,(CBK)\n                inc a\n                ld b,a\n                and 3\n                cp 3\n                ld a,b\n                jr c,cpb_l'),
     ('compareSlope: factores cruzados', 'geom.asm', 'ld hl,(C3)\n                ld de,(C1)\n                call cs_mul\n                ld (CL),hl', 'ld hl,(C2)\n                ld de,(C1)\n                call cs_mul\n                ld (CL),hl'),
     ('adjustXY: el umbral 30 vale para todo', 'geom.asm', 'ld hl,900               ; umbral al cuadrado', 'ld hl,65535             ; umbral al cuadrado'),
-    ('adjustXY: las cajas invisibles no se saltan', 'geom.asm', 'jr z,ax_next            ; invisible\n', 'jr z,ax_vis             ; invisible\n'),
+    ('adjustXY: las cajas invisibles no se saltan', 'geom.asm', 'jp z,ax_next            ; invisible\n', 'jp z,ax_vis             ; invisible\n'),
     ('adjustXY: no guarda la mejor caja', 'geom.asm', 'ld a,(AXBOX)\n                ld (AXBB),a\nax_next:', 'ld a,(AXBOX)\n                ld (AXBOX),a\nax_next:'),
     ('adjustXY: dentro de la caja no actualiza las coordenadas validas', 'geom.asm', 'ld hl,(BP)              ; dentro de la caja\n                ld (ix+A_LVX),l', 'ld hl,(BP)              ; dentro de la caja\n                ld (ix+A_LVY),l'),
     ('getGates: la esquina va segunda', 'geom.asm', 'cp 4\n                jr nc,sg_1\n                ex (sp),hl', 'cp 4\n                jr c,sg_1\n                ex (sp),hl'),
@@ -168,7 +167,9 @@ M = [
     ('moveCamera: la camara no se alinea a 8', 'ovc7.asm', 'and $F8\n                ld l,a\n                ld (CAMCUR),hl', 'and $FF\n                ld l,a\n                ld (CAMCUR),hl'),
     ('moveCamera: fuera del minimo avanza 7', 'ovc7.asm', 'mc_a:           ld de,8', 'mc_a:           ld de,7'),
     ('moveCamera: fuera del maximo no retrocede', 'ovc7.asm', 'mc_b:           ld de,-8', 'mc_b:           ld de,0'),
-    ('moveCamera: no acota el destino al minimo', 'ovc7.asm', 'ld (CAMDEST),hl\nmc_5:', 'ld (CAMDEST),hl\n                jr mc_6\nmc_5:'),
+    ('moveCamera: tras acotar al minimo no mira el maximo', 'ovc7.asm', 'ld (CAMDEST),hl\nmc_5:', 'ld (CAMDEST),hl\n                jr mc_6\nmc_5:'),
+    ('moveCamera: no acota el destino al minimo', 'ovc7.asm', 'mc_4:           ld hl,(CAMDEST)\n                ld de,(VAR_CAMERA_MIN_X)\n                call sless\n                jr nc,mc_5',
+     'mc_4:           ld hl,(CAMDEST)\n                ld de,(VAR_CAMERA_MIN_X)\n                call sless\n                jr mc_5'),
     ('moveCamera: no acota el destino al maximo', 'ovc7.asm', 'mc_5:           ld hl,(VAR_CAMERA_MAX_X)\n                ld de,(CAMDEST)\n                call sless\n                jr nc,mc_6',
      'mc_5:           ld hl,(VAR_CAMERA_MAX_X)\n                ld de,(CAMDEST)\n                call sless\n                jr mc_6'),
     ('moveCamera: no sube hacia el destino', 'ovc7.asm', 'mc_7:           ld hl,(CAMCUR)\n                ld de,(CAMDEST)\n                call sless\n                jr nc,mc_7b',
@@ -185,6 +186,18 @@ sys.path.insert(0, HERE)
 from mut_fase7 import M7                   # noqa: E402  (la fase 7)
 M += M7
 
+# 10e: mutaciones equivalentes (con los datos de Indy3 no pueden cambiar nada que se vea): nombre -> motivo. No se pasan salvo con MUT_EQUIV=1.
+EQUIV = {
+    'cadena: $FF 8 lleva bytes':
+        'scan_str (resStrLen) solo cambia con $FF 8 o $FF 9 y ninguna cadena de los 1.003 scripts de Indy3 los lleva (solo $FF 1-7; 2026-11-17)',
+    'fase 7 checkExecVerbs: el clic derecho no cuenta':
+        'MKSTAT solo vale 0, $8000, una tecla (<= 319) o VAR_CUTSCENEEXIT_KEY, e Indy3 solo escribe 27 en esa variable: el bit 14 sin el 15 no se da (el boton derecho es ESC en v3)',
+    'moveCamera: tras acotar al minimo no mira el maximo':
+        'a mc_4 solo se llega con MIN <= cur <= MAX (si no, mc_a / mc_b y vuelve), asi que MIN <= MAX y tras dest = MIN nunca se cumple MAX < dest (cualquier dato)',
+    'fase 7 drawVerb: un verbo guardado se dibuja':
+        'vd_draw solo se llama al final de verbOps (la ranura con saveid 0 o una nueva) y al restaurar, despues de poner saveid a 0: nunca con un verbo guardado',
+}
+
 
 def run(cmd, cwd=HERE):
     return subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
@@ -193,9 +206,15 @@ def run(cmd, cwd=HERE):
 def main():
     rooms = sys.argv[1] if len(sys.argv) > 1 else '1,15,20'
     os.makedirs(MUT, exist_ok=True)
-    if not os.path.exists(os.path.join(MUT, 'expected.txt')):
+    # 10e: los escenarios esperados se rehacen si el modelo (o las salas pedidas) son mas nuevos que ellos; antes se reusaban aunque el modelo hubiera cambiado
+    exp = os.path.join(MUT, 'expected.txt')
+    stamp = os.path.join(MUT, 'rooms.txt')
+    model = [os.path.join(TOOLS, f) for f in ('vmmodel3.py', 'vmgame3.py', 'vmcommon3.py', 'pack_data3.py') if os.path.exists(os.path.join(TOOLS, f))]
+    old_rooms = open(stamp).read().strip() if os.path.exists(stamp) else ''
+    if not os.path.exists(exp) or old_rooms != rooms or any(os.path.getmtime(m) > os.path.getmtime(exp) for m in model):
         r = run([sys.executable, '-I', os.path.join(TOOLS, 'vmmodel3.py'), GAME, 'scenarios-core', MUT, '1', rooms])
         print(r.stdout.strip())
+        open(stamp, 'w').write(rooms)
     src = {}
     for fn in os.listdir(ENGINE):
         if fn.endswith(('.asm', '.inc')):
@@ -203,9 +222,15 @@ def main():
                 src[fn] = fh.read().decode('utf-8').replace('\r\n', '\n')
     detected = 0
     missed = []
+    equiv = []
     only = sys.argv[2].split('|') if len(sys.argv) > 2 else None        # (opcional) solo las mutaciones cuyo nombre contenga alguna de estas palabras
-    for name, f, old, new in M:
-        if only and not any(w in name for w in only):
+    run_equiv = os.environ.get('MUT_EQUIV') == '1'                     # MUT_EQUIV=1: pasa tambien las equivalentes
+    todo = [('(sin mutar: tiene que dar 0)', 'vm_core.asm', '', '')]
+    todo += [m for m in M if not only or any(w in m[0] for w in only)]
+    for name, f, old, new in todo:
+        if name in EQUIV and not run_equiv:
+            print('%-45s equivalente: %s' % (name, EQUIV[name]))
+            equiv.append(name)
             continue
         if old not in src[f]:
             print('%-45s PATRON NO ENCONTRADO' % name)
@@ -213,7 +238,7 @@ def main():
             continue
         for fn, txt in src.items():
             with open(os.path.join(MUT, fn), 'wb') as fh:
-                fh.write((txt.replace(old, new, 1) if fn == f else txt).encode('utf-8'))
+                fh.write((txt.replace(old, new, 1) if fn == f and old else txt).encode('utf-8'))
         r = run(['pasmo', 'vm.asm', 'vm.bin', 'vm.sym'], MUT)
         r2 = run(['pasmo', 'ovlb.asm', 'ovlb.bin', 'ovlb.sym'], MUT) if not r.returncode else r
         r3 = run(['pasmo', 'ovlc.asm', 'ovlc.bin', 'ovlc.sym'], MUT) if not r2.returncode else r2
@@ -228,12 +253,17 @@ def main():
         r = run([sys.executable, '-I', 'compare_traces.py', os.path.join(MUT, 'expected.txt'), os.path.join(MUT, 'actual.txt'), '0'])
         n = int(r.stdout.strip().split('\n')[0].split('distintos: ')[1])
         print('%-45s %5d escenarios distintos' % (name, n))
+        if not old:
+            if n:
+                print('EL NUCLEO SIN MUTAR NO DA LO MISMO QUE EL MODELO: no vale la pena seguir')
+                return 2
+            continue
         if n:
             detected += 1
         else:
             missed.append(name)
-    nm = len([1 for m in M if not only or any(w in m[0] for w in only)])
-    print('\nmutaciones: %d, detectadas: %d, sin detectar: %d' % (nm, detected, nm - detected))
+    nm = len(todo) - 1 - len(equiv)
+    print('\nmutaciones: %d, detectadas: %d, sin detectar: %d (equivalentes, sin pasar: %d)' % (nm, detected, nm - detected, len(equiv)))
     for m in missed:
         print('  sin detectar:', m)
     return 1 if missed else 0

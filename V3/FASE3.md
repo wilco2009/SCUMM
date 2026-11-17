@@ -886,6 +886,78 @@ que era `AXD`, sin uso; `aq_x32`/`aq_y32` en `AC2V+12..15` y `aq_ctab`/`aq_drc` 
 - `walkActorTo` con clics lejos de las cajas en salas de muchas cajas (0,4-0,6 M; 1,1 M con y fuera de la sala): `closestPtOnLine` general (~15-25.000 T).
 - El resto de los scripts de la sala 28 (~150.000 T por vuelta) es interpretacion de 95 instrucciones; lo que mas pesa ahora: `es_hi`, `vr_x`, `map_blk0`,
   `actor_ix`, `slot_addr` (nucleo).
-- `check_spr.py` en la sala 70 (los 2 sprites de los actores 8 y 10, de antes).
+- `check_spr.py` en la sala 70 (los 2 sprites de los actores 8 y 10, de antes). **Resuelto en la 10e** (era la prueba).
+
+Sin commit.
+
+## Fase 10e: huecos de las pruebas (2026-11-17; solo arnes)
+
+**Prueba de la noche:** `ENGINE/test/build/noche/` no existe todavia (la primera es la del 18/11). Nada que contar de ella.
+
+### Cifras (detectadas de las que se pasan; las equivalentes, aparte)
+
+| Grupo | Antes | Despues |
+|---|---|---|
+| Nucleo, grupo pedido (`mutaciones.py 1,15,20` con filtro: las 4 de siempre, `moveCamera`/`camera_moved`, fase 7 y las 6 que la 10d habia dejado sin patron) | **33 de 46** | **43 de 43** + 4 equivalentes (47 en total: se anade la de "no acota el destino al minimo" de verdad, ver abajo) |
+| Actores (`mut_fase8.py "actores,mascara,cache"`: 44) | **30 de 44** | **41 de 41** + 3 equivalentes |
+| Guardar y cargar (`mut_fase9.py`, nuevo: 43 de `ovc9.asm`) | nunca pasadas | **pendiente de la validacion final** (pasada a medias, parada a peticion del usuario: abajo) |
+
+- Antes de nada, **15 patrones ya no se aplicaban** tras la 10d (6 del nucleo: `loc_addr`, `getStringWidth`, `isActorInBox` 3 esquinas, `closestPtOnLine` pv, `getClosestPtOnBox` 3 aristas, `adjustXY` invisibles; 9 de actores: blob extra, ytop, celda izquierda y derecha, mascara FF, color uniforme, desplazamiento, tira de la sala, tira siguiente): adaptados al codigo nuevo con el mismo sentido. Las 6 del nucleo se detectan.
+- `mutaciones.py`: (1) **rehace `build/mut/expected.txt`** si el modelo (`vmmodel3`, `vmgame3`, `vmcommon3`, `pack_data3`) o las salas son mas nuevos (antes reusaba el del 15/11 aunque el modelo hubiera cambiado); (2) **pasada de control sin mutar** (tiene que dar 0; si no, para); (3) **`EQUIV`**: las equivalentes con su motivo, que no se pasan salvo con `MUT_EQUIV=1`. `mut_fase8.py` y `mut_fase9.py` igual (`EQUIV8`, `EQUIV9`, control sin mutar en la copia).
+
+### Nucleo: escenarios nuevos (`vmmodel3.make_scenarios_core`, sin azar y al final: no cambian los demas)
+- **`cgapidx`**: indice constante de `0x2000` >= `0x800` (escribe y lee el bit `0x8C80 + 0x805`: variable 72, bit 5). En Indy3 solo los hay en el codigo muerto de la entrada de la sala 69.
+- **`cgapdiv`**: `divide` con los dos negativos (-7 / -2) y con uno.
+- **`cgapnest`**: `stopScript` de un anidado. En ScummVM `runScriptNested` solo vuelve al padre si su ranura sigue con el mismo numero, viva y sin congelar, asi que limpiar `vm.nest` solo se nota si el script parado **vuelve a arrancar en la misma ranura** antes de volver: el 199 arranca el 198, que arranca el 199 (no recursivo: mata al de fuera); el nuevo 199 cede el turno y el padre no debe seguir. Ordenes nuevas del arnes (modelo y `test_vm.cpp`): **`CODER <hex>`** (como `CODE`, pero `startScript(199)` lo vuelve a arrancar) y **`SYNTH n <hex>`** (el global n pasa a ser ese bytecode en ese escenario; `SCRDIR[n]` apunta a una pagina libre y `slot_base_off` lo sabe; `digest_boot.inc` lo copia).
+- **`cgapcam`** (sala 1): `setCameraAt(100)` (destino bajo el minimo), `roomOps 1 (400, 500)` (camara bajo el minimo: +8 por fotograma), `(160, 200)` (por encima del maximo: -8) y `actorFollowCamera` con el actor en t = 9 (`_leftTrigger` = 10).
+- **`cgapverb`**: un verbo centrado (`verbOps 19`) y un clic 4 px a la izquierda de su `left`; un verbo con el nombre "A" + `$FF 4` (variable 250) que se guarda, cambia la variable y se restaura (`drawVerb` le rehace el rectangulo: de 2 a 6 columnas).
+- **`cgapibx<sala>`**: `isActorInBox` junto a la 4.a esquina de las cajas en que esa esquina es la unica extrema en x o en y (suelos en trapecio). Con el rechazo rapido por minimo y maximo de la 10d, quitar la 4.a esquina ya no es equivalente (lo era con el de la fase 5).
+- Nucleo sin mutar con todo eso: sala 1 **1.395/1.395**; salas 1, 15 y 20 **1.521/1.521**.
+
+**Equivalentes del nucleo** (`EQUIV` de `mutaciones.py`):
+- `cadena: $FF 8 lleva bytes`: `scan_str` solo cambia con `$FF 8` o `$FF 9`, y ninguna cadena de los 1.003 scripts de Indy3 los lleva (solo `$FF 1`-`7`; recorridos con `scumm3dis`).
+- `fase 7 checkExecVerbs: el clic derecho no cuenta`: `MKSTAT` solo vale 0, `$8000`, una tecla (<= 319) o `VAR_CUTSCENEEXIT_KEY`, e Indy3 solo escribe 27 en esa variable (el boton derecho es ESC en v3).
+- `fase 7 drawVerb: un verbo guardado se dibuja`: `vd_draw` solo se llama al final de `verbOps` (ranura con saveid 0 o nueva) y al restaurar, despues de poner saveid a 0.
+- `moveCamera: tras acotar al minimo no mira el maximo` (la que se llamaba "no acota el destino al minimo": su cambio era saltarse el acotado al maximo): a `mc_4` solo se llega con MIN <= cur <= MAX, asi que MIN <= MAX y tras `dest = MIN` nunca se cumple `MAX < dest`, con cualquier dato. Se anade la mutacion que el nombre pedia (`jr nc,mc_5` -> `jr mc_5`): detectada (41 escenarios).
+
+### Actores: escenas fijas (`mk_actscen.py`, al final de cada sala, sin azar; `ACT_FIXED=0` las quita)
+- X0-X2: un actor visible **sin traje** y luego con traje y el mismo fotograma (`aq_sel` toca el contador de poses antes de mirar el traje: no es equivalente); el **angulo 70** (de espaldas; con `cp 70` seria derecha); **empate de y**; una animacion que **solo esta en el blob extra** (con `A_STAND` = su fotograma).
+- X3: actores de un solo paso con **64 celdas**: el de mas atras va a los extra (con `AC_MAXSPR` = 64 cabria).
+- La **camara** en otro sitio en las salas anchas (x - camara).
+- X4-X10: la **cache de firma**: cambia solo la x, solo la camara, solo el fotograma, cambia el primer sprite, y el actor vuelve tras ocultarse (marca de la entrada).
+- X11-X12: **mascara** con un fotograma de 6 celdas sobre un tramo que acaba 80 filas por debajo de su borde (sin acotar el fin del tramo, la tira 8 se sale de `MKBUF` y pisa la entrada de `ASEL` del actor de delante) y el mismo actor en una caja sin mascara.
+- X13: un actor que asoma mas de 16 lineas por encima de la sala (`acl_neg`).
+- Sin mutar: salas 7, 77, 12 y 28 (las de `mut_fase8.py`) **22, 22, 19 y 19 escenas sin diferencias**; 1 y 15 **24 y 24**.
+
+**Equivalentes de actores** (`EQUIV8` de `mut_fase8.py`):
+- `un actor que no cabe se dibuja a medias`: la pasada 1 ya reparte (normales <= 63), asi que en la pasada 2 `aq_n + celdas <= aq_tot <= 63` siempre.
+- `celda a la izquierda de la pantalla`: una x negativa es >= 319 sin signo y la salta la comprobacion siguiente.
+- `mascara: un tramo de valor 0 se rellena`: `mk_strip` ya deja a cero las `aq_rh` filas y el relleno no sale de ellas.
+
+### Sala 70: lo que salia distinto era la prueba
+Las 8 escenas "con diferencias" de `actscen.sh 1 70 8` no tenian **ningun sprite distinto**: los "2 distintos" eran la comprobacion previa de `EXPECT_PC` (el contador de poses de cada actor visible tiene que haber vuelto a 0 en la escena), aplicada a los actores 8 y 10, que **la escena no pone**: los scripts locales de la sala (el 201 los mete en la sala con `putActorInRoom`/`putActor`/`animateActor`; 204, 205, 207 y 209 los mueven en bucle) los vuelven a mostrar en cuanto la escena los oculta. Es lo que hace ScummVM (`Actor::putActor` muestra al actor si esta en la sala en curso), y el estado de los actores ya lo comparan con el modelo las trazas del nucleo. **Arreglo en la prueba**: `mk_actscen.py` saca una 4.a linea con los actores que pone cada escena, `actscen.sh` se la pasa a `check_spr.py` (`EXPECT_ACT`) y `sprites3.py` solo mira el contador de esos. `actscen.sh 1 70 8`: **8 de 8 escenas sin diferencias** (los mismos volcados).
+
+### Guardar y cargar (`mut_fase9.py`, nuevo)
+Guarda en `build/m9/` lo esperado de las 6 pruebas de `savetest.sh` (resumen del modelo, ordenes de sonido, `DATA.BIN` (la del script sintetico es otra), sucesos y la linea de `check_hr`), una vez y sin mutar (tienen que dar todo igual). Cada mutacion de `ovc9.asm` vuelve a montar **solo el overlay C** en una copia (`V3/ENGINE_m9_<n>`): `scumm.sym` no cambia, asi que lo esperado vale para todas; borra las `SAVE*.SAV` antes de cada prueba. `MUT9_NOBASE=1` reusa lo esperado.
+Ademas de lo de `savetest.sh`, cada prueba **compara los `SAVE*.SAV`** (nombres y bytes) con los de la pasada sin mutar (sin eso no se veian ni el nombre del fichero ni la cabecera). Pruebas nuevas:
+- **`cargarfuera`** (`ev_save4.txt`): el script sintetico guarda y se carga desde el bucle principal (DBG_SAVE): la ranura sigue justo detras del opcode de guardar (`update_ptr`).
+- **`nombrevacio`** (`ev_save6.txt` = `ev_f5j.txt` + guardar en la ranura 5, cuyo nombre esta vacio): el nombre que se leyo antes no puede quedar en el fichero.
+- **`sdllena`**: el script sintetico con la SD que rechaza las escrituras: **`TS_WRFAIL=1`** en `test_scumm.cpp` (FWRITE responde 255 y no escribe) y en el modelo (`saveLoadGame $80` devuelve 2 y no guarda): guardar da 2 y cargar despues, 5.
+- **Arreglo del arnes:** `slot_base_off` (y con el `digest_boot.inc` del programa) trataba siempre el script 199 como el `CODE` del nucleo (base `$2000`); con `SCUMM_SYNTH` el 199 del programa viene de `DATA.BIN` y su posicion salia mal en cuanto seguia vivo en el resumen (`cargarfuera`). Ahora solo si una orden `CODE`/`CODER`/`SYNTH` lo marca.
+- **Pasada a medias** (solo con las 6 pruebas de `savetest.sh`, antes de anadir las 3 nuevas y la comparacion de ficheros; parada a peticion del usuario): de las 14 primeras, detectadas 7 (unidad, nombre de la cadena siguiente, bloque 7 sin el ultimo byte, OBJCLS, monton de cadenas, reproductor, MSGBUF); sin detectar 7: numero de ranuras y 30 caracteres (equivalentes, en `EQUIV9`), y unidades del nombre del fichero, cabecera sin `ev_handler`, nombre sin borrar, `update_ptr` y error de escritura, para las que se hicieron la comparacion de ficheros y las pruebas `cargarfuera`, `nombrevacio` y `sdllena` (validadas sin mutar: 401/401 y 401/401; la de `nombrevacio`, sin pasar). **Las 43 con todo eso no se han pasado: quedan para la validacion final** (`python mut_fase9.py`, ~1,5-2 h; la prueba de la noche la incluye).
+- **Hallazgo, sin resolver (no es de la 10e):** `ev_dialogo2.txt` (el dialogo: un nombre de 33 letras en la ranura 3; despues, otra vez F5 y otra partida en la 4) da **351 fotogramas distintos del modelo desde el 2.250**: en el segundo dialogo, con una partida ya guardada, el clic de (230, 128) acaba en el script del objeto 168 en el modelo y del 167 en el Z80, y cambian distintos estados de objetos (`O=`). Hasta el 2.249 todo igual. Hay que mirar quien tiene razon contra ScummVM (`findObject` con dos objetos solapados que se activan cuando hay partidas, o la lista de nombres). Ademas: **el dialogo corta el nombre a 22 letras** (guarda "ABCDEFGHIJKLMNOPQRSTUV").
+
+### Pruebas pasadas (especificas, de dia)
+- Nucleo: sala 1 1.395/1.395; salas 1, 15 y 20 1.521/1.521. `mutaciones.py` solo con el filtro del grupo.
+- `actscen.sh`: salas 7, 77, 12, 28, 1, 15 y 70 sin diferencias (con las escenas fijas).
+- `build_boot.sh 700` con `ev_save.txt` 701/701 y las 6 de `savetest.sh` sin mutar (dentro de `mut_fase9.py`): todo igual; `check_hr` como siempre (8 de la capa de texto en el dialogo F5).
+- No se ha pasado la bateria completa ni `mutaciones.py` entero (de noche).
+
+### Prueba de la noche
+`pruebas_noche.sh` pasa ademas `mut_fase8.py` (todas, tambien las de sonido) y `mut_fase9.py`.
+
+### Lo que falta
+- **Sala 20 con 12 escenas (semilla 1): `ERR=6` en el fotograma 55** (`startScene` a una sala que no existe, desde un script de la sala con el estado de los actores forzado a mano). Pasa igual sin las escenas fijas y con el Z80 de HEAD (la 10d solo paso la sala 20 con 8 escenas). La prueba de la noche (`actall.sh "1 2" "1 15 20 28" 12`) la va a dar como fallo. Sin investigar.
+- Las equivalentes no se han pasado (`MUT_EQUIV=1`): son por razonamiento sobre el codigo y los datos.
 
 Sin commit.

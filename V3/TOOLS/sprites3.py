@@ -288,8 +288,12 @@ def check_dump(dump, sym, data, verbose=True):
     x0 = dump[131072 + 64 * 32 + 10:131072 + 64 * 32 + 10 + 0x400]
     bad = 0
     if os.environ.get('EXPECT_PC'):                       # escenas de actscen.sh: el fotograma de cada actor cambia en cada escena y el volcado se hace 2 vueltas despues
+        ea = os.environ.get('EXPECT_ACT')                 # 10e: solo los actores que pone la escena (los demas los mueven los scripts de la sala: en la 70, los
+        only = set(int(x) for x in ea.split(',') if x) if ea else None     # actores 8 y 10 vuelven con putActor/animateActor y su fotograma no cambia en cada escena)
         for a in range(1, NACT):
             r = actors[a]
+            if only is not None and a not in only:
+                continue
             if r[A_ROOM] == room and r[A_VIS] and (r[A_COST] or r[A_COST + 1]):
                 pf, pc = counters[a]
                 if pf != r[A_FRAME] or pc > 2:

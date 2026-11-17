@@ -36,9 +36,11 @@ static uint16_t crc16(const uint8_t* d, size_t n, uint16_t crc = 0xFFFF) {
   return crc;
 }
 
+static int slot_base_off(int st_where, int num, int page, int ptr);
+static bool synth_scr[256];                                 // 10e: SYNTH n: el script global n es bytecode sintetico (empieza en el inicio de la ventana; digest_boot.inc lo copia)
 static int slot_base_off(int st_where, int num, int page, int ptr) {
   if (st_where == 2) {
-    if (num == 199) return ptr - 0x2000;                    // CODE: el bytecode empieza en el inicio de la ventana
+    if (num < 256 && synth_scr[num]) return ptr - 0x2000;   // CODE/CODER/SYNTH: el bytecode empieza en el inicio de la ventana (10e: el 199 de SCUMM_SYNTH en el programa va por SCRDIR)
     int pg = d8(OFF_SCRDIR + 3 * num), ad = d16(OFF_SCRDIR + 3 * num + 1);
     if (pg == 255) { int e = OFF_BIGDIR + 8 * ad; return (page - d8(e + 2)) * 4096 + ptr - 0x2000; }
     return ptr - ad;

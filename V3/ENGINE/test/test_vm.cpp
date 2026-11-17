@@ -276,9 +276,11 @@ static bool z80_call(int addr) {
 
 // ---------------------------------------------------------------- escenarios
 static int cur_room = 0, entry_room = 0, exit_room = 0;
+static int slot_base_off(int st_where, int num, int page, int ptr);
+static bool synth_scr[256];                                 // 10e: SYNTH n: el script global n es bytecode sintetico (empieza en el inicio de la ventana; digest_boot.inc lo copia)
 static int slot_base_off(int st_where, int num, int page, int ptr) {
   if (st_where == 2) {
-    if (num == 199) return ptr - 0x2000;                    // CODE: el bytecode empieza en el inicio de la ventana
+    if (num < 256 && synth_scr[num]) return ptr - 0x2000;   // CODE/CODER/SYNTH: el bytecode empieza en el inicio de la ventana (10e: el 199 de SCUMM_SYNTH en el programa va por SCRDIR)
     int pg = d8(OFF_SCRDIR + 3 * num), ad = d16(OFF_SCRDIR + 3 * num + 1);
     if (pg == 255) { int e = OFF_BIGDIR + 8 * ad; return (page - d8(e + 2)) * 4096 + ptr - 0x2000; }
     return ptr - ad;
@@ -512,6 +514,7 @@ int main(int argc, char** argv) {
     if (np < 0) continue;
     bool dig = false;
     if (!strcmp(cmd, "INIT")) {
+      memset(synth_scr, 0, sizeof synth_scr);
       for (int i = 0; i < 8; i++) blk[i] = i;
       init_world();
       if (!run_call(API_INIT, out)) { aborted = true; continue; }
@@ -570,16 +573,28 @@ int main(int argc, char** argv) {
       wr16(APIN, p[0]); wr(APIP, p[0] < 1000 ? d8(e) : 0); wr16(APIA, p[0] < 1000 ? d16(e + 1) : 0); wr(APIVERB, p[1]);
       if (!run_call(API_RUN_OBJECT, out)) { aborted = true; continue; }
       dig = true;
-    } else if (!strcmp(cmd, "CODE")) {                         // CODE <hex>: bytecode sintetico como un script global (vmsynth3.py)
+    } else if (!strcmp(cmd, "CODE") || !strcmp(cmd, "CODER")) {   // CODE <hex>: bytecode sintetico como un script global (vmsynth3.py); CODER (10e): ademas SCRDIR[199] apunta a el (startScript(199) lo vuelve a arrancar)
       int pg = d_first + d_npages + ncode++;                    // una pagina de datos que no usa DATA.BIN (una por CODE: los nombres de verbos y actores apuntan al texto)
       if (128 + pg > 255) { printf("sin paginas para CODE%c", 10); return 2; }
       uint8_t* mem = ram[128 + pg];
       memset(mem, 0, 8192);
       int nb = 0;
-      for (const char* h = line + 5; h[0] && h[1] && nb < 8192; h += 2) { unsigned v = 0; sscanf(h, "%2x", &v); mem[nb++] = (uint8_t)v; }
+      for (const char* h = line + strlen(cmd) + 1; h[0] && h[1] && nb < 8192; h += 2) { unsigned v = 0; sscanf(h, "%2x", &v); mem[nb++] = (uint8_t)v; }
+      if (!strcmp(cmd, "CODER")) { wr(SCRDIR + 3 * 199, pg); wr16(SCRDIR + 3 * 199 + 1, 0x2000); }
+      synth_scr[199] = true;
       wr(APIW, 2); wr16(APIN, 199); wr(APIP, pg); wr16(APIA, 0x2000); wr(APIBIG, 0);
       if (!run_call(API_RUN_EXT, out)) { aborted = true; continue; }
       dig = true;
+    } else if (!strcmp(cmd, "SYNTH")) {                         // SYNTH n <hex> (10e): el script global n pasa a ser ese bytecode (SCRDIR[n] apunta a una pagina libre); no lo arranca
+      int pg = d_first + d_npages + ncode++;
+      if (128 + pg > 255 || p[0] < 1 || p[0] > 199) { printf("SYNTH: sin paginas o numero malo%c", 10); return 2; }
+      uint8_t* mem = ram[128 + pg];
+      memset(mem, 0, 8192);
+      const char* h = strchr(line + 6, ' ');
+      int nb = 0;
+      for (h = h ? h + 1 : line + strlen(line); h[0] && h[1] && nb < 8192; h += 2) { unsigned v = 0; sscanf(h, "%2x", &v); mem[nb++] = (uint8_t)v; }
+      wr(SCRDIR + 3 * p[0], pg); wr16(SCRDIR + 3 * p[0] + 1, 0x2000);
+      synth_scr[p[0]] = true;
     } else if (!strcmp(cmd, "USERPUT")) {                       // USERPUT u c: _userPut y _cursor.state a mano
       wr16(USERPUT, (uint16_t)p[0]); wr16(CURSTATE, (uint16_t)p[1]);
     } else if (!strcmp(cmd, "INPUT")) {                         // INPUT zona valor [modo]: runInputScript (fase 7)
