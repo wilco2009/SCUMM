@@ -60,8 +60,8 @@ hv_oh           equ HV+25
 hv_so           equ HV+26
 hv_rem          equ HV+28
 hv_pg           equ HV+30
-hv_c0            equ HV+32               ; columnas (minima y maxima) de los objetos que han cambiado
-hv_c1            equ HV+33
+hv_y0           equ HV+32               ; fase 10c: lineas de la ventana que componen hr_makecol / hr_put: [hv_y0, 128 - hv_y1), multiplos de 8 (0 y 0: las 128)
+hv_y1           equ HV+33
 hv_ch            equ HV+34
 hv_dark         equ HV+35               ; 1: la sala esta a oscuras (dark.asm): hr_put oscurece los atributos de lo que dibuja
 hv_lines        equ HV+36               ; D3: lineas de la sala en el .GFX, las que se ven (<= 128), la primera que se ve, columnas por pagina, 2 * lineas (palabra)
@@ -72,6 +72,13 @@ hv_l2           equ HV+40
 hv_cs           equ HV+42               ; clip de un objeto en la columna: primera linea (absoluta), destino y longitud
 hv_cd           equ HV+43
 hv_cl           equ HV+44
+hv_wlo          equ HV+45               ; fase 10c: lineas de la sala (absolutas) que compone hr_makecol: [hv_wlo, hv_whi)
+hv_whi          equ HV+46
+hv_dlo          equ HV+47               ; fase 10c: primer indice de la lista de objetos que recorre hr_makecol (0: HR_DLIST; 128: la filtrada de hr_orect, HR_DLIST+128)
+hv_ndls         equ HV+48               ; fase 10c: hv_ndl guardado mientras hv_ndl es el final de la lista filtrada
+hv_nobg         equ HV+49               ; fase 10c: 1 = hr_makecol no copia el fondo (la lista filtrada empieza por un objeto que cubre todo el rectangulo)
+hv_nr           equ SV+242              ; fase 10c: rectangulos ya recompuestos en este hr_objupd (en HR_RECTS)
+HR_RECTS        equ HR_BM+$1900         ; fase 10c: hasta 32 x 4 bytes (columna, columnas, hv_y0, hv_y1); el bufer de abajo del scroll vertical, que no se usa
 hv_drawn        equ HV+31               ; 0: la sala aun no se ha dibujado (se dibuja ya en su sitio: el salto de la camara, o gd_update si nadie la mueve)
 
 ; ---------------------------------------------------------------------
@@ -187,24 +194,58 @@ hr_makecol:     ld (hv_w),de
                 ld a,(hv_hh)
                 cp 128
                 call c,hm_zero          ; una sala de menos de 128 lineas: el resto de la columna a cero
+                ld a,(hv_y1)            ; fase 10c: solo las lineas [hv_y0, 128 - hv_y1) de la ventana (recortadas al alto de la sala)
+                ld b,a
+                ld a,128
+                sub b
+                ld hl,hv_hh
+                cp (hl)
+                jr c,hm_e
+                ld a,(hl)
+hm_e:           ld hl,hv_ytop
+                add a,(hl)
+                ld (hv_whi),a
+                ld a,(hv_y0)
+                add a,(hl)
+                ld (hv_wlo),a
+                ld b,a
+                ld a,(hv_nobg)          ; fase 10c: un objeto lo tapa todo
+                or a
+                jr nz,hm_nobg
+                ld a,(hv_whi)
+                sub b                   ; lineas del fondo
+                jr z,hm_nobg
+                jr c,hm_nobg
+                ld (hv_cl),a
                 call hr_coloff          ; HL = bitmap de la columna (desde la primera linea que se ve)
+                ld a,(hv_y0)
+                ld e,a
+                ld d,0
+                add hl,de
                 push hl
-                ld de,HR_COLBUF
-                ld a,(hv_hh)
+                ld hl,HR_COLBUF
+                add hl,de
+                ex de,hl
+                ld a,(hv_cl)
                 ld c,a
                 ld b,0
+                pop hl
+                push hl
                 call hr_fcopy
                 pop hl
                 ld a,(hv_lines)
                 ld e,a
                 ld d,0
                 add hl,de               ; y detras, sus atributos
-                ld de,HR_COLBUF+128
-                ld a,(hv_hh)
+                ld a,(hv_y0)
+                or $80
+                ld e,a
+                ld d,HR_COLBUF>>8       ; HR_COLBUF + 128 + hv_y0 (HR_COLBUF acaba en $00)
+                ld a,(hv_cl)
                 ld c,a
                 ld b,0
                 call hr_fcopy
-                xor a
+hm_nobg:        ld a,(hv_dlo)           ; fase 10c: la lista entera o la filtrada de hr_orect
                 ld (hv_j),a
 hm_o:           ld a,(hv_ndl)
                 ld b,a
@@ -262,7 +303,11 @@ hm_o:           ld a,(hv_ndl)
                 ld hl,hv_on
                 cp (hl)
                 jp nc,hm_next
-                ld b,a
+                push af
+                call hm_clip            ; la parte del objeto que cae en las lineas que se componen: hv_cs (primera, absoluta), hv_cd (destino), hv_cl (longitud)
+                pop bc                  ; B = columna dentro del objeto (los indicadores, los de hm_clip)
+                jp c,hm_next
+                jp z,hm_next
                 ld a,(hv_oh)
                 ld e,a
                 ld d,0
@@ -276,9 +321,6 @@ hm_mul:         dec b
 hm_md:          ld de,(hv_oo)
                 add hl,de
                 ld (hv_so),hl           ; donde esta el bitmap de esa columna del objeto
-                call hm_clip            ; la parte del objeto que cae en la ventana de 128 lineas: hv_cs (primera, absoluta), hv_cd (destino), hv_cl (longitud)
-                jp c,hm_next
-                jp z,hm_next
                 ld a,(hv_ol)
                 ld c,a
                 ld a,(hv_cs)
@@ -333,20 +375,18 @@ hm_zero:        ld hl,HR_COLBUF
                 ldir
                 ret
 
-; recorta el objeto actual (hv_ol, hv_oh) a la ventana [hv_ytop, hv_ytop + hv_hh): carry o Z si no queda nada; si no, NC y NZ con hv_cs, hv_cd, hv_cl
+; recorta el objeto actual (hv_ol, hv_oh) a las lineas [hv_wlo, hv_whi) (fase 10c; antes la ventana [hv_ytop, hv_ytop + hv_hh)): carry o Z si no queda nada; si no, NC y NZ con hv_cs, hv_cd, hv_cl
 hm_clip:        ld a,(hv_ol)
-                ld hl,hv_ytop
+                ld hl,hv_wlo
                 cp (hl)
                 jr nc,hmc1
-                ld a,(hl)               ; start = max(ol, ytop)
+                ld a,(hl)               ; start = max(ol, wlo)
 hmc1:           ld (hv_cs),a
                 ld a,(hv_ol)
                 ld hl,hv_oh
                 add a,(hl)
                 ld b,a                  ; B = ol + oh
-                ld a,(hv_ytop)
-                ld hl,hv_hh
-                add a,(hl)              ; ytop + hh
+                ld a,(hv_whi)
                 cp b
                 jr c,hmc2
                 ld a,b                  ; end = min(ol + oh, ytop + hh)
@@ -364,7 +404,7 @@ hmc2:           ld hl,hv_cs
 
 ; HL = origen (128 bytes, sin cruzar de pagina de 256: HR_COLBUF o HR_COLBUF+128), DE = destino: uno por linea (paso 32). Fase 10b: 8 por vuelta, desenrollado
 hr_stride:      ld c,16
-hs_l:
+hs_l:                                   ; (fase 10c: entrando aqui, C = grupos de 8 lineas)
                 ld a,(hl)
                 inc l
                 ld (de),a
@@ -425,37 +465,68 @@ hr_put:         ld (hv_s),a
                 jr z,hp_nd
                 ld a,(hv_s)
                 call OVL_DKMASK         ; los atributos de lo que queda fuera de la linterna, a 0
-hp_nd:          ld a,(hv_s)
+hp_nd:          ld a,(hv_s)             ; fase 10c: solo las lineas [hv_y0, 128 - hv_y1)
                 cp 32
                 jr z,hp_r
                 cp $FF
                 jr z,hp_l
                 ld e,a
                 ld d,(HR_BM>>8)+HR_TOP/8
-                ld hl,HR_COLBUF
-                call hr_stride
+                xor a
+                call hp_s
                 ld a,(hv_s)
                 ld e,a
                 ld d,(HR_ATT>>8)+HR_TOP/8
-                ld hl,HR_COLBUF+128
-                jp hr_stride
-hp_r:           ld hl,HR_COLBUF
-                ld de,HR_RBM+HR_TOP
-                ld bc,128
+                ld a,128
+; E = columna, D = byte alto de la linea 0 de la ventana, A = 0 (bitmap) o 128 (atributos)
+hp_s:           ld hl,hv_y0
+                add a,(hl)
+                ld b,(hl)
+                ld l,a
+                ld h,HR_COLBUF>>8       ; HL = HR_COLBUF (+ 128) + hv_y0
+                ld a,b
+                rrca
+                rrca
+                rrca
+                add a,d
+                ld d,a                  ; + hv_y0 * 32
+                ld a,(hv_y1)
+                add a,b
+                neg
+                add a,128
+                rrca
+                rrca
+                rrca
+                ld c,a                  ; grupos de 8 lineas (nunca 0)
+                jp hs_l
+hp_r:           ld de,HR_RBM+HR_TOP
+                ld bc,HR_RATT+HR_TOP
+                jr hp_b
+hp_l:           ld de,HR_LBM+HR_TOP
+                ld bc,HR_LATT+HR_TOP
+hp_b:           push bc
+                call hp_n
                 ldir
-                ld hl,HR_COLBUF+128
-                ld de,HR_RATT+HR_TOP
-                ld bc,128
+                pop de
+                call hp_n
+                set 7,l                 ; HR_COLBUF + 128 + hv_y0
                 ldir
                 ret
-hp_l:           ld hl,HR_COLBUF
-                ld de,HR_LBM+HR_TOP
-                ld bc,128
-                ldir
-                ld hl,HR_COLBUF+128
-                ld de,HR_LATT+HR_TOP
-                ld bc,128
-                ldir
+; DE = base -> HL = HR_COLBUF + hv_y0, DE = base + hv_y0, BC = lineas
+hp_n:           ld a,(hv_y0)
+                ld l,a
+                ld h,HR_COLBUF>>8
+                add a,e
+                ld e,a
+                adc a,d
+                sub e
+                ld d,a
+                ld a,(hv_y1)
+                add a,l
+                neg
+                add a,128
+                ld c,a
+                ld b,0
                 ret
 
 ; ---------------------------------------------------------------------
@@ -542,6 +613,10 @@ hr_init:        call hr_pal16           ; fase 8: la paleta de 16 con los colore
                 ld (hv_pend),a
                 ld (hv_ndl),a
                 ld (hv_nobj),a
+                ld (hv_y0),a            ; fase 10c: las 128 lineas y la lista entera
+                ld (hv_y1),a
+                ld (hv_dlo),a
+                ld (hv_nobg),a
                 inc a
                 ld (WINPG),a            ; el bloque 1 tiene su pagina de arranque
 hr_clear:       ld hl,HR_BM
@@ -926,6 +1001,10 @@ gf_draw_window: call hr_settle
                 call hr_dclr            ; fase 10b: se dibuja todo: nada sucio
                 xor a
                 ld (hv_ch),a
+                ld (hv_y0),a            ; fase 10c: las 128 lineas y la lista entera
+                ld (hv_y1),a
+                ld (hv_dlo),a
+                ld (hv_nobg),a
                 ld a,1
                 ld (hv_drawn),a
                 ld hl,(gf_cam)
@@ -976,6 +1055,9 @@ hr_objupd:      call hr_settle
                 ld (gd_pending),a
                 call hr_mkdl
                 xor a
+                ld (hv_nr),a            ; fase 10c: ningun rectangulo recompuesto
+                call ov_merge           ; fase 9: las columnas que ha tocado la capa de texto y cajas (txtlayer.asm), enteras (fase 10c: antes que los objetos, para no repetirlas)
+                xor a
                 ld (hv_i),a
 hou_l:          ld a,(hv_i)
                 ld hl,hv_nobj
@@ -993,12 +1075,11 @@ hou_l:          ld a,(hv_i)
                 ld a,(hl)
                 cp b
                 ld a,e
-                call nz,hr_omark        ; ha cambiado: sus columnas, sucias (fase 10b: antes un solo rango del minimo al maximo, que en el pasillo cogia casi toda la pantalla)
+                call nz,hr_orect        ; ha cambiado: se recompone su rectangulo (fase 10c; en la 10b sus columnas enteras; antes un rango del minimo al maximo)
 hou_n:          ld hl,hv_i
                 inc (hl)
                 jr hou_l
-hou_cmp:        call ov_merge           ; fase 9: las columnas que ha tocado la capa de texto y cajas (txtlayer.asm)
-                ld a,(hv_ch)
+hou_cmp:        ld a,(hv_ch)
                 or a
                 jr z,hou_cp
                 xor a
@@ -1040,8 +1121,9 @@ hou_cp:         ld hl,HR_NFLAGS
                 ldir
                 jp hr_unmap
 
-; fase 10b: columnas sucias. hr_omark: A = objeto (indice desde 0, < hv_nobj) -> sus columnas; hr_dmark: C = primera, B = cuantas (0: nada). Ponen hv_ch
-hr_omark:       ld l,a
+; fase 10c: A = objeto (indice desde 0, < hv_nobj) que ha cambiado: se recomponen ya sus columnas que estan en pantalla o en los bufers, pero solo las lineas
+; que toca (redondeadas a 8), salvo las columnas sucias de la capa, que recompone enteras hr_objupd despues. Fuera de esas lineas no cambia nada.
+hr_orect:       ld l,a
                 ld h,0
                 ld d,h
                 ld e,l
@@ -1060,8 +1142,254 @@ hr_omark:       ld l,a
                 ret z                   ; sin imagen: no hay nada que redibujar
                 ld c,(hl)               ; primera columna
                 inc hl
+                ld a,(hl)
+                ld (hv_ol),a
                 inc hl
                 ld b,(hl)               ; columnas
+                inc hl
+                ld a,(hl)
+                ld (hv_oh),a
+                ld a,(hv_ytop)          ; recortado a la ventana entera
+                ld (hv_wlo),a
+                ld hl,hv_hh
+                add a,(hl)
+                ld (hv_whi),a
+                push bc
+                call hm_clip
+                pop bc
+                ret c
+                ret z                   ; no se ve ninguna de sus lineas
+                ld a,(hv_cd)
+                ld e,a
+                and $F8
+                ld (hv_y0),a
+                ld a,(hv_cl)
+                add a,e
+                add a,7
+                and $F8
+                neg
+                add a,128
+                ld (hv_y1),a
+                ld a,b
+                or a
+                jr z,hor_z
+                call hr_rdup            ; fase 10c: dentro de otro ya recompuesto (los dos estados de una animacion suelen ocupar el mismo sitio): nada
+                jr z,hor_z
+                push bc
+                call hr_ofilt           ; solo los objetos que tocan el rectangulo
+                pop bc
+hor_l:          push bc
+                call hr_orc
+                pop bc
+                inc c
+                jr z,hor_e
+                djnz hor_l
+hor_e:          ld a,(hv_ndls)
+                ld (hv_ndl),a
+hor_z:          xor a
+                ld (hv_y0),a
+                ld (hv_y1),a
+                ld (hv_dlo),a
+                ld (hv_nobg),a
+                ret
+; C = columna, B = columnas, hv_y0 / hv_y1: Z si cabe en uno de los rectangulos de HR_RECTS; si no, NZ y se apunta (si hay sitio). Conserva BC
+hr_rdup:        ld a,(hv_nr)
+                or a
+                jr z,hrd_add
+                ld e,a
+                ld hl,HR_RECTS
+hrd_l:          ld a,(hl)
+                cp c
+                jr nz,hrd_n
+                inc hl
+                ld a,(hl)
+                cp b
+                jr nz,hrd_n1
+                inc hl
+                ld a,(hv_y0)
+                cp (hl)
+                jr c,hrd_n2             ; empieza mas arriba
+                inc hl
+                ld a,(hv_y1)
+                cp (hl)
+                jr c,hrd_n3             ; acaba mas abajo
+                xor a
+                ret
+hrd_n:          inc hl
+hrd_n1:         inc hl
+hrd_n2:         inc hl
+hrd_n3:         inc hl
+                dec e
+                jr nz,hrd_l
+                ld a,(hv_nr)
+hrd_add:        cp 32
+                jr nc,hrd_x             ; lleno: no se apunta
+                add a,a
+                add a,a
+                ld l,a
+                ld h,HR_RECTS>>8        ; HR_RECTS acaba en $00
+                ld (hl),c
+                inc l
+                ld (hl),b
+                inc l
+                ld a,(hv_y0)
+                ld (hl),a
+                inc l
+                ld a,(hv_y1)
+                ld (hl),a
+                ld hl,hv_nr
+                inc (hl)
+hrd_x:          or 1
+                ret
+; C = primera columna, B = cuantas, lineas [hv_y0, 128 - hv_y1) de la ventana: los objetos de HR_DLIST que tocan ese rectangulo, en su orden, a
+; HR_DLIST+128 (hv_dlo = 128, hv_ndl = 128 + cuantos; el de antes en hv_ndls). Asi hr_makecol no recorre en cada columna los que no la tocan
+hr_ofilt:       xor a
+                ld (hv_nobg),a
+                ld a,c
+                ld (hv_c),a             ; primera columna
+                add a,b
+                jr nc,hf_e
+                ld a,$FF
+hf_e:           ld (hv_s),a             ; la siguiente a la ultima
+                ld a,(hv_ytop)
+                ld hl,hv_y0
+                add a,(hl)
+                ld (hv_wlo),a           ; lineas de la sala (absolutas)
+                ld a,128
+                ld hl,hv_y1
+                sub (hl)
+                ld hl,hv_ytop
+                add a,(hl)
+                ld (hv_whi),a
+                ld a,(hv_ndl)
+                ld (hv_ndls),a
+                cp 128
+                ret nc                  ; (no cabe al lado: la lista entera)
+                ld b,a
+                ld a,128
+                ld (hv_ndl),a
+                ld (hv_dlo),a
+                ld a,b
+                or a
+                ret z
+                ld de,HR_DLIST
+hf_l:           ld a,(de)
+                push de
+                push bc
+                call hf_obj
+                pop bc
+                pop de
+                inc e
+                djnz hf_l
+                ret
+; A = objeto: si toca el rectangulo, al final de la lista filtrada
+hf_obj:         ld hl,hv_nobj
+                cp (hl)
+                ret nc                  ; sin registro (hr_makecol se lo salta)
+                ld c,a
+                ld l,a
+                ld h,0
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,de
+                add hl,hl               ; 6 * objeto
+                ld de,HR_OBJREC
+                add hl,de
+                ld a,(hl)
+                inc hl
+                and (hl)
+                inc a
+                ret z                   ; sin imagen
+                inc hl
+                ld e,(hl)               ; primera columna
+                ld a,(hv_s)
+                cp e
+                ret c
+                ret z                   ; empieza despues del rectangulo
+                ld b,0                  ; B = 0 si cubre todo el rectangulo (cada lado que no lo cubre suma 1)
+                ld a,(hv_c)
+                cp e
+                jr nc,hfv1
+                inc b
+hfv1:           inc hl
+                ld d,(hl)               ; primera linea
+                inc hl
+                ld a,e
+                add a,(hl)              ; + columnas
+                jr c,hf_c1
+                ld e,a
+                ld a,(hv_c)
+                cp e
+                ret nc                  ; acaba antes del rectangulo
+                ld a,(hv_s)
+                cp e
+                jr c,hf_c1
+                jr z,hf_c1
+                inc b
+hf_c1:          inc hl
+                ld a,(hv_whi)
+                cp d
+                ret c
+                ret z                   ; empieza por debajo
+                ld a,(hv_wlo)
+                cp d
+                jr nc,hfv2
+                inc b
+hfv2:           ld a,d
+                add a,(hl)              ; + lineas
+                ld e,a
+                ld a,(hv_wlo)
+                cp e
+                ret nc                  ; acaba por encima
+                ld a,(hv_whi)
+                cp e
+                jr c,hfv3
+                jr z,hfv3
+                inc b
+hfv3:           ld a,b
+                or a
+                jr nz,hf_app
+                ld a,128                ; lo tapa todo (los objetos son opacos): lo anterior de la lista y el fondo no se ven
+                ld (hv_ndl),a
+                ld a,1
+                ld (hv_nobg),a
+hf_app:         ld a,(hv_ndl)
+                ld e,a
+                ld d,HR_DLIST>>8        ; HR_DLIST acaba en $00
+                ld a,c
+                ld (de),a
+                ld hl,hv_ndl
+                inc (hl)
+                ret
+; C = columna del mundo: si esta en pantalla o en un bufer y no es sucia de la capa, se recompone (con hv_y0 / hv_y1)
+hr_orc:         ld e,c
+                ld d,0
+                ld hl,(hv_cam)
+                dec hl
+                ex de,hl
+                or a
+                sbc hl,de               ; 0 = bufer de la izquierda, 1-32 = pantalla, 33 = bufer de la derecha
+                ld a,h
+                or a
+                ret nz
+                ld a,l
+                cp 34
+                ret nc
+                ld b,a
+                ld a,c
+                call hr_dbit
+                and (hl)
+                ret nz                  ; sucia de la capa: entera, despues
+                push bc
+                ld e,c
+                ld d,0
+                call hr_makecol
+                pop af                  ; A = B
+                sub 1                   ; 0 -> $FF (bufer de la izquierda)
+                jp hr_put
+
+; fase 10b: columnas sucias (fase 10c: hr_omark, que marcaba las de un objeto, ya no hace falta). hr_dmark: C = primera, B = cuantas (0: nada). Pone hv_ch
 hr_dmark:       ld a,b
                 or a
                 ret z

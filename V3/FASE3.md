@@ -735,4 +735,36 @@ Tamanos: residente `$4200-$7A2A` (**1.494 B libres** hasta `$8000`), overlay C i
 
 **Pruebas (2026-11-16, con permiso del usuario):** `build_test.sh` **3.687/3.687**; pasillo hasta el fotograma 760 (scroll) **761/761** y `check_hr` 0 distintos; arranque **1.501/1.501**, `check_hr` 0; Barnett **1.751/1.751**, `check_hr` 0; `objflip.sh` en las salas 20 y 28 (objetos que cambian en cada fotograma) `check_hr` 0 distintos en los 8 volcados; `savetest.sh` (repetido despues del cambio 6): **701, 901, 401, 1.501, 1.351 y 2.601 iguales**; `check_hr` 0 en "cruzando salas". En el dialogo F5 (sala 14) `check_hr` da **8 distintos**, y son correctos: el glifo "0" del texto de la capa en x = 216, y = 21 (encima de la caja 1 del dialogo), que esta en `OV_TXT`; `check_hr.py` no modela la capa de texto. En la fase 9 dio 0 porque ese texto no caia en la parte visible; la 10a cambio la `x` de `print` y esta prueba no se habia vuelto a pasar.
 
+r
 **Falta:** la placa. Sin commit.
+## Fase 10c: recomposicion de objetos en las salas 20 y 28 (2026-11-16; solo arnes, sin placa)
+
+**Medida** (`test/objflip.sh 20` y `objflip.sh 28`: 2 objetos al azar cambian de estado en cada fotograma, `TS_PROF=30-150`; para ver las rutinas por vuelta, el mismo `test_scumm.exe` con `TS_LOOPS=n`):
+
+| | media | mediana | p90 | maxima |
+|---|---|---|---|---|
+| sala 20 antes (tras la 10b) | 336.409 | 268.268 | 595.654 | 773.808 |
+| sala 20 despues | **296.946** | 268.285 | **396.272** | **612.902** |
+| sala 28 antes (tras la 10b) | 450.177 | 324.728 | 864.143 | 1.511.340 |
+| sala 28 despues | **375.332** | 317.120 | **519.463** | **849.790** |
+| pasillo (`TS_PROF=582-760`, sin las 2 vueltas de la SD) antes | 167.050 | | | 404.736 (4 vueltas > 325.000) |
+| pasillo despues | **150.609** | | | **351.130** (2 vueltas > 325.000) |
+
+(Pasillo con las vueltas de la SD: media 192.782 -> 176.293, p90 271.147 -> 220.968.)
+
+**La sala 20 ya cabe de media en los 325.000; la 28 no, pero no por los objetos:** una vuelta de la sala 28 en la que no cambia nada ya cuesta **~310.000 T** (scripts y actores: `loc_addr` 19.125 por vuelta, `D:mk_strip`, `es_hi`, `vr_x`, `D:mp_*`, `B:ex_push/pop`...). Lo que queda de recomponer son unos 65.000 T por vuelta de media con 2 objetos cambiando en cada fotograma (una prueba de esfuerzo: el juego cambia mucho menos), y es copia de datos de verdad (`hs_l`, `hfc2`). La vuelta mas cara (849.790, la 58) es un calculo de camino de la caminata (`D:mu_l`, `D:cpb_l`, `D:cplin`, `D:sqd`: ~200.000 T): para la 10d. Lo siguiente que pesa en las actualizaciones es comparar banderas y rehacer la lista (`obj_drawn`, `od_rec`, `hou_l`, `hd_l`, `hr_mkdl`: ~25.000 T por actualizacion).
+
+**Por que pesaba:** se recomponian las **128 lineas** de cada columna de un objeto que cambiaba (en la 28 los objetos son de 24-32 columnas; el 3 y el 13, en las lineas 152-184, ni se ven y se recomponian sus 32 columnas), y en cada columna se recorria **toda** la lista de objetos (`hm_o`), `ov_apply` borraba 128 bytes de `OV_FLG` (2.700 T por columna) y los dos estados de una animacion (6/16, 7/17...: mismo sitio) se recomponian dos veces.
+
+**Cambios** (`hr.asm`, `txtlayer.asm`; lo que se ve no cambia):
+1. `hr_orect` sustituye a `hr_omark`: de cada objeto que cambia se recompone ya su **rectangulo**: sus columnas en pantalla o en los bufers y solo sus lineas (`hv_y0` / `hv_y1`, redondeadas a 8). `hr_makecol` copia el fondo solo de esas lineas (`hv_wlo` / `hv_whi`, y `hm_clip` recorta a ellas) y `hr_put` escribe solo esas (`hp_s`, `hp_n`; `hs_l` entra con C = grupos de 8). Las columnas sucias de la capa de texto siguen enteras: `ov_merge` va ahora antes y `hr_orc` se salta esas columnas. Por defecto (0 y 0) son las 128 lineas: el scroll, la oscuridad y `gf_draw_window` no cambian.
+2. `hr_ofilt`: lista de los objetos de `HR_DLIST` que tocan el rectangulo, en su orden, en `HR_DLIST+128` (`hv_dlo` = 128, `hv_ndl` = final; `hv_ndls` guarda el de antes). Si un objeto tapa el rectangulo entero (son opacos), la lista empieza por el y no se copia el fondo (`hv_nobg`).
+3. `hr_rdup`: un rectangulo dentro de otro ya recompuesto en este `hr_objupd` no se repite (`HR_RECTS` = `HR_BM+$1900`, hasta 32, en el bufer de abajo del scroll vertical; `hv_nr` = `SV+242`).
+4. `hm_o`: `hm_clip` antes de multiplicar (los objetos que no caen en las lineas no multiplican).
+5. `txtlayer.asm`: `ov_apply` solo borra `OV_FLG` si un texto lo ha marcado (`ov_fok` = `SV+215`, el byte alto de `ov_xx`, que no se usaba).
+
+Variables: `hv_y0`/`hv_y1` = `HV+32/33` (eran `hv_c0`/`hv_c1`, sin uso desde la 10b), `hv_wlo`, `hv_whi`, `hv_dlo`, `hv_ndls`, `hv_nobg` = `HV+45..49` (hasta `SV+149`). **Residente hasta `$7C6F`: 913 B libres** (eran 1.449; +536 B). Overlays igual.
+
+**Pruebas (especificas, 2026-11-16):** `objflip.sh 20` y `objflip.sh 28`: `check_hr` **0 distintos** en los 10 volcados; `build_boot.sh 760` (pasillo con scroll) **761/761** iguales, 3 ordenes de sonido iguales y `check_hr` 0 distintos. `check_hr.py` no modela la capa de texto: el cambio 5 es igual por construccion (`OV_FLG` solo lo escribe `ov_text_col`, que pone `ov_fok` a 0); en la noche, `check_hr` del dialogo F5 tiene que seguir dando los mismos 8 distintos del texto.
+
+**Falta:** la placa y la prueba de la noche. Sin commit.

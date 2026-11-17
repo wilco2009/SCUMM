@@ -42,7 +42,8 @@ ov_tx           equ SV+209              ; palabra: x del texto que se anade
 ov_ty           equ SV+211
 ov_tl           equ SV+212
 ov_cnt          equ SV+213              ; temporales de ov_apply
-ov_xx           equ SV+214              ; palabra
+ov_xx           equ SV+214              ; (byte)
+ov_fok          equ SV+215              ; fase 10c: 1 si OV_FLG esta a cero (ov_apply no lo borra); lo pone a 0 el texto que marca una linea
 ov_g            equ SV+216              ; 3 punteros de glifo (6 bytes) en 216..221
 ov_d            equ SV+222              ; 3 desplazamientos (3 bytes)
 ov_n            equ SV+225
@@ -554,11 +555,17 @@ ov_apply:       ld hl,(hv_w)
                 add hl,hl
                 add hl,hl
                 ld (ov_cx),hl           ; x de su primer pixel
+                ld a,(ov_fok)           ; fase 10c: solo si algun texto lo ha marcado (borrarlo eran 2.700 T por columna)
+                or a
+                jr nz,oa_fk
                 ld hl,OV_FLG
                 ld de,OV_FLG+1
                 ld bc,127
                 ld (hl),0
                 ldir
+                inc a
+                ld (ov_fok),a
+oa_fk:
                 ld ix,OV_BOX
                 ld b,OV_NB
 oa_b:           ld a,(ix+OVB_USED)
@@ -837,6 +844,8 @@ orw_o:          or c
                 ld d,0
                 ld hl,OV_FLG
                 add hl,de
+                xor a
+                ld (ov_fok),a           ; fase 10c: OV_FLG ya no esta a cero
                 ld a,(hl)
                 or a
                 ld (hl),1
