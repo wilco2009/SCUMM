@@ -248,7 +248,7 @@ static std::vector<long long> prof_loops;
 static int prof_lo = -1, prof_hi = -1;
 // TS_VM=1 (con TS_PROF y TS_T=1): instrucciones de script ejecutadas y sus T-estados por opcode. Una instruccion de script va desde el paso por es_loop
 // (vm_core.asm: el bucle de exec_script) hasta que el manejador vuelve a es_loop; las ejecuciones anidadas (startScript...) se restan de la instruccion que las lanza.
-static unsigned a_es_loop = 0, a_es_noerr = 0, a_disp = 0, a_sptr = 0;
+static unsigned a_es_loop = 0, a_es_noerr = 0, a_es_go = 0, a_disp = 0, a_sptr = 0;
 static const bool ts_vm = getenv("TS_VM") != 0;
 struct VmFrame { int op; long long t0, child, pro; unsigned sp; };
 struct VmOp { long long n = 0, excl = 0, incl = 0; };
@@ -343,7 +343,7 @@ int main(int argc, char** argv) {
   { FILE* s = fopen(argv[2], "r"); char line[256];
     while (s && fgets(line, sizeof line, s)) {
       char name[128]; unsigned v;
-      if (sscanf(line, "%127s EQU %xH", name, &v) == 2) { sym[name] = (int)v; if (!strcmp(name, "main_loop")) main_loop_addr = v; if (!strcmp(name, "es_loop")) a_es_loop = v; if (!strcmp(name, "es_noerr")) a_es_noerr = v; if (!strcmp(name, "disp_table")) a_disp = v; if (!strcmp(name, "SPTR")) a_sptr = v; if (!strcmp(name, "wait_frame")) wait_frame_addr = v; if (v >= 0x4200 && v < 0x8000) syms.push_back({v, name}); }
+      if (sscanf(line, "%127s EQU %xH", name, &v) == 2) { sym[name] = (int)v; if (!strcmp(name, "main_loop")) main_loop_addr = v; if (!strcmp(name, "es_loop")) a_es_loop = v; if (!strcmp(name, "es_noerr")) a_es_noerr = v; if (!strcmp(name, "es_go")) a_es_go = v; if (!strcmp(name, "disp_table")) a_disp = v; if (!strcmp(name, "SPTR")) a_sptr = v; if (!strcmp(name, "wait_frame")) wait_frame_addr = v; if (v >= 0x4200 && v < 0x8000) syms.push_back({v, name}); }
     }
     if (s) fclose(s); }
   sd_dir = argv[3];
@@ -476,7 +476,7 @@ int main(int argc, char** argv) {
     hist[hi++ & 255] = z80.pc.w;
     int ts0 = tstates;
     unsigned vm_pc0 = z80.pc.w, vm_sp0 = z80.sp.w;
-    const bool vm_on = ts_vm && a_es_noerr && prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi;
+    const bool vm_on = ts_vm && (a_es_noerr || a_es_go) && prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi;
     if (vm_on) {
       if (vm_pc0 == a_es_loop) {                                   // vuelve el manejador: cierra la instruccion abierta en este nivel
         while (!vm_stack.empty() && vm_stack.back().sp < vm_sp0) vm_stack.pop_back();   // restos de un nivel que no volvio por es_loop
@@ -487,7 +487,8 @@ int main(int argc, char** argv) {
           if (!vm_stack.empty()) vm_stack.back().child += incl;
         }
       }
-      if (vm_pc0 == a_es_noerr + 6) {                              // ld hl,(SPTR): empieza una instruccion de script
+      if (vm_pc0 == (a_es_noerr ? a_es_noerr + 6 : a_es_go)) {      // (v3: es_go)
+                              // ld hl,(SPTR): empieza una instruccion de script
         while (!vm_stack.empty() && vm_stack.back().sp < vm_sp0) vm_stack.pop_back();
         VmFrame f; f.op = rd(rd16(a_sptr)); f.t0 = prof_total; f.child = 0; f.pro = vm_pro_acc; f.sp = vm_sp0;
         vm_pro_acc = 0; vm_n++; vm_loop_n++;
@@ -496,7 +497,7 @@ int main(int argc, char** argv) {
     }
     z80_do_opcode();
     if (prof_lo >= 0 && frames_done > prof_lo && frames_done <= prof_hi) { const char* sn = sym_of(hist[(hi - 1) & 255]); if (strcmp(sn, "hs_w")) { { static const bool ts_t = getenv("TS_T") != 0; int dt = ts_t ? tstates : 1; prof[sn] += dt; prof_by_loop[prof_n][sn] += dt; prof_total += dt; prof_work += dt; } } }
-    if (vm_on && vm_pc0 >= a_es_loop && vm_pc0 < a_es_noerr + 6) {   // prologo del bucle (comprobar ERR y CUR): se carga a la instruccion que sigue o a la salida
+    if (vm_on && vm_pc0 >= a_es_loop && vm_pc0 < (a_es_noerr ? a_es_noerr + 6 : a_es_go)) {   // prologo del bucle (comprobar ERR y CUR): se carga a la instruccion que sigue o a la salida
       vm_pro_acc += tstates;
       if (z80.pc.w < a_es_loop || z80.pc.w > a_es_noerr + 6) { vm_exit_oh += vm_pro_acc; vm_pro_acc = 0; }
     }

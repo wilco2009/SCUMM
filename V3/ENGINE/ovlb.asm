@@ -125,24 +125,25 @@ ex_sx:          ld (NR),hl              ; NR = HL con extension de signo
                 ld (NR+3),a
                 ret
 
-ex_push:        ld a,(ESP)              ; NR -> pila (conserva DE)
+ex_push:        ld a,(ESP)              ; NR -> pila (conserva DE). Fase 10d: sin ldir (ESTK no cruza un limite de 256 bytes)
                 cp MAXESTK
                 jp nc,err_range
                 inc a
                 ld (ESP),a
-                dec a
-                push de
                 add a,a
                 add a,a
+                add a,ESTK mod 256 - 4
                 ld l,a
-                ld h,0
-                ld de,ESTK
-                add hl,de
-                ex de,hl
-                ld hl,NR
-                ld bc,4
-                ldir
-                pop de
+                ld h,ESTK / 256
+                ld bc,(NR)
+                ld (hl),c
+                inc l
+                ld (hl),b
+                inc l
+                ld bc,(NR+2)
+                ld (hl),c
+                inc l
+                ld (hl),b
                 ret
 
 ex_pop:         ld a,(ESP)              ; pila -> (HL) (4 bytes; conserva DE); vacia: E_RANGE
@@ -154,14 +155,16 @@ ex_pop:         ld a,(ESP)              ; pila -> (HL) (4 bytes; conserva DE); v
                 ex de,hl
                 add a,a
                 add a,a
+                add a,ESTK mod 256
                 ld l,a
-                ld h,0
-                ld bc,ESTK
-                add hl,bc
+                ld h,ESTK / 256
                 ld bc,4
                 ldir
                 pop de
                 ret
+                IF (ESTK mod 256) + 4 * MAXESTK > 256
+                defb ESTK_CRUZA_UN_LIMITE_DE_256
+                ENDIF
 
                 include "ovb4.asm"
                 include "ovb4b.asm"

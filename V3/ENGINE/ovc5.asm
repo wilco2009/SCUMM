@@ -385,48 +385,71 @@ eo_neg:         ld hl,(N1)              ; ambos negativos: |L| >= |R|
                 xor a
                 ret
 
-; axis_rej: HL = v (s16), A = 0 (x) o 2 (y), IY = caja -> A = 1 si v es menor que las 4 esquinas o mayor que las 4
-axis_rej:       ld (SC+8),hl
-                ld c,a
-                ld b,0
-                push iy
+; axis_rej: HL = v (s16), A = 0 (x) o 2 (y), IY = caja -> A = 1 si v es menor que las 4 esquinas o mayor que las 4 (fase 10d: es decir,
+; fuera de [la menor, la mayor]; se compara sin signo con el bit de signo invertido)
+axis_rej:       or a
+                jr z,arj_x
+                inc iy
+                inc iy
+                call arj_x
+                dec iy
+                dec iy
+                ret
+arj_x:          ld a,h
+                xor $80
+                ld h,a
+                push hl
+                ld e,(iy+0)
+                ld a,(iy+1)
+                xor $80
+                ld d,a                  ; DE = la menor
+                ld b,d
+                ld c,e                  ; BC = la mayor
+                ld l,(iy+4)
+                ld a,(iy+5)
+                xor $80
+                ld h,a
+                call arj_mm
+                ld l,(iy+8)
+                ld a,(iy+9)
+                xor $80
+                ld h,a
+                call arj_mm
+                ld l,(iy+12)
+                ld a,(iy+13)
+                xor $80
+                ld h,a
+                call arj_mm
                 pop hl
-                add hl,bc
-                ld (SC+10),hl           ; direccion de la coordenada de la esquina k
-                xor a
-                ld (SC+13),a            ; menores
-                ld (SC+14),a            ; mayores
-                ld a,4
-                ld (SC+12),a
-ar_l:           ld hl,(SC+10)
-                ld e,(hl)
-                inc hl
-                ld d,(hl)
-                ld hl,(SC+10)
-                ld bc,4
-                add hl,bc
-                ld (SC+10),hl
-                ld hl,(SC+8)
-                call sless              ; carry si v < esquina; Z si iguales
-                jr c,ar_lt
-                jr z,ar_nx
-                ld hl,SC+14
-                inc (hl)
-                jr ar_nx
-ar_lt:          ld hl,SC+13
-                inc (hl)
-ar_nx:          ld hl,SC+12
-                dec (hl)
-                jr nz,ar_l
-                ld a,(SC+13)
-                cp 4
-                jr z,ar_y
-                ld a,(SC+14)
-                cp 4
-                jr z,ar_y
+                ld a,l
+                sub e
+                ld a,h
+                sbc a,d
+                jr c,arj_y              ; v < la menor
+                ld a,c
+                sub l
+                ld a,b
+                sbc a,h
+                jr c,arj_y              ; v > la mayor
                 xor a
                 ret
-ar_y:           ld a,1
+arj_y:          ld a,1
+                ret
+arj_mm:         ld a,l                  ; HL = una esquina: DE = min(DE, HL), BC = max(BC, HL)
+                sub e
+                ld a,h
+                sbc a,d
+                jr nc,arm_1
+                ld d,h
+                ld e,l
+                ret
+arm_1:          ld a,c
+                sub l
+                ld a,b
+                sbc a,h
+                ret nc
+                ld b,h
+                ld c,l
                 ret
 
 ; checkXYInBoxBounds (version < 7): BC = caja, IX = actor -> A = 1 si el actor esta dentro
@@ -1073,7 +1096,58 @@ lr_e:           pop bc
                 ret z
                 ld a,(RBLOB)
                 ld (NBOXES),a
-                ret
+                jp gt_load
+
+; gt_load (fase 10d): la tabla de puertas de la sala (ROOMDIR +22 en CURRD: pagina, direccion y bytes; pack_data3.gate_table) a GT_OFF + 1 en
+; la pagina CLS_PG, por la ventana y de 256 en 256 bytes por GW (libre fuera de la caminata), con la sala (ROOMRES) en GT_OFF; sin tabla, 0
+; entradas. La ventana vuelve a la pagina del script en curso (o, sin script, a la que tenia). La llaman ovc_room y la carga de partidas
+gt_load:        ld a,(WINPG)
+                ld (CLSSV),a
+                ld a,CLS_PG
+                call map_phys
+                ld a,(ROOMRES)
+                ld (GT_OFF+WINDOW),a
+                xor a
+                ld (GT_OFF+WINDOW+1),a
+                ld bc,(CURRD+25)
+                ld hl,(CURRD+23)
+                ld de,GT_OFF+WINDOW+1
+lg_l:           ld a,b
+                or c
+                jr z,lg_e
+                push bc                 ; lo que queda
+                ld a,b
+                or a
+                jr z,lg_c               ; menos de 256: BC
+                ld bc,256
+lg_c:           push bc                 ; el trozo
+                ld a,(CURRD+22)
+                call map_page           ; (conserva BC, DE y HL)
+                push de
+                ld de,GW
+                ldir                    ; HL: el siguiente de la tabla
+                pop de
+                pop bc
+                push hl
+                push bc
+                ld a,CLS_PG
+                call map_phys
+                ld hl,GW
+                ldir                    ; DE: el siguiente de GT
+                pop bc                  ; el trozo
+                pop hl
+                ex (sp),hl              ; HL = lo que quedaba; en la pila, la fuente
+                or a
+                sbc hl,bc
+                ld b,h
+                ld c,l
+                pop hl
+                jr lg_l
+lg_e:           ld a,(CUR)
+                inc a
+                jp nz,restore_win
+                ld a,(CLSSV)
+                jp map_phys
 
 ; start_enc: HL = numero (10001 EXCD / 10002 ENCD), A = pagina, DE = direccion: arranca el codigo de salida o de entrada de la sala (donde = sala)
 start_enc:      ld (APIN),hl

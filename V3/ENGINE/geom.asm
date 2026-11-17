@@ -7,8 +7,10 @@
 ;  IX = actor en todo el overlay (no se toca); IY = caja (su registro de RBLOB: 4 esquinas de 4 bytes ul, ur, lr, ll; +17 banderas).
 ;  Variables: GW (bloque 7, vm_core.asm). Nada de esto sobrevive a otra llamada del overlay.
 ; =====================================================================
-GSP             equ GW+0                ; palabra: cima de la pila de 32 bits
-GSTK            equ GW+2                ; 6 x 4
+LUM             equ GW+0                ; fase 10d (cpl_gen): |lu|, |lv|, sus signos y b
+LVM             equ GW+2
+LSG             equ GW+4
+LBV              equ GW+5                ; 4
 LNS              equ GW+26               ; closestPtOnLine: inicio del segmento (x, y), fin, punto (contiguos) y resultado
 LNE              equ GW+30
 LNP              equ GW+34
@@ -19,13 +21,12 @@ LA              equ GW+50
 LC              equ GW+54
 LDIST           equ GW+58
 LSWAP           equ GW+62               ; 1: el eje mayor es y (se trabaja con x e y cambiadas)
-MSGN            equ GW+63               ; signo de smul
-BP              equ GW+64               ; 4: el punto de cpb, cxb y qrej
+MSGN            equ GW+63               ; signo de sdiv
+BP              equ GW+64               ; 4: el punto de cpb, cxb y ax_bd
 CBBEST          equ GW+68               ; 4: getClosestPtOnBox: mejor distancia (32 bits) y su punto
 CBOUT           equ GW+72
 CBK             equ GW+76               ; arista / esquina en curso
 AXT             equ GW+77               ; palabra: axis_cnt
-QTHR            equ GW+79
 QAX             equ GW+80
 C1              equ GW+81               ; compareSlope: p1, p2, p3 (12 bytes)
 C2              equ GW+85
@@ -51,7 +52,8 @@ FPOS            equ GW+219              ; 4: posicion del actor
 FDST            equ GW+223              ; 4: destino final
 FBX2            equ GW+227
 FFIN            equ GW+228
-AXD             equ GW+229              ; adjustXYToBeInBox: el punto pedido (4)
+CBT             equ GW+229              ; fase 10d: umbral de cpb_t (lo pone adjust_xy) y el de la poda en curso
+CBTH            equ GW+231
 AXPL            equ GW+233              ; el actor es jugador
 AXTI            equ GW+234              ; indice del umbral
 AXBEST          equ GW+235              ; palabra
@@ -165,44 +167,6 @@ neg_dehl:       xor a                   ; DE:HL = -DE:HL
                 ld d,a
                 ret
 
-; smul: NR = N1 * N2 (int de C: 32 bits bajos). Con los dos en 16 bits sin signo tras quitar el signo, mul16u; si no, mul32 del residente
-smul:           xor a
-                ld (MSGN),a
-                ld a,(N2+3)
-                rla
-                jr nc,sm_1
-                ld hl,N2
-                call neg32
-                ld a,1
-                ld (MSGN),a
-sm_1:           ld a,(N1+3)
-                rla
-                jr nc,sm_2
-                ld hl,N1
-                call neg32
-                ld a,(MSGN)
-                xor 1
-                ld (MSGN),a
-sm_2:           ld hl,(N1+2)
-                ld a,h
-                or l
-                ld hl,(N2+2)
-                or h
-                or l
-                jr nz,sm_big
-                ld bc,(N1)
-                ld de,(N2)
-                call mul16u
-                ld (NR),hl
-                ld (NR+2),de
-                jr sm_sg
-sm_big:         call mul32
-sm_sg:          ld a,(MSGN)
-                or a
-                ret z
-                ld hl,NR
-                jp neg32
-
 ; sdiv: NR = N1 / N2 (int de C: truncada hacia cero; N2 != 0). Sin signo y por casos: divisor de 16 bits (dos divisiones 32/16 de 16 vueltas),
 ; divisor de 17 a 31 bits (el cociente cabe en 16 bits: 16 vueltas con el resto en DE:HL) y divisor 2^31 (el cociente es 0 o 1)
 sdiv:           xor a
@@ -308,110 +272,118 @@ dv_n:           dec a
                 jr nz,dv_l
                 ret
 
-; ---------------------------------------------------------------- pila de 32 bits (los calculos de closestPtOnLine)
-gpush16:        ld e,(hl)               ; apila el s16 de (HL) con su signo
-                inc hl
-                ld d,(hl)
-                ex de,hl
-                ld a,h
-                rla
-                sbc a,a
-                ld e,a
-                ld d,a
-                jr gpush_dehl
-gpush32:        ld e,(hl)               ; apila los 32 bits de (HL)
-                inc hl
-                ld d,(hl)
-                inc hl
-                ld a,(hl)
-                inc hl
-                ld h,(hl)
+; ---------------------------------------------------------------- utilidades de closestPtOnLine (fase 10d)
+abs16:          bit 7,h                 ; HL (s16) -> HL = valor absoluto (16 bits sin signo), A = 1 si era negativo
+                ld a,0
+                ret z
+                sub l
                 ld l,a
-                ex de,hl
-gpush_dehl:     push de                 ; apila DE:HL
-                ex de,hl
-                ld hl,(GSP)
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                inc hl
-                pop de
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                inc hl
-                ld (GSP),hl
+                sbc a,a
+                sub h
+                ld h,a
+                ld a,1
                 ret
-gpop_dehl:      ld hl,(GSP)             ; desapila -> DE:HL
-                dec hl
-                ld d,(hl)
-                dec hl
-                ld e,(hl)
-                dec hl
-                ld b,(hl)
-                dec hl
-                ld c,(hl)
-                ld (GSP),hl
-                ld h,b
-                ld l,c
-                ret
-gpop32:         push hl                 ; desapila en los 32 bits de (HL)
-                call gpop_dehl
-                ex de,hl
-                ex (sp),hl
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                inc hl
-                pop de
-                ld (hl),e
-                inc hl
-                ld (hl),d
-                ret
-gadd:           call gpop_dehl
-                push de
-                push hl
-                call gpop_dehl
-                pop bc
+
+adds16:         bit 7,b                 ; DE:HL += BC (s16 extendido a 32 bits)
                 add hl,bc
-                ex de,hl
-                pop bc
-                adc hl,bc
-                ex de,hl
-                jr gpush_dehl
-gsub:           call gpop_dehl
-                push de
-                push hl
-                call gpop_dehl
-                pop bc
+                jr nz,as_n
+                ret nc
+                inc de
+                ret
+as_n:           ret c
+                dec de
+                ret
+
+subs16:         ld a,b                  ; DE:HL -= BC (s16 extendido a 32 bits)
                 or a
                 sbc hl,bc
-                ex de,hl
-                pop bc
+                jr c,ss_b
+                rla
+                ret nc
+                inc de
+                ret
+ss_b:           rla
+                ret c
+                dec de
+                ret
+
+; ud3216: (HL) = 32 bits sin signo, BC = divisor (!= 0) -> (HL) = cociente (32 bits). Conserva BC
+ud3216:         push hl
+                inc hl
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)               ; DE = la palabra alta
+                ld h,d
+                ld l,e
+                or a
                 sbc hl,bc
-                ex de,hl
-                jr gpush_dehl
-gmul:           ld hl,N2
-                call gpop32
-                ld hl,N1
-                call gpop32
-                call smul
-                ld hl,NR
-                jr gpush32
-gdiv:           ld hl,N2
-                call gpop32
-                ld hl,N1
-                call gpop32
-                ld hl,(N2)
-                ld a,h
-                or l
-                ld hl,(N2+2)
-                or h
-                or l
-                jp z,err_range          ; ScummVM dividiria por cero
-                call sdiv
-                ld hl,NR
-                jp gpush32
+                jr nc,u32_2
+                ex de,hl                ; menor que el divisor: cociente alto 0 y ese resto
+                ld de,0
+                jr u32_1
+u32_2:           ld hl,0
+                call dv16               ; DE = alto / BC, HL = resto
+u32_1:           ex (sp),hl              ; HL = puntero, en la pila el resto
+                inc hl
+                inc hl
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                dec hl
+                dec hl
+                dec hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)               ; DE = la palabra baja
+                ex (sp),hl              ; HL = el resto, en la pila el puntero + 1
+                call dv16
+                pop hl
+                ld (hl),d
+                dec hl
+                ld (hl),e
+                ret
+
+; mul_lo: NR = N1 * N2 (32 bits bajos, sin signo: lo mismo que con signo modulo 2^32): Xlo*Ylo + ((Xlo*Yhi + Xhi*Ylo) << 16)
+mul_lo:         ld bc,(N1)
+                ld de,(N2)
+                call mul16u
+                ld (NR),hl
+                ld (NR+2),de
+                ld de,(N2+2)
+                ld a,d
+                or e
+                jr z,ml_1
+                ld bc,(N1)
+                call mul16u
+                ld de,(NR+2)
+                add hl,de
+                ld (NR+2),hl
+ml_1:           ld bc,(N1+2)
+                ld a,b
+                or c
+                ret z
+                ld de,(N2)
+                call mul16u
+                ld de,(NR+2)
+                add hl,de
+                ld (NR+2),hl
+                ret
+
+; sgn32: (HL) = int de 32 bits -> su valor absoluto en su sitio; A = 1 (NZ) si era negativo, 0 (Z) si no
+sgn32:          push hl
+                inc hl
+                inc hl
+                inc hl
+                ld a,(hl)
+                pop hl
+                rla
+                ld a,0
+                ret nc
+                call neg32
+                ld a,1
+                or a
+                ret
 
 ; ---------------------------------------------------------------- closestPtOnLine
 ; cpl: LNS = inicio, LNE = fin, LNP = punto -> LNR. Se trabaja con el eje mayor u (x si |lx| > |ly|; si no, y, cambiando x por y en todo:
@@ -465,76 +437,179 @@ cpl_ns:         ld (LSWAP),a
                 ld hl,(LNS+2)
                 ld (LNR+2),hl
                 jp cpl_clip
-cpl_gen:        ld hl,GSTK
-                ld (GSP),hl
-                ld hl,LU                ; dist = lu*lu + lv*lv
-                call gpush32
-                ld hl,LU
-                call gpush32
-                call gmul
-                ld hl,LV
-                call gpush32
-                ld hl,LV
-                call gpush32
-                call gmul
-                call gadd
-                ld hl,LDIST
-                call gpop32
-                ld hl,LNS                ; a = su*lv/lu
-                call gpush16
-                ld hl,LV
-                call gpush32
-                call gmul
-                ld hl,LU
-                call gpush32
-                call gdiv
-                ld hl,LA
-                call gpop32
-                ld hl,LNP                ; b = pu*lu/lv
-                call gpush16
-                ld hl,LU
-                call gpush32
-                call gmul
-                ld hl,LV
-                call gpush32
-                call gdiv
-                ld hl,LA                ; c = (a + b - sv + pv)*lv*lu/dist
-                call gpush32
-                call gadd
-                ld hl,LNS+2
-                call gpush16
-                call gsub
-                ld hl,LNP+2
-                call gpush16
-                call gadd
-                ld hl,LV
-                call gpush32
-                call gmul
-                ld hl,LU
-                call gpush32
-                call gmul
-                ld hl,LDIST
-                call gpush32
-                call gdiv
-                ld hl,LC
-                call gpop32
-                ld hl,(LC)              ; ru = c (un Common::Point: los 16 bits bajos)
-                ld (LNR),hl
-                ld hl,LC                ; rv = c*lv/lu - a + sv
-                call gpush32
-                ld hl,LV
-                call gpush32
-                call gmul
-                ld hl,LU
-                call gpush32
-                call gdiv
-                ld hl,LA
-                call gpush32
-                call gsub
-                ld hl,LNS+2
-                call gpush16
-                call gadd
-                call gpop_dehl
+cpl_gen:        ld hl,(LU)              ; fase 10d: sin la pila de 32 bits ni mul32 (antes ~38.000 T por llamada). Mismo calculo de C, con
+                ld de,(LU+2)            ; signo y modulo 2^32, por los valores absolutos: |lu|, |lv|, |su| y |pu| caben en 16 bits
+                call mag17
+                ld (LUM),hl
+                ld hl,(LV)
+                ld de,(LV+2)
+                call mag17
+                ld (LVM),hl
+                ld a,(LU+3)
+                rlca
+                and 1
+                ld b,a
+                ld a,(LV+3)
+                rlca
+                rlca
+                and 2
+                or b
+                ld (LSG),a              ; bit 0: lu < 0; bit 1: lv < 0
+                ld bc,(LUM)             ; dist = lu*lu + lv*lv (modulo 2^32)
+                ld d,b
+                ld e,c
+                call mul16u
+                ld (LDIST),hl
+                ld (LDIST+2),de
+                ld bc,(LVM)
+                ld d,b
+                ld e,c
+                call mul16u
+                ld bc,(LDIST)
+                add hl,bc
+                ld (LDIST),hl
+                ex de,hl
+                ld bc,(LDIST+2)
+                adc hl,bc
+                ld (LDIST+2),hl
+                ld hl,(LNS)             ; a = su*lv/lu: |su*lv| < 2^31 y |a| <= |su| (|lv| <= |lu|): una division de 16 vueltas
+                call abs16
+                push af
+                ld b,h
+                ld c,l
+                ld de,(LVM)
+                call mul16u
+                ex de,hl
+                ld bc,(LUM)
+                call dv16
+                pop bc                  ; signo: su, lv y lu
+                ld a,(LSG)
+                rrca
+                xor b
+                ld b,a
+                ld a,(LSG)
+                xor b
+                and 1
+                ex de,hl
+                ld de,0
+                call nz,neg_dehl
+                ld (LA),hl
+                ld (LA+2),de
+                ld hl,(LNP)             ; b = pu*lu/lv (|b| < 2^31)
+                call abs16
+                push af
+                ld b,h
+                ld c,l
+                ld de,(LUM)
+                call mul16u
+                ld (LBV),hl
+                ld (LBV+2),de
+                ld hl,LBV
+                ld bc,(LVM)
+                call ud3216
+                pop bc                  ; signo: pu, lu y lv
+                ld a,(LSG)
+                rrca
+                xor b
+                ld b,a
+                ld a,(LSG)
+                xor b
+                and 1
+                ld hl,LBV
+                call nz,neg32
+                ld hl,(LBV)              ; t = a + b - sv + pv
+                ld de,(LBV+2)
+                ld bc,(LA)
+                add hl,bc
+                ex de,hl
+                ld bc,(LA+2)
+                adc hl,bc
+                ex de,hl
+                ld bc,(LNS+2)
+                call subs16
+                ld bc,(LNP+2)
+                call adds16
+                ld (N1),hl
+                ld (N1+2),de
+                ld hl,N1                ; N = t*lv*lu = |t| * (|lv|*|lu|) con el signo de los tres (modulo 2^32)
+                call sgn32
+                ld b,a
+                ld a,(LSG)
+                rrca
+                xor b
+                ld b,a
+                ld a,(LSG)
+                xor b
+                and 1
+                push af
+                ld bc,(LVM)
+                ld de,(LUM)
+                call mul16u
+                ld (N2),hl
+                ld (N2+2),de
+                call mul_lo
+                pop af
+                ld hl,NR
+                call nz,neg32
+                ld hl,(NR)              ; c = N / dist (int de C)
+                ld (N1),hl
+                ld hl,(NR+2)
+                ld (N1+2),hl
+                ld hl,(LDIST)
+                ld (N2),hl
+                ld a,h
+                or l
+                ld hl,(LDIST+2)
+                ld (N2+2),hl
+                or h
+                or l
+                jp z,err_range          ; ScummVM dividiria por cero
+                call sdiv
+                ld hl,(NR)
+                ld (LNR),hl             ; ru = c (los 16 bits bajos)
+                ld (N1),hl
+                ld hl,(NR+2)
+                ld (N1+2),hl
+                ld hl,N1                ; M = c*lv (modulo 2^32)
+                call sgn32
+                ld b,a
+                ld a,(LSG)
+                rrca
+                xor b
+                and 1
+                push af
+                ld hl,(LVM)
+                ld (N2),hl
+                ld hl,0
+                ld (N2+2),hl
+                call mul_lo
+                pop af
+                ld hl,NR
+                call nz,neg32
+                ld hl,NR                ; q = M / lu (int de C)
+                call sgn32
+                ld b,a
+                ld a,(LSG)
+                xor b
+                and 1
+                push af
+                ld hl,NR
+                ld bc,(LUM)
+                call ud3216
+                pop af
+                ld hl,(NR)
+                jr z,cg_q
+                xor a
+                sub l
+                ld l,a
+                sbc a,a
+                sub h
+                ld h,a
+cg_q:           ld de,(LA)              ; rv = q - a + sv (16 bits bajos)
+                or a
+                sbc hl,de
+                ld de,(LNS+2)
+                add hl,de
                 ld (LNR+2),hl
 cpl_clip:       ld a,(LU+3)
                 rla
@@ -628,15 +703,22 @@ sqd_far:        ld hl,$FFFF
                 ret
 
 ; cpb: getClosestPtOnBox(IY = caja, BP = punto) -> HL = distancia al cuadrado saturada a 16 bits ($FFFF si es mayor), CBOUT = el punto
-; (0, 0 si ninguna arista da menos de 0xFFFFFF) y CBBEST = la distancia entera
-cpb:            ld hl,$FFFF
+; (0, 0 si ninguna arista da menos de 0xFFFFFF) y CBBEST = la distancia entera.
+; cpb_t (fase 10d): lo mismo con poda por arista para quien solo quiere la caja si da menos que CBT (adjust_xy): no calcula las aristas
+; cuya cota (edge_lb) llega al umbral (el menor de CBT y la mejor de la caja hasta ahi). Si la caja da menos que CBT, el resultado y el
+; punto son los de cpb (la primera arista con la menor distancia no se poda); si no, da CBT o mas. Bit 7 de CBK: con poda
+cpb:            xor a
+                jr cpb_0
+cpb_t:          ld hl,(CBT)
+                ld (CBTH),hl
+                ld a,$80
+cpb_0:          ld hl,$FFFF
                 ld (CBBEST),hl
                 ld hl,$00FF
                 ld (CBBEST+2),hl
                 ld hl,0
                 ld (CBOUT),hl
                 ld (CBOUT+2),hl
-                xor a
 cpb_l:          ld (CBK),a
                 call corner             ; arista k: de la esquina k a la k + 1
                 ld de,LNS
@@ -650,7 +732,15 @@ cpb_l:          ld (CBK),a
                 ld hl,BP
                 ld bc,4
                 ldir                    ; LNP
-                call cplin
+                ld a,(CBK)
+                rla
+                jr nc,cpb_c
+                call edge_lb
+                ld de,(CBTH)
+                or a
+                sbc hl,de
+                jr nc,cpb_n             ; la arista no puede bajar del umbral
+cpb_c:          call cplin
                 call sqd
                 push hl
                 push de
@@ -665,14 +755,25 @@ cpb_l:          ld (CBK),a
                 jr nc,cpb_n
                 ld (CBBEST),hl
                 ld (CBBEST+2),de
-                ld hl,(LNR)
+                ld a,d
+                or e
+                jr nz,cpb_o
+                ld de,(CBTH)            ; el umbral de la poda baja con la mejor de la caja
+                push hl
+                sbc hl,de
+                pop hl
+                jr nc,cpb_o
+                ld (CBTH),hl
+cpb_o:          ld hl,(LNR)
                 ld (CBOUT),hl
                 ld hl,(LNR+2)
                 ld (CBOUT+2),hl
 cpb_n:          ld a,(CBK)
                 inc a
-                cp 4
-                jr c,cpb_l
+                ld b,a
+                and 3
+                ld a,b
+                jr nz,cpb_l
                 ld hl,(CBBEST+2)
                 ld a,h
                 or l
@@ -837,53 +938,6 @@ cxb_num:        cp $FF
                 pop iy
                 jr cxb
 
-; qrej: inBoxQuickReject(IY = caja, BP = punto, A = umbral) -> NZ si el punto esta a mas de `umbral` de la caja en x o en y
-qrej:           ld (QTHR),a
-                xor a
-                call qr_axis
-                ret nz
-                ld a,2
-qr_axis:        ld (QAX),a
-                ld e,a
-                ld d,0
-                ld hl,BP
-                add hl,de
-                ld a,(hl)
-                inc hl
-                ld h,(hl)
-                ld l,a
-                push hl
-                ld a,(QTHR)
-                ld e,a
-                ld d,0
-                or a
-                sbc hl,de               ; t = v - umbral (saturado: mas alla de -32768 no cambia el resultado)
-                jp po,qa_1
-                ld hl,$8000
-qa_1:           ld a,(QAX)
-                call axis_cnt
-                pop hl
-                ld a,c
-                cp 4
-                jr z,qa_y               ; t es mayor que las 4 esquinas
-                ld a,(QTHR)
-                ld e,a
-                ld d,0
-                or a
-                adc hl,de               ; t = v + umbral
-                jp po,qa_2
-                ld hl,$7FFF
-qa_2:           ld a,(QAX)
-                call axis_cnt
-                ld a,b
-                cp 4
-                jr z,qa_y               ; t es menor que las 4
-                xor a
-                ret
-qa_y:           ld a,1
-                or a
-                ret
-
 ; ---------------------------------------------------------------- getGates y findPathTowardsOld
 isqrt16:        ld de,0                 ; HL -> A = parte entera de la raiz
                 ld bc,$4000
@@ -923,8 +977,83 @@ absd:           sub (hl)                ; A = |A - (HL)|
                 neg
                 ret
 
-; gates: getGates(caja 1 = (GB1P), caja 2 = (GB2P)) -> GA (gateA[0], gateA[1]) y GB
-gates:          ld hl,(GB1P)
+; gates: getGates(caja 1 = (GB1P), caja 2 = (GB2P)) -> GA (gateA[0], gateA[1]) y GB. Fase 10d: si el par (caja del actor IX, FBX2) esta en la
+; tabla de puertas de la sala (GT_OFF de la pagina CLS_PG, por la ventana; ordenada por caja 1 y caja 2; gt_load), se copia de alli
+; (pack_data3.gate_table la calcula con get_gates). Si la tabla es de otra sala o no tiene el par, se calcula como siempre
+gates:          call cls_open
+                ld hl,GT_OFF+WINDOW
+                ld a,(ROOMRES)
+                cp (hl)
+                jr nz,gt_cx
+                inc hl
+                ld a,(hl)
+                or a
+                jr z,gt_cx
+                ld b,a
+                inc hl
+                ld c,(ix+A_WBOX)
+                ld de,GT_ENTRY
+gtl_l:          ld a,(hl)
+                cp c
+                jr z,gtl_1
+                jr nc,gt_cx             ; (ordenada: ya ha pasado la caja 1)
+gtl_n:          add hl,de
+                djnz gtl_l
+gt_cx:          call cls_close
+                jr gt_calc
+gtl_1:          inc hl
+                ld a,(FBX2)
+                cp (hl)
+                dec hl
+                jr nz,gtl_n
+                inc hl
+                inc hl
+                ld a,(hl)               ; linea de gateA | linea de gateB << 4
+                inc hl                  ; los dos puntos
+                push af
+                and 15
+                ld de,GA
+                call gtl_set
+                pop af
+                rrca
+                rrca
+                rrca
+                rrca
+                and 15
+                ld de,GB
+                call gtl_set
+                jp cls_close
+gtl_set:        push hl                 ; A = linea, HL = el punto, DE = la puerta: como set_gate (L < 4: esquina L de la caja 1 y el punto;
+                cp 4                    ; si no, el punto y la esquina L - 4 de la caja 2) -> HL = el punto siguiente
+                jr nc,gls_2
+                add a,a
+                add a,a
+                ld c,a
+                ld b,0
+                ld hl,(GB1P)
+                add hl,bc
+                ld c,4
+                ldir                    ; la esquina
+                pop hl
+                ld c,4
+                ldir                    ; el punto
+                ret
+gls_2:          sub 4
+                add a,a
+                add a,a
+                ld c,a
+                ld b,0
+                ld hl,(GB2P)
+                add hl,bc
+                ex (sp),hl              ; HL = el punto, en la pila la esquina
+                ld c,4
+                ldir
+                ex (sp),hl
+                ld c,4
+                ldir
+                pop hl
+                ret
+gt_calc:        ld hl,(GB1P)
                 ld de,GCOR
                 ld bc,16
                 ldir
@@ -1327,8 +1456,189 @@ actor_cls:      call actor_num
                 pop af
                 ret
 
+; edge_lb (fase 10d): arista LNS -> LNE, punto BP -> HL = cota inferior de sqrDist(punto, closestPtOnLine) ($FFFF: 65.535 o mas). Exacta:
+; closestPtOnLine siempre deja la coordenada del eje mayor de la arista (x si |ly| < |lx|; si no, y) dentro del segmento (recorta, o es la
+; del punto en las aristas verticales y horizontales), asi que sqrDist >= d * d, con d la distancia del punto a ese intervalo en ese eje.
+; Usa AXT y QAX (libres dentro de cpb)
+edge_lb:        ld hl,(LNE)
+                ld de,(LNS)
+                call sdiff
+                push hl                 ; |lx|
+                ld hl,(LNE+2)
+                ld de,(LNS+2)
+                call sdiff
+                pop de
+                or a
+                sbc hl,de               ; carry: |ly| < |lx|, eje x
+                ld de,0
+                jr c,el_ax
+                ld e,2
+el_ax:          ld hl,LNE
+                add hl,de
+                ld a,(hl)
+                inc hl
+                ld h,(hl)
+                ld l,a
+                push hl                 ; el final de la arista en el eje
+                ld hl,LNS
+                add hl,de
+                ld c,(hl)
+                inc hl
+                ld b,(hl)               ; el principio
+                ld hl,BP
+                add hl,de
+                ld a,(hl)
+                inc hl
+                ld h,(hl)
+                ld l,a                  ; el punto
+                push hl
+                ld d,b
+                ld e,c
+                call sdiff              ; |p - s| y su signo
+                ld (AXT),hl
+                ld (QAX),a
+                pop hl
+                pop de
+                call sdiff              ; |p - e|
+                ld b,a
+                ld a,(QAX)
+                cp b
+                jr nz,el_0              ; el punto esta entre los dos: cota 0
+                ld de,(AXT)
+                push hl
+                or a
+                sbc hl,de
+                pop hl
+                jr c,el_m
+                ex de,hl                ; d = la menor de las dos
+el_m:           ld a,h
+                or a
+                jr nz,el_far            ; d >= 256
+                ld b,a
+                ld c,l
+                ld d,a
+                ld e,l
+                jp mul16u               ; HL = d * d
+el_far:         ld hl,$FFFF
+                ret
+el_0:           ld hl,0
+                ret
+
 ; adjust_xy: Actor::adjustXYToBeInBox(IX = actor, WKX, WKY) -> WKX, WKY y WKBOX. Con ignoreBoxes, el punto tal cual y caja invalida; sin
-; cajas, las ultimas coordenadas validas. Tres pasadas (umbral 30, 80 y sin umbral) sobre las cajas de la ultima a la primera
+; cajas, las ultimas coordenadas validas. Tres pasadas (umbral 30, 80 y sin umbral) sobre las cajas de la ultima a la primera.
+; Fase 10d (mismo resultado, menos calculo): (1) checkXYInBoxBounds solo en la primera pasada: si llega a la segunda, el punto no esta en
+; ninguna de las cajas que se miran (las que la primera no miro tienen el punto a mas de 30 pixeles de sus 4 esquinas en x o en y, y
+; checkXYInBoxBounds las descarta por lo mismo); (2) getClosestPtOnBox con poda por arista (cpb_t, umbral AXBEST): una caja solo
+; cuenta si da menos que AXBEST; (3) inBoxQuickReject(umbral) es "ax_bd > umbral", y ax_bd se calcula una vez por caja (ax_getd)
+ADB             equ GCOR                ; ax_bd de cada caja (la primera pasada lo guarda y la segunda lo lee), si hay ADB_N cajas o menos
+ADB_N           equ 125                 ; (GCOR..FDST: getGates y findPathTowardsOld no corren durante adjust_xy)
+
+; ax_bd: IY = caja, BP = punto -> A = la mayor de las distancias del punto al rectangulo envolvente de la caja en x y en y (0 si esta
+; dentro en ese eje), saturada a 255. inBoxQuickReject(umbral) (qrej) descarta la caja si x - umbral pasa de las 4 esquinas, o x + umbral
+; no llega a ninguna, o lo mismo en y (con la saturacion de 16 bits sale lo mismo que con enteros): justo cuando esta distancia > umbral
+ax_bd:          ld hl,(BP)
+                call bd_ax
+                ld (AXT),a
+                inc iy
+                inc iy
+                ld hl,(BP+2)
+                call bd_ax
+                dec iy
+                dec iy
+                ld b,a
+                ld a,(AXT)
+                cp b
+                ret nc
+                ld a,b
+                ret
+; bd_ax: HL = coordenada del punto, IY = la de la esquina 0 en ese eje (las otras a +4, +8 y +12) -> A = distancia del punto al intervalo
+; [menor, mayor] de las 4 esquinas (0 si esta dentro), saturada a 255. Se compara sin signo con el bit de signo invertido
+bd_ax:          ld a,h
+                xor $80
+                ld h,a
+                push hl                 ; el punto
+                ld e,(iy+0)
+                ld a,(iy+1)
+                xor $80
+                ld d,a                  ; DE = la menor
+                ld b,d
+                ld c,e                  ; BC = la mayor
+                ld l,(iy+4)
+                ld a,(iy+5)
+                xor $80
+                ld h,a
+                call bd_mm
+                ld l,(iy+8)
+                ld a,(iy+9)
+                xor $80
+                ld h,a
+                call bd_mm
+                ld l,(iy+12)
+                ld a,(iy+13)
+                xor $80
+                ld h,a
+                call bd_mm
+                pop hl
+                ld a,c
+                sub l
+                ld a,b
+                sbc a,h
+                jr c,bd_hi              ; el punto pasa de la mayor
+                ld a,l
+                sub e
+                ld a,h
+                sbc a,d
+                jr c,bd_lo              ; no llega a la menor
+                xor a
+                ret
+bd_hi:          or a
+                sbc hl,bc
+                jr bd_s
+bd_lo:          ex de,hl
+                or a
+                sbc hl,de
+bd_s:           ld a,h
+                or a
+                ld a,255
+                ret nz
+                ld a,l
+                ret
+bd_mm:          ld a,l                  ; HL = una esquina: DE = min(DE, HL), BC = max(BC, HL)
+                sub e
+                ld a,h
+                sbc a,d
+                jr nc,mm_1
+                ld d,h
+                ld e,l
+                ret
+mm_1:           ld a,c
+                sub l
+                ld a,b
+                sbc a,h
+                ret nc
+                ld b,h
+                ld c,l
+                ret
+
+; ax_getd: IY = caja AXBOX -> A = ax_bd: la primera pasada lo calcula y lo guarda en ADB, la segunda lo lee (con mas de ADB_N cajas, se calcula)
+ax_getd:        ld a,(NBOXES)
+                cp ADB_N+1
+                jp nc,ax_bd
+                ld a,(AXBOX)
+                ld e,a
+                ld d,0
+                ld hl,ADB
+                add hl,de
+                ld a,(AXTI)
+                or a
+                ld a,(hl)
+                ret nz
+                push hl
+                call ax_bd
+                pop hl
+                ld (hl),a
+                ret
+
 adjust_xy:      ld a,$FF
                 ld (WKBOX),a
                 ld a,(ix+A_IGNB)
@@ -1362,20 +1672,26 @@ ax_l:           dec a
                 bit 7,a
                 jr z,ax_vis
                 bit 5,a
-                jr z,ax_next            ; invisible
+                jp z,ax_next            ; invisible
                 ld a,(AXPL)
                 or a
-                jr nz,ax_next           ; invisible y solo para jugadores, y lo es
+                jp nz,ax_next           ; invisible y solo para jugadores, y lo es
 ax_vis:         ld a,(AXTI)
                 cp 2
-                jr z,ax_noq
+                jr z,ax_cl
+                call ax_getd            ; (3)
+                ld c,a
+                ld a,(AXTI)
                 or a
                 ld a,30
                 jr z,ax_q
                 ld a,80
-ax_q:           call qrej
-                jr nz,ax_next
-ax_noq:         call cxb
+ax_q:           cp c
+                jp c,ax_next            ; inBoxQuickReject
+                ld a,(AXTI)
+                or a
+                jr nz,ax_cl             ; (1)
+                call cxb
                 or a
                 jr z,ax_cl
                 ld hl,(BP)              ; dentro de la caja
@@ -1387,13 +1703,15 @@ ax_noq:         call cxb
                 ld a,(AXBOX)
                 ld (WKBOX),a
                 jr ax_lv
-ax_cl:          call cpb
+ax_cl:          ld hl,(AXBEST)          ; (2)
+                ld (CBT),hl
+                call cpb_t
                 ld de,(AXBEST)
                 push hl
                 or a
                 sbc hl,de
                 pop hl
-                jr nc,ax_next
+                jp nc,ax_next
                 ld de,(CBOUT)
                 ld (ix+A_LVX),e
                 ld (ix+A_LVX+1),d

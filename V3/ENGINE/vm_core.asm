@@ -134,6 +134,9 @@ P3Y             equ RMV_END+8   ; NACT palabras
 GW              equ P3Y+2*NACT  ; 260 B (geom.asm, walk.asm)
 GW_END          equ GW+260
 CLS_PG          equ 47          ; pagina fisica fria con OBJCLS (3 bytes por objeto desde el principio); la fase 9 la saca de la cache de paginas
+GT_OFF          equ $0C00       ; fase 10d: en la pagina CLS_PG, tras OBJCLS (3.000 B), la tabla de puertas de la sala: u8 sala (ROOMRES) y
+GT_MAX          equ 2048        ; la tabla de pack_data3.gate_table (hasta GT_MAX - 1 bytes; igual alli). gt_load (ovc5.asm) la copia al
+GT_ENTRY        equ 11          ; cargar la sala o una partida y gates (geom.asm) la consulta por la ventana (cls_open)
 ROOMPAL         equ $F520       ; fase 8: _roomPalette y _shadowPalette (16 bytes cada una, identidad al empezar; roomOps 2 y 4); las lee el programa para reprogramar la paleta de la FPGA
 SHADOWPAL       equ ROOMPAL+16
 OB_SZ           equ 14          ; registro de un objeto de la sala (blob): id (2), x/8, y/8, ancho/8, alto/8, padre, estado del padre, x e y de acercamiento
@@ -964,24 +967,24 @@ vr_bit:         push de
                 ret
 
 ; HL = 0x4000 | indice -> HL = el local de la ranura en curso; carry si no hay ranura. Error si el indice pasa de 15
-loc_addr:       ld a,h
+loc_addr:       ld a,h                  ; (fase 10d: sin push/pop de; 115 T en vez de 153)
                 and $0F
                 jp nz,err_range
                 ld a,l
                 cp NLOCAL
                 jp nc,err_range
+                add a,a
+                ld l,a
                 ld a,(CUR)
                 inc a
                 scf
                 ret z
                 ld a,l
-                add a,a
+                ld hl,(LOCP)
+                add a,l
                 ld l,a
-                ld h,0
-                push de
-                ld de,(LOCP)
-                add hl,de
-                pop de
+                ret nc
+                inc h
                 or a
                 ret
 

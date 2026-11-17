@@ -360,6 +360,7 @@ sun_l:          ld c,(hl)
                 pop hl
                 jr sun_l
 sun_e:          call aq_init            ; sprites: la cache de firma y los contadores de poses
+                call gt_load            ; 10d: la tabla de puertas de la sala de la partida
                 ld a,(CURROOM)          ; la sala se vuelve a pintar (con los objetos que dice OBJST) y los actores esperan dos fotogramas
                 ld (EVARGS),a
                 ld a,EV_ROOM_LOAD

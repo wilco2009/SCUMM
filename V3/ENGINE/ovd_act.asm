@@ -615,7 +615,28 @@ acd_fx:         ld a,(aq_xn)
                 cp AC_XMAX+1
                 ret nc
 acd_fo:
+                ld hl,(aq_x)            ; 10d: lo que cada celda sumaba a x y a la fila, una vez por actor
+                ld de,32
+                add hl,de
+                ld (aq_x32),hl
+                ld hl,(aq_ry)
+                ld de,HR_TOP+32
+                add hl,de
+                ld a,(hv_ytop)
+                ld e,a
+                ld d,0
+                or a
+                sbc hl,de
+                ld (aq_y32),hl
                 call aq_mkdec           ; la mascara de la sala bajo el actor (puede quitar aq_mk)
+                ld hl,(aq_blob)         ; 10d: la tabla de celdas del traje, una vez por actor
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld hl,(aq_blob)
+                add hl,de
+                ld (aq_ctab),hl
                 ld b,(iy+4)
                 push iy
                 pop hl
@@ -626,121 +647,161 @@ acd_cell:       ld a,b
                 jp z,acd_end
                 ld a,(hl)               ; referencia: cx | cy << 4 y el indice de la celda en el fondo de celdas del traje
                 ld (aq_pos),a
+                ld c,a                  ; (y en C)
                 inc hl
-                ld a,(hl)
+                ld e,(hl)
                 inc hl
                 ld (aq_nx),hl           ; la siguiente referencia
-                ld l,a
-                ld h,0
-                add hl,hl
-                ex de,hl                ; DE = 2 * indice
-                ld hl,(aq_blob)
-                inc hl
-                ld a,(hl)
-                inc hl
-                ld h,(hl)
-                ld l,a                  ; HL = offset de la tabla de celdas
+                ld d,0
+                ld hl,(aq_ctab)
                 add hl,de
-                ld de,(aq_blob)
                 add hl,de
                 ld a,(hl)
                 inc hl
                 ld h,(hl)
                 ld l,a                  ; HL = offset de la celda (banderas, forma, mascara, color)
+                ld de,(aq_blob)
                 add hl,de
-                dec hl                  ; el codigo de abajo cuenta con un byte antes de las banderas
-                ld (aq_cp),hl
-                inc hl
-                ld a,(hl)               ; banderas: bit 0 mascara completa, bit 1 color uniforme
-                ld (aq_fl),a
                 push bc
-                ld a,(aq_pos)
+                push hl                 ; la celda (sus banderas: bit 0 mascara completa, bit 1 color uniforme)
+                ld a,c
                 and $0F
                 add a,a
                 add a,a
                 add a,a
                 ld e,a
                 ld d,0
-                ld hl,(aq_x)
-                add hl,de
-                ld de,32
+                ld hl,(aq_x32)          ; (aq_x + 32)
                 add hl,de
                 bit 7,h
-                jp nz,acd_skip
+                jp nz,acd_skp2
                 ld (aq_cx),hl
                 ld de,319
                 or a
                 sbc hl,de
-                jp nc,acd_skip
-                ld a,(aq_pos)           ; y de la celda de pantalla = fila de la sala + 8 * cy + HR_TOP - ytop (+32 del sprite)
+                jp nc,acd_skp2
+                ld a,c                  ; y de la celda de pantalla = fila de la sala + 8 * cy + HR_TOP - ytop (+32 del sprite)
                 srl a
-                srl a
-                srl a
-                srl a
-                add a,a
-                add a,a
-                add a,a
+                and $78                 ; 8 * cy
                 ld e,a
                 ld d,0
-                ld hl,(aq_ry)
+                ld hl,(aq_y32)          ; (aq_ry + HR_TOP + 32 - hv_ytop)
                 add hl,de
-                ld de,HR_TOP+32
-                add hl,de
-                ld a,(hv_ytop)
-                ld e,a
-                ld d,0
-                or a
-                sbc hl,de
                 bit 7,h
-                jp nz,acd_skip
+                jp nz,acd_skp2
                 ld a,h
                 or a
-                jp nz,acd_skip
+                jp nz,acd_skp2
                 ld a,l
                 ld (aq_cy),a
+                sub 32                  ; 10d: directo (aq_drc = 1) si no hay mascara de la sala y las 8 filas caen en [AC_YMIN, AC_YMAX):
+                jr c,acd_nd             ; entonces aq_mask_px no se llama y aq_clip no cambia nada (ver aq_clip)
+                cp AC_YMIN
+                jr c,acd_nd
+                cp AC_YMAX-7
+                jr nc,acd_nd
+                ld a,(aq_mk)
+                or a
+                jr nz,acd_nd
+                inc a
+                jr acd_sd
+acd_nd:         xor a
+acd_sd:         ld (aq_drc),a
                 call aq_slot            ; el siguiente sprite (normal o extra): su posicion escrita y donde van forma, mascara y colores
-                jp c,acd_skip
-                ld hl,(aq_cp)
-                inc hl
+                jp c,acd_skp2
+                pop hl                  ; la celda
+                ld a,(hl)               ; banderas (A sobrevive a ldi)
                 inc hl
                 ld de,(aq_sp)           ; forma
-                ld bc,8
-                ldir
-                ld a,(aq_fl)
-                bit 0,a
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                push af
+                ld c,a
+                ld a,(aq_drc)
+                or a
+                jr z,acd_ms             ; el camino de siempre (aq_mt y acd_mput)
+                bit 0,c
+                jr nz,acd_df
+                ld de,(aq_sm)           ; directo: la mascara de la celda a los registros del sprite
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                jr acd_c0
+acd_df:         ex de,hl                ; directo, mascara completa
+                ld hl,(aq_sm)
+                call acd_ff
+                ex de,hl
+                jr acd_c0
+acd_ms:         bit 0,c
                 jr z,acd_m1
                 push hl                 ; mascara completa
                 ld hl,aq_mt
-                ld b,8
-acd_m0:         ld (hl),$FF
-                inc hl
-                djnz acd_m0
+                call acd_ff
                 pop hl
                 call acd_mput
                 jr acd_c0
 acd_m1:         ld de,aq_mt
-                ld bc,8
-                ldir
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
                 call acd_mput
-acd_c0:         ld a,(aq_fl)
+acd_c0:         pop af
                 bit 1,a
                 jr z,acd_c1
                 ld a,(hl)               ; color uniforme
                 ld hl,(aq_sc)
-                ld b,8
-acd_c2:         ld (hl),a
-                inc hl
-                djnz acd_c2
-                jp acd_skip
+                call acd_fa
+                jr acd_skip
 acd_c1:         ld de,(aq_sc)
-                ld bc,8
-                ldir
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                jr acd_skip
+acd_skp2:       pop hl                  ; (la celda)
 acd_skip:       ld hl,(aq_nx)
                 pop bc
                 dec b
                 jp acd_cell
 acd_end:        ld a,(aq_cpage)         ; la mascara de la sala movio la ventana: el traje vuelve
                 jp map_page
+acd_ff:         ld a,$FF                ; 8 bytes desde HL con A ($FF en acd_ff)
+acd_fa:         ld (hl),a
+                inc hl
+                ld (hl),a
+                inc hl
+                ld (hl),a
+                inc hl
+                ld (hl),a
+                inc hl
+                ld (hl),a
+                inc hl
+                ld (hl),a
+                inc hl
+                ld (hl),a
+                inc hl
+                ld (hl),a
+                ret
 
 ; la mascara de la celda (aq_mt), sin los pixeles que tapa la sala ni las lineas que caen fuera de la sala en pantalla, a los registros del sprite; conserva HL
 acd_mput:       push hl
@@ -750,8 +811,14 @@ acd_mput:       push hl
                 call aq_clip
                 ld hl,aq_mt
                 ld de,(aq_sm)
-                ld bc,8
-                ldir
+                ldi                     ; (10d: 8 ldi en vez de ldir)
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
+                ldi
                 pop hl
                 ret
 
@@ -875,13 +942,19 @@ mk_s0:          ld (aq_s0),a
                 ld (aq_dd),hl
                 xor a
                 ld (aq_k),a             ; tira k de la ventana
-mk_strip:       ld hl,(aq_dd)           ; la tira, a ceros
+mk_strip:       ld hl,(aq_dd)           ; la tira, a ceros: 10d, solo sus aq_rh filas (las celdas caen dentro del fotograma: costume3.py
+                ld (hl),0               ; las saca de su rejilla de ancho x alto; las filas de mas abajo no se leen)
+                ld a,(aq_rh)
+                sub 2
+                jr c,mk_z
+                inc a
+                ld c,a
+                ld b,0
                 ld d,h
                 ld e,l
                 inc de
-                ld (hl),0
-                ld bc,63
                 ldir
+mk_z:
                 ld a,(aq_s0)
                 ld hl,aq_k
                 add a,(hl)              ; tira de la sala = s0 + k
@@ -1014,40 +1087,159 @@ aq_mask_px:     push hl
                 ld e,a
                 ld d,0
                 add hl,de
-                ld de,aq_mt
-                ld b,8
-mp_r:           push bc
-                ld a,(hl)               ; byte de la tira
-                push hl
+                push iy                 ; fase 10d: IY = la tira siguiente y una variante del bucle por desplazamiento (antes, un bucle de
+                push hl                 ; desplazamientos por fila: mp_s, mp_r y mp_a eran un tercio de una vuelta con 6 actores)
+                pop iy
                 ld bc,64
-                add hl,bc
-                ld c,(hl)               ; byte de la tira siguiente
-                ld b,a
-                pop hl
+                add iy,bc
+                ld de,aq_mt
                 ld a,(aq_sh)
-                or a
-                jr z,mp_n
+                add a,a
+                ld c,a
+                ld b,0
                 push hl
-                ld h,b
-                ld l,c
-                ld b,a
-mp_s:           add hl,hl
-                djnz mp_s
-                ld a,h
+                ld hl,mp_tab
+                add hl,bc
+                ld a,(hl)
+                inc hl
+                ld h,(hl)
+                ld l,a
+                ex (sp),hl              ; en la pila, la variante; HL = la tira
+                ld b,8
+                ret
+mp_done:        pop iy
                 pop hl
-                jr mp_a
-mp_n:           ld a,b
-mp_a:           cpl
+                ret
+mp_tab:         defw mp_v0,mp_v1,mp_v2,mp_v3,mp_v4,mp_v5,mp_v6,mp_v7
+mp_v0:          ld a,(hl)               ; sin desplazamiento: solo la tira
+                cpl
                 ld c,a
                 ld a,(de)
                 and c
                 ld (de),a
                 inc de
                 inc hl
-                pop bc
-                djnz mp_r
-                pop hl
-                ret
+                djnz mp_v0
+                jp mp_done
+mp_v1:          ld c,(iy+0)             ; (tira << 1) | (siguiente >> 7)
+                ld a,(hl)
+                sla c
+                rla
+                cpl
+                ld c,a
+                ld a,(de)
+                and c
+                ld (de),a
+                inc de
+                inc hl
+                inc iy
+                djnz mp_v1
+                jp mp_done
+mp_v2:          ld c,(iy+0)             ; (tira << 2) | (siguiente >> 6)
+                ld a,(hl)
+                sla c
+                rla
+                sla c
+                rla
+                cpl
+                ld c,a
+                ld a,(de)
+                and c
+                ld (de),a
+                inc de
+                inc hl
+                inc iy
+                djnz mp_v2
+                jp mp_done
+mp_v3:          ld c,(iy+0)             ; (tira << 3) | (siguiente >> 5)
+                ld a,(hl)
+                sla c
+                rla
+                sla c
+                rla
+                sla c
+                rla
+                cpl
+                ld c,a
+                ld a,(de)
+                and c
+                ld (de),a
+                inc de
+                inc hl
+                inc iy
+                djnz mp_v3
+                jp mp_done
+mp_v4:          ld c,(iy+0)             ; (tira << 4) | (siguiente >> 4)
+                ld a,(hl)
+                sla c
+                rla
+                sla c
+                rla
+                sla c
+                rla
+                sla c
+                rla
+                cpl
+                ld c,a
+                ld a,(de)
+                and c
+                ld (de),a
+                inc de
+                inc hl
+                inc iy
+                djnz mp_v4
+                jp mp_done
+mp_v5:          ld c,(iy+0)             ; (tira << 5) | (siguiente >> 3) = byte bajo de (tira:siguiente) >> 3 (10d)
+                ld a,(hl)
+                srl a
+                rr c
+                srl a
+                rr c
+                srl a
+                rr c
+                ld a,c
+                cpl
+                ld c,a
+                ld a,(de)
+                and c
+                ld (de),a
+                inc de
+                inc hl
+                inc iy
+                djnz mp_v5
+                jp mp_done
+mp_v6:          ld c,(iy+0)             ; (tira << 6) | (siguiente >> 2) = byte bajo de (tira:siguiente) >> 2 (10d)
+                ld a,(hl)
+                srl a
+                rr c
+                srl a
+                rr c
+                ld a,c
+                cpl
+                ld c,a
+                ld a,(de)
+                and c
+                ld (de),a
+                inc de
+                inc hl
+                inc iy
+                djnz mp_v6
+                jp mp_done
+mp_v7:          ld c,(iy+0)             ; (tira << 7) | (siguiente >> 1) = byte bajo de (tira:siguiente) >> 1 (10d)
+                ld a,(hl)
+                srl a
+                rr c
+                ld a,c
+                cpl
+                ld c,a
+                ld a,(de)
+                and c
+                ld (de),a
+                inc de
+                inc hl
+                inc iy
+                djnz mp_v7
+                jp mp_done
 
 ; el siguiente sprite de la pasada (normal: POKEs 2100-2104; extra: su entrada en la sombra, {hoja 0, j, campo} = $0000 + 32 * j, que lee la FPGA con POKE 2129 = 0 y 2131 = numero de extras):
 ; escribe su posicion (aq_cx, aq_cy) y deja en aq_sp, aq_sm y aq_sc donde van la forma, la mascara y los colores. Carry si no hay hueco
@@ -1068,55 +1260,54 @@ sl_ok:          ld (2100),a
                 ld (2104),a
                 ld a,1
                 ld (2101),a
+                ld a,(aq_sp+1)          ; 10d: los punteros de los normales ya estan (los de los extra estan por debajo de $0400)
+                cp 2113/256
+                jr z,slo_r
                 ld hl,2113
                 ld (aq_sp),hl
                 ld hl,2121
                 ld (aq_sm),hl
                 ld hl,2105
                 ld (aq_sc),hl
-                or a
+slo_r:          or a
                 ret
 sl_x:           ld a,(aq_xn)
                 cp AC_XMAX
                 jr c,sl_xok
                 scf
                 ret
-sl_xok:                ld l,a
-                ld h,0
+sl_xok:         ld c,a                  ; j. 10d: la entrada es $0000 + 32 * j y sus campos (+1..+29) no cruzan un limite de 256 B
                 inc a
                 ld (aq_xn),a
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl               ; 32 * j
-                push hl
-                inc hl
+                ld a,c
+                rrca
+                rrca
+                rrca
+                ld h,a
+                and $E0
+                ld l,a
+                xor h
+                ld h,a                  ; HL = 32 * j
+                inc l
                 ld de,(aq_cx)
                 ld (hl),e               ; x (+1, +2: el bit 8) e y (+3)
-                inc hl
+                inc l
                 ld (hl),d
-                inc hl
+                inc l
                 ld a,(aq_cy)
                 ld (hl),a
-                pop hl
-                push hl
-                ld de,29
-                add hl,de
+                ld a,l
+                add a,29-3
+                ld l,a
                 ld (hl),0               ; formato A
-                pop hl
-                push hl
-                ld de,4
-                add hl,de
-                ld (aq_sc),hl
-                pop hl
-                push hl
-                ld de,12
-                add hl,de
-                ld (aq_sp),hl
-                pop hl
-                ld de,20
-                add hl,de
-                ld (aq_sm),hl
+                sub 29-4
+                ld l,a
+                ld (aq_sc),hl           ; +4
+                add a,8
+                ld l,a
+                ld (aq_sp),hl           ; +12
+                add a,8
+                ld l,a
+                ld (aq_sm),hl           ; +20
                 or a
                 ret

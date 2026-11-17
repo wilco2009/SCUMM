@@ -61,8 +61,13 @@ aq_tot          equ AC2V+8              ; sprites normales y extra repartidos en
 aq_tx           equ AC2V+9
 aq_li           equ AC2V+10             ; indice en la lista
 aq_ovf          equ AC2V+11             ; 1: ya hubo un actor que no cabio en los normales: los que van mas atras van a los extra
+aq_x32          equ AC2V+12             ; palabra (10d): aq_x + 32, una vez por actor (aq_draw)
+aq_y32          equ AC2V+14             ; palabra (10d): aq_ry + HR_TOP + 32 - hv_ytop
 AC2_END         equ AC2V+16
+aq_ctab         equ AC2_END             ; palabra (10d): la tabla de celdas del traje del actor que se dibuja
+aq_drc          equ AC2_END+2           ; (10d) 1: la celda va directa a los registros del sprite (sin mascara de la sala ni recorte)
+AC3_END         equ AC2_END+3
 AC_XMAX         equ 32                  ; sprites extra como mucho: con 64 normales, 32 extra y 12 sprites de formato A cargados por linea, los pasos de la FPGA (2 + 64 + 32 + 6 * 12 = 170) caben en el limite de 174
-                IF AC2_END > ROOMPAL
+                IF AC3_END > ROOMPAL
                 defb LAS_VARIABLES_DE_LOS_ACTORES_PISAN_LA_PALETA
                 ENDIF

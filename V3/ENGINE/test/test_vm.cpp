@@ -169,7 +169,7 @@ static long long tnow = 0;
 static bool ts_vm = false;
 struct Frame { long long t0; int sp; int op; long long nested; };
 static std::vector<Frame> istk;
-struct OpStat { long n = 0; long long excl = 0, incl = 0; };
+struct OpStat { long n = 0; long long excl = 0, incl = 0, mx = 0; };
 static OpStat opst[256];
 static std::vector<int> all_t;
 struct FStat { long n = 0; long long sum = 0, mx = 0; };
@@ -207,8 +207,12 @@ static void wk_begin() {
     if (rd(a) == room && rd(a + 9)) { wk_n++; wk_a = a; wk_mv = rd(a + 9); wk_nx = rd16(a + 39); wk_ny = rd16(a + 41); }
   }
 }
+static int wkd_on = 0, wkd_adr[10], wkd_cnt[10], wkd_all[10], wkd_nl = 0; static const char* wkd_nm[10] = {"gates","fpo","cplin","cpl_gen","cpb","adjust_xy","cxb","gnb","cpb_lb","cslope"};
+static std::vector<std::array<int, 10>> cstk;
 static void wk_end() {
   wk_on = false;
+  if (wkd_on && tnow - wk_t0 > wkd_on) { printf("WKD %lld n=%d", tnow - wk_t0, wk_n); for (int q = 0; q < wkd_nl; q++) printf(" %s=%d", wkd_nm[q], wkd_cnt[q]); printf("%c", 10); }
+  for (int q = 0; q < 10; q++) wkd_cnt[q] = 0;
   int k = 0;
   if (wk_n > 1) k = 3;
   else if (wk_n == 1) k = ((wk_mv & 3) == 2 && (rd(wk_a + 9) & 3) == 2 && rd16(wk_a + 39) == wk_nx && rd16(wk_a + 41) == wk_ny) ? 1 : 2;
@@ -224,23 +228,26 @@ static long tv_pc = 0;
 static bool tv_ring = false;
 static int ring[40], VM_ERR = 0;
 static long ringn = 0;
+static long long ts_big = 0;                  // TS_BIG=n: una linea por instruccion de script de mas de n T (escenario, opcode)
+static char cur_scn[64] = "";
 static bool z80_call(int addr) {
   z80.sp.w = 0x7FF0;
   wr16(0x7FF0, TRAP);
   ram[3][TRAP & 0x1FFF] = 0x76;
   z80.pc.w = addr; z80.halted = 0; z80.iff1 = z80.iff2 = 0;
   long n = 0;
-  istk.clear();
+  istk.clear(); cstk.clear();
   while (z80.pc.w != TRAP) {
     int pc = z80.pc.w;
     if (ts_vm) {
-      if (pc == ES_GO) { if (istk.empty() || istk.back().sp != z80.sp.w) istk.push_back({tnow, z80.sp.w, rd(rd16(SPTR)), 0}); }   // (es_cross vuelve a es_go)
+      if (pc == ES_GO) { if (istk.empty() || istk.back().sp != z80.sp.w) istk.push_back({tnow, z80.sp.w, rd(rd16(SPTR)), 0}); std::array<int, 10> c; for (int q = 0; q < 10; q++) c[q] = wkd_all[q]; cstk.push_back(c); }   // (es_cross vuelve a es_go)
       else if (pc == ES_LOOP && !istk.empty() && istk.back().sp == z80.sp.w) {
-        Frame f = istk.back(); istk.pop_back();
+        Frame f = istk.back(); istk.pop_back(); std::array<int, 10> c0 = cstk.back(); cstk.pop_back();
         long long incl = tnow - f.t0 + 22;          // + la comprobacion de CUR de es_loop (13 + 4 + 5)
         long long excl = incl - f.nested;
-        opst[f.op].n++; opst[f.op].excl += excl; opst[f.op].incl += incl;
+        opst[f.op].n++; opst[f.op].excl += excl; opst[f.op].incl += incl; opst[f.op].mx = std::max(opst[f.op].mx, excl);
         all_t.push_back((int)excl);
+        if (ts_big && excl > ts_big) { printf("BIG %s op %02X %lld actor1 %d,%d", cur_scn, f.op, excl, (int)(short)rd16(ACTORS + ASIZE + 1), (int)(short)rd16(ACTORS + ASIZE + 3)); for (int q = 0; q < wkd_nl; q++) printf(" %s=%d", wkd_nm[q], wkd_all[q] - c0[q]); printf("%c", 10); }
         if (!istk.empty()) istk.back().nested += incl;
       }
     }
@@ -258,7 +265,8 @@ static bool z80_call(int addr) {
     tstates = 0;
     z80_do_opcode();
     tnow += tstates;
-    if (pd_on && pc < 0x2000 && blk[0] == pd_page) pd_t[pc] += tstates;      // TS_PD=1: T por direccion dentro del overlay D
+    if (pd_on && pc < 0x2000 && blk[0] == pd_page) pd_t[pc] += tstates;
+    if (wkd_nl && blk[0] == pd_page) for (int q = 0; q < wkd_nl; q++) if (pc == wkd_adr[q]) { wkd_all[q]++; if (wk_on) wkd_cnt[q]++; }      // TS_PD=1: T por direccion dentro del overlay D
     instr_total++;
     if (++n > call_limit) return false;
   }
@@ -414,6 +422,7 @@ int main(int argc, char** argv) {
   signal(SIGSEGV, segv);
   if (argc < 7) { printf("uso: test_vm vm.bin vm.sym ovlb.bin DATA.BIN scenarios.txt actual.txt\n"); return 2; }
   ts_vm = getenv("TS_VM") && atoi(getenv("TS_VM"));
+  ts_big = getenv("TS_BIG") ? atoll(getenv("TS_BIG")) : 0;
   tv_trace = getenv("TV_TRACE") != nullptr;
   tv_ring = getenv("TV_RING") != nullptr;
   tv_pc = getenv("TV_PC") ? atol(getenv("TV_PC")) : 0;
@@ -442,6 +451,13 @@ int main(int argc, char** argv) {
   VM_ERR = S("vm_err");
   TK_IN = S("talk_frame"); TK_OUT = S("vf_tk"); WK_IN = S("walk_frame");
   pd_on = getenv("TS_PD") && atoi(getenv("TS_PD")); pd_page = S("OVD_PAGE");
+  if (getenv("TS_WKD") && argc > 8) {               // TS_WKD=n: una linea por walk_frame de mas de n T con las llamadas a gates, cplin...
+    wkd_on = atoi(getenv("TS_WKD")); pd_page = S("OVD_PAGE");
+    std::string sp = argv[8]; size_t k = sp.rfind(".bin"); if (k != std::string::npos) sp.replace(k, 4, ".sym");
+    FILE* fs = fopen(sp.c_str(), "r"); char ln[300];
+    while (fs && fgets(ln, sizeof ln, fs)) { char nm[100]; unsigned v; if (sscanf(ln, "%99s EQU 0%xH", nm, &v) == 2) for (int q = 0; q < 10; q++) if (!strcmp(nm, wkd_nm[q])) wkd_adr[q] = v; }
+    if (fs) fclose(fs); wkd_nl = 10;
+  }
   ES_GO = S("es_go"); ES_LOOP = S("es_loop");
   FILE* f = fopen(argv[1], "rb");
   if (!f) { printf("no encuentro %s\n", argv[1]); return 2; }
@@ -482,6 +498,7 @@ int main(int argc, char** argv) {
     line[strcspn(line, "\r\n")] = 0;
     if (!strncmp(line, "SCENARIO ", 9)) {
       fprintf(out, "%s\n", line);
+      snprintf(cur_scn, sizeof cur_scn, "%s", line + 9);
       trace.clear(); frame = 0; cur_room = entry_room = exit_room = 0; aborted = false; nsc++; ncode = 0; pend_ev.clear();
       for (int i = 0; i < 8; i++) blk[i] = i;
       continue;
@@ -644,8 +661,8 @@ int main(int argc, char** argv) {
     std::vector<int> ops;
     for (int i = 0; i < 256; i++) if (opst[i].n) ops.push_back(i);
     std::sort(ops.begin(), ops.end(), [](int a, int b) { return opst[a].n > opst[b].n; });
-    printf("  op        n   T medios (excl)   T medios (con anidadas)\n");
-    for (int i : ops) printf("  %02X %8ld   %10.0f   %10.0f\n", i, opst[i].n, (double)opst[i].excl / opst[i].n, (double)opst[i].incl / opst[i].n);
+    printf("  op        n   T medios (excl)   T medios (con anidadas)   max (excl)%c", 10);
+    for (int i : ops) printf("  %02X %8ld   %10.0f   %10.0f   %10lld%c", i, opst[i].n, (double)opst[i].excl / opst[i].n, (double)opst[i].incl / opst[i].n, opst[i].mx, 10);
   }
   return 0;
 }

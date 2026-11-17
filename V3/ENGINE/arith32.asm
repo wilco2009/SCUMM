@@ -94,7 +94,22 @@ d32_a:
                 ld hl,N2
                 call neg32
 d32_b:
-                ld hl,0
+                ld hl,(N2+2)            ; fase 10d: divisor de 16 bits (el caso de los scripts): una o dos divisiones de 16 vueltas
+                ld a,h
+                or l
+                jr nz,d32_g
+                ld bc,(N2)
+                ld de,(N1+2)
+                ld a,d
+                or e
+                jr z,d32_1              ; (HL = 0: cociente alto 0, resto 0)
+                call d32_16
+d32_1:          ld (N1+2),de
+                ld de,(N1)
+                call d32_16
+                ld (N1),de
+                jr d32_e
+d32_g:          ld hl,0
                 ld (DR),hl
                 ld (DR+2),hl
                 ld b,32
@@ -132,7 +147,7 @@ d32_l:
 d32_n:
                 pop bc
                 djnz d32_l
-                ld hl,(N1)
+d32_e:          ld hl,(N1)
                 ld (NR),hl
                 ld hl,(N1+2)
                 ld (NR+2),hl
@@ -141,3 +156,18 @@ d32_n:
                 ret nc
                 ld hl,NR
                 jp neg32
+d32_16:         ld a,16                 ; (HL:DE) / BC con HL < BC -> DE = cociente, HL = resto
+d16_l:          sla e
+                rl d
+                adc hl,hl
+                jr c,d16_o
+                sbc hl,bc
+                jr nc,d16_s
+                add hl,bc
+                jr d16_n
+d16_o:          or a
+                sbc hl,bc
+d16_s:          inc e
+d16_n:          dec a
+                jr nz,d16_l
+                ret

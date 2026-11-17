@@ -768,3 +768,124 @@ Variables: `hv_y0`/`hv_y1` = `HV+32/33` (eran `hv_c0`/`hv_c1`, sin uso desde la 
 **Pruebas (especificas, 2026-11-16):** `objflip.sh 20` y `objflip.sh 28`: `check_hr` **0 distintos** en los 10 volcados; `build_boot.sh 760` (pasillo con scroll) **761/761** iguales, 3 ordenes de sonido iguales y `check_hr` 0 distintos. `check_hr.py` no modela la capa de texto: el cambio 5 es igual por construccion (`OV_FLG` solo lo escribe `ov_text_col`, que pone `ov_fok` a 0); en la noche, `check_hr` del dialogo F5 tiene que seguir dando los mismos 8 distintos del texto.
 
 **Falta:** la placa y la prueba de la noche. Sin commit.
+
+## Fase 10d: caminata, scripts y actores (2026-11-17; solo arnes, sin placa)
+
+**Prueba de la noche:** `ENGINE/test/build/noche/2026-11-17.txt` no existe: la tarea de Windows "SCUMM v3 pruebas noche" **no se ha ejecutado nunca** (`LastTaskResult` 267011, "aun no se ha ejecutado"; la proxima, el 18/11 a las 02:00). Nada que contar de ella.
+
+### Caminata (overlay D; `geom.asm`, `walk.asm`; medidas con `TS_VM=1 build_test.sh "..." 1 "1,15,20,28,43,47"`, 1.609 escenarios)
+
+| | antes | despues |
+|---|---|---|
+| `walk_frame` que arranca, cambia de tramo o llega: media / maxima | 148.198 / 1.428.728 | **19.158 / 79.454** |
+| `walk_frame` con varios actores: maxima | 1.353.490 | **98.933** |
+| `walkActorTo` (1E): media / maxima | 70.230 / 3.877.573 | **37.687 / 1.110.937** |
+| `walkActorToObject` (36): media / maxima | 20.091 / 628.035 | **12.383 / 289.677** |
+| `walkActorToActor` (0D): maxima | 391.216 | **257.176** |
+
+(Las cifras de la fase 6, 134.670 / 1.467.429, eran de las 88 salas; estas son de las 6 de caminata.)
+
+**Por que costaba:** cada cambio de tramo llama a `getGates` (8 `getClosestPtOnBox` = 32 `closestPtOnLine`) y, si el actor llega al punto de la puerta en el mismo fotograma, otra vez con la caja siguiente (como `Actor_v3::walkActor` de ScummVM: el `do ... while` sigue de caja en caja). La vuelta de 1,43 M eran 2 `getGates` con 36 `closestPtOnLine` "generales" (aristas inclinadas) de ~38.000 T cada una (pila de 32 bits y `mul32`). `walkActorTo` llama a `adjustXYToBeInBox`, que con un clic a mas de 80 px de todas las cajas hace `getClosestPtOnBox` en TODAS (54 cajas en la sala 43, 37 en la 47).
+
+**Cambios** (mismo resultado que ScummVM, que lo calcula todo en el mismo fotograma; no se reparte entre vueltas):
+1. **Tabla de puertas** (`pack_data3.gate_table`): `getGates` solo depende de las dos cajas, y en v3 las coordenadas de las cajas no cambian (`o5_matrixOps` de v3 solo cambia banderas). El empaquetador calcula, con `vmgame3.get_gates` (el modelo), las puertas de cada par (caja, siguiente) que puede dar `getNextBox` (las ternas de la matriz, mas el WORKAROUND de la sala 46): 1.094 pares en Indy3, 12.408 B en `DATA.BIN`; la mayor, la sala 43 (112 pares, 1.233 B). Entrada de 11 B: caja 1, caja 2, lineas de gateA y gateB (como `set_gate`: linea < 4, esquina de la caja 1 y el punto; si no, el punto y la esquina de la caja 2) y los dos puntos. `ROOMDIR +22`: pagina, direccion y bytes. `gt_load` (`ovc5.asm`, overlay C) la copia al cargar la sala (`ovc_room`) **y al cargar una partida** (`ovc9.asm`) a la pagina `CLS_PG` (47) desde `GT_OFF` = `$0C00` (tras OBJCLS, 3.000 B; hasta `GT_MAX` = 2.048), por la ventana y de 256 en 256 por `GW`, con la sala (`ROOMRES`) en el primer byte. `gates` (`geom.asm`) la busca con `cls_open`; si la sala no coincide o el par no esta, calcula como antes. Coste de un cambio de tramo con tabla: ~5.000 T de busqueda.
+2. **`closestPtOnLine` general reescrita** (`cpl_gen`): el mismo calculo de C (int de 32 bits que desborda, division truncada) por valores absolutos con signo aparte: `|lu|`, `|lv|`, `|su|`, `|pu|` caben en 16 bits; `a` cabe en 16 (`|lv| <= |lu|`); `t*lv*lu = |t| * (|lv|*|lu|)` modulo 2^32 (`mul_lo`); divisiones de 32/16 (`ud3216`). Sin pila de 32 bits (`gpush`/`gpop`/`gmul`/`gdiv`/`smul` fuera). Comprobada antes en Python contra `vmgame3.closest_pt_on_line` con 200.000 casos (la mitad con coordenadas s16 extremas): 0 distintos.
+3. **`adjustXYToBeInBox`**: (a) `checkXYInBoxBounds` solo en la primera pasada (si se llega a la segunda, el punto no esta en ninguna caja: las que la primera no miro estan a mas de 30 px de sus 4 esquinas en x o en y, y `checkXYInBoxBounds` las descarta por lo mismo); (b) `inBoxQuickReject(umbral)` es "distancia al rectangulo envolvente > umbral" (`ax_bd`, minimo y maximo de las esquinas), calculada una vez por caja en la primera pasada y guardada para la segunda (`ADB`, hasta 125 cajas); (c) `getClosestPtOnBox` con poda por arista (`cpb_t`): `closestPtOnLine` deja siempre la coordenada del eje mayor de la arista dentro del segmento, asi que `d * d` (d = distancia del punto a ese intervalo) es una cota inferior exacta; una arista con cota >= min(mejor de la caja, `AXBEST`) no se calcula (la caja solo cuenta si da menos que `AXBEST`; la primera arista con la menor distancia nunca se poda, asi que el punto es el mismo). `getGates` sigue usando `cpb` sin poda (necesita el punto aunque pase de 65.535).
+
+**Lo que queda:** `walkActorTo` llega a 1,1 M en un clic de la sala 47 con y = 151 (fuera de los 128 px de la sala: no lo da el raton) y a ~0,4-0,6 M en clics lejos de las cajas en salas de muchas cajas: son `closestPtOnLine` generales de verdad (~15-25.000 T cada una: multiplicaciones y divisiones de 16 vueltas). Lo siguiente seria multiplicar con tabla de cuartos de cuadrado (1 KB) o desenrollar `mul16u`/`dv16`.
+
+### Scripts de la sala 28 y los demas (residente, overlays B y C)
+
+Perfil de la sala 28 parada (`TS_POKE="2:<DBG_ROOM>:1C,2:<DBG_ROOM+1>:0" TS_T=1 TS_PROF=30-150 TS_LOOPS=14 TS_VM=1`): 95 instrucciones de script por vuelta, el **58 %** de la vuelta: `expression` (10 por vuelta, 3.818 T), `isActorInBox` (10, 2.913), `getObjectState` (12, 1.224), `startScript` (2, 8.214), `drawObject` (2, 3.831)...; ademas `loc_addr` (125 llamadas por vuelta: 19.125 T) y un actor animado (~40.000 T de sprites). En la sala 70, un script divide 5 veces por vuelta en `expression`: `div32s` eran **43.000 T por vuelta**.
+
+**Cambios:**
+4. `div32s` (`arith32.asm`, residente): con divisor de 16 bits, una o dos divisiones de 16 vueltas (`d32_16`) en vez de 32 vueltas lentas. Mismo cociente (sin signo y con el signo despues, como antes; INT_MIN igual).
+5. `loc_addr` (residente): 153 -> 115 T (sin `push`/`pop de`; las comprobaciones en el mismo orden).
+6. `ex_push`/`ex_pop` (`ovlb.asm`, `expression`): sin `ldir` en el push (ESTK no cruza un limite de 256 B: comprobado al ensamblar).
+7. `isActorInBox` (`ovc5.asm`, `axis_rej`): fuera de [menor, mayor] de las 4 esquinas con minimo y maximo por registros, en vez de contar esquinas con `sless` y variables.
+
+En la sala 28 parada: `expression` 10 por vuelta, `isActorInBox` 10, `getObjectState` 12; con los cambios 4-7 y los de los actores (abajo) la vuelta baja
+de ~283.000 a ~255.000 T. La vuelta de 574.314 de HEAD era un calculo de camino (cambio de tramo): ahora no pasa de 291.638.
+
+### Actores (overlay D, `ovd_act.asm`)
+
+8. `aq_mask_px` (mascara de la sala por pixel): una variante del bucle de 8 filas por desplazamiento (0-7), con `sla c / rla` desenrollado y la tira siguiente en IY; antes, un bucle de desplazamientos por fila con pilas (`mp_s` + `mp_r` + `mp_a` = 184.000 T en una vuelta de la sala 15 con 6 actores).
+9. `ldir` de 8 bytes (forma, mascara, color, mascara al sprite) -> 8 `ldi`.
+10. `acd_cell`: x + 32 y la fila + `HR_TOP` + 32 - `hv_ytop` se calculan una vez por actor (`aq_x32`, `aq_y32` = `AC2V+12/14`, que estaban libres); `8 * cy` = `(pos >> 1) & $78`.
+
+**Segunda tanda (2026-11-17, tarde, pedida por el usuario: "sprites aqui"):**
+11. **Camino directo de la mascara**: si el actor no tiene mascara de la sala (`aq_mk` = 0) y las 8 filas de la celda caen en `[AC_YMIN, AC_YMAX)`, `aq_mask_px`
+    no se llama y `aq_clip` no cambia nada, asi que la mascara de la celda (o 8 x `$FF`) va directa a los registros del sprite (`aq_sm`) sin pasar por `aq_mt`
+    ni `acd_mput` (`aq_drc` = 1). Si no, el camino de siempre.
+12. La tabla de celdas del traje se calcula una vez por actor (`aq_ctab`; `aq_ctab` y `aq_drc` en `AC2_END..+2`, en los 41 B libres hasta `ROOMPAL`); el
+    puntero de la celda va en la pila y su posicion en C; los rellenos de 8 bytes (mascara completa, color uniforme) desenrollados (`acd_ff`/`acd_fa`).
+13. `aq_slot`: `sl_ok` no reescribe los 3 punteros si ya son los de los sprites normales; `sl_xok` calcula la entrada `32 * j` y sus campos con sumas de 8 bits
+    (no cruzan un limite de 256 B) en vez de `push`/`pop` y sumas de 16.
+14. Mascara: `mk_strip` borra solo las `aq_rh` filas de cada tira (las celdas salen de la rejilla del fotograma, `costume3.py`, y nunca leen mas abajo);
+    las variantes de desplazamiento 5, 6 y 7 desplazan `tira:siguiente` a la derecha 3, 2 y 1 veces (`srl a / rr c`: el mismo byte).
+
+### Cifras de las vueltas (programa completo, `test_scumm.exe`; `test/loops_nosd.py` quita las vueltas que leen de la SD)
+
+Misma prueba con HEAD (dcea8c3, montada aparte) y con la 10d. Sala 28 parada: `TS_POKE` a `DBG_ROOM` = 28, `TS_PROF=30-150`. Salas 70, 20 y 15:
+`mk_actscen.py` (semillas 1, 2 y 2; 24 escenas de 1 a 6 actores al azar que cambian cada 4 fotogramas; una de cada cuatro con 6 de los trajes
+mas grandes, que no caben en 63 sprites): es una prueba de esfuerzo (todos los actores se redibujan a la vez). Guion: `medir4.sh` (en el
+scratchpad de la sesion; son las ordenes de abajo).
+
+| vueltas sin las de la SD | media | p90 | maxima | > 325.000 |
+|---|---|---|---|---|
+| sala 28 parada, HEAD | 282.914 | 281.601 | 574.314 | 3 de 120 |
+| sala 28 parada, 10d | **245.834** | 247.468 | **283.246** | **0** |
+| sala 70, HEAD | 234.488 | 322.916 | 368.853 | 14 de 145 |
+| sala 70, 10d | **185.694** | 253.402 | **290.568** | **0** |
+| sala 20 (1-6 actores), HEAD | 250.182 | 352.523 | 486.898 | 26 de 143 |
+| sala 20 (1-6 actores), 10d | **227.774** | 308.676 | **352.151** | **7** |
+| sala 15 (1-6 actores, mascara), HEAD | 169.073 | 241.235 | 583.134 | 16 de 209 |
+| sala 15 (1-6 actores, mascara), 10d | **161.086** | 232.654 | **442.710** | **9** |
+
+Ordenes: `TS_POKE="2:<DBG_ROOM>:1C,2:<DBG_ROOM+1>:0" TS_NOSTOP=1 TS_T=1 TS_PROF=30-150 TS_LOOPS=14 build/test_scumm.exe prog/scumm.bin prog/scumm.sym build/sdboot 160 x.bin`;
+para las escenas, `python -I mk_actscen.py prog/scumm.sym build/sdboot/DATA/DATA.BIN 2 "20" 24`, su linea 1 en `TS_POKE` y `TS_PROF=18-<linea 3>`; luego
+`python -I loops_nosd.py salida.txt`. Con `TS_VM=1` sale ademas el reparto por opcode.
+
+### Pruebas (especificas)
+- Nucleo (`build_test.sh` con salas): `1,15,20,28,43,47` **1.609/1.609**, `41,44,46,60` **1.404/1.404** (la 46 es la del WORKAROUND y la matriz truncada),
+  `28,70` **1.400/1.400**, `70` **1.355/1.355** (tras el ultimo cambio de B).
+- `wlk_test.py` (600 caminatas con coordenadas extremas y desbordamientos de 32 bits): **600/600**. `ibx_test.py` (`isActorInBox`): **600/600**.
+  `exp_test.py` (nuevo, 600 `expression` con divisiones): **600/600**.
+- `cpl_gen` en Python contra `vmgame3.closest_pt_on_line`: 200.000 casos, 0 distintos (antes de pasarlo al Z80).
+- `pack_data3.py ... check`: la tabla de puertas se lee de vuelta; cada entrada se descodifica y se compara con `get_gates` al empaquetar.
+- Programa: `build_boot.sh 760` (pasillo) **761/761**, 3 ordenes de sonido iguales, `check_hr` 0 distintos; `savetest.sh` **701, 901, 401, 1.501, 1.351 y
+  2.601 iguales** (en el dialogo F5, los 8 de `check_hr` de la capa de texto de siempre).
+- Sprites (con la segunda tanda; ojo: no pasar dos `actscen.sh` a la vez, comparten `build/spr_dump.bin.*`): `actscen.sh 1 "15,20,70" 8`: 24 escenas, las 16 de las salas 15 y 20 sin diferencias; las 8 de la sala 70 con **2 sprites distintos cada una,
+  exactamente igual que HEAD** (comprobado montando HEAD aparte: las mismas lineas). No es de esta fase: los actores 8 y 10 los mueven los scripts de la
+  sala y `check_spr.py` avisa de que su contador de poses "no vale"; la prueba de la noche no mira la sala 70.
+- No se ha pasado la bateria ni `mutaciones.py` (regla del 2026-11-16): esta noche.
+
+### Tamanos
+Residente hasta **`$7CAD`: 851 B libres** (eran 913: +64 B de `div32s`/`d32_16`, -2 de `loc_addr`). Programa: overlay B 7.936 B (codigo hasta `$1CFF`:
+**queda 1 byte** antes de que su tabla salte a `$1E00` y B se llene), C 5.632 B (codigo hasta `$1396`), **D 7.163 B** (eran 6.332; 1.029 libres). Nucleo de
+pruebas: D 4.897 B. Pagina 47 (`CLS_PG`): OBJCLS 3.000 B + tabla de puertas en `$0C00-$13FF`. Bloque 7: sin cambios de sitio (`CBT`/`CBTH` en `GW+229`,
+que era `AXD`, sin uso; `aq_x32`/`aq_y32` en `AC2V+12..15` y `aq_ctab`/`aq_drc` en `AC2_END..+2`, libres): las partidas guardadas siguen valiendo. `DATA.BIN` cambia (`ROOMDIR +22`):
+`compila_scumm.bat` lo regenera siempre; un OVLD nuevo con un `DATA.BIN` viejo funciona (0 entradas: calcula como antes).
+
+### Herramientas nuevas del arnes
+- `test_vm.cpp`: `TS_WKD=n` (una linea por `walk_frame` de mas de n T con las llamadas a `gates`, `fpo`, `cplin`, `cpl_gen`, `cpb`, `adjust_xy`, `cxb`...), `TS_BIG=n` (una linea por instruccion de script de mas de n T: escenario, opcode y esas llamadas), maximo por opcode en la tabla de `TS_VM`.
+- `test_scumm.cpp`: `TS_VM=1` vuelve a funcionar con el nucleo de v3 (`es_go`): instrucciones de script por vuelta y T por opcode.
+- `test/loops_nosd.py`: resumen de las lineas `V` de `TS_LOOPS` sin las vueltas que leen de la SD.
+- `test/exp_test.py`: 600 `expression` al azar con divisiones (dividendos de 32 bits, divisores de 16 y 32, con signo) contra el modelo.
+
+### Falta
+- **La placa** (todo lo de arriba es arnes) y la prueba de la noche (la primera sera la del 18/11).
+- **Salas con 4-6 actores redibujados a la vez** (prueba de esfuerzo): la 20 pasa de 325.000 en 7 de 143 vueltas (max. 352.151; eran 26) y la 15, con
+  mascara de profundidad, en 9 de 209 (max. 442.710; eran 16). Sin mascara, una celda cuesta ya ~900 T (90 celdas en la peor vuelta de la 20, y ~200.000
+  T de scripts de la sala). En la 15 manda la mascara de la sala: descodificarla (`mk_strip`/`mk_run`, ~45.000 T en la peor vuelta) y aplicarla por
+  celda (`aq_mask_px` y sus variantes, ~90.000). Bajarlo mas pide otro diseno, no recortes: conservar la mascara descodificada de un actor que no cambia
+  de tira ni de fila (`MKBUF` es una sola para todos), o reescribir solo las posiciones de un actor que solo se mueve. En el juego, 6 actores que cambian
+  de postura en el mismo fotograma son raros.
+  **PENDIENTE (usuario, 2026-11-17): conservar la mascara descodificada por actor** (no volver a descodificar `MKBUF` si el actor no cambia de tira ni de
+  fila; hoy hay una sola para todos) para bajar las 9 vueltas de la sala 15. Apuntado; no se ha empezado.
+- `walkActorTo` con clics lejos de las cajas en salas de muchas cajas (0,4-0,6 M; 1,1 M con y fuera de la sala): `closestPtOnLine` general (~15-25.000 T).
+- El resto de los scripts de la sala 28 (~150.000 T por vuelta) es interpretacion de 95 instrucciones; lo que mas pesa ahora: `es_hi`, `vr_x`, `map_blk0`,
+  `actor_ix`, `slot_addr` (nucleo).
+- `check_spr.py` en la sala 70 (los 2 sprites de los actores 8 y 10, de antes).
+
+Sin commit.

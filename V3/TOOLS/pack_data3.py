@@ -43,7 +43,7 @@ ROOMDIR, 32 bytes por sala (todo a 0 en las salas que no existen):
   +6  u16 ancho de la sala en pixeles        +8  u8 alto en pixeles (128-200)      +9  u8 numero de scripts locales
   +10 pagina, direccion y u16 tamano del blob de la sala (abajo)       +15 pagina y direccion de la mascara de profundidad (0: no hay)
   +18 pagina y direccion de la tabla de scripts locales: n x (u8 id (>= 200), u8 pagina, u16 direccion)
-  +21 u8 numero de objetos de la sala         +22.. ceros
+  +21 u8 numero de objetos de la sala         +22 pagina, direccion y u16 tamano de la tabla de puertas (gate_table; 0: no hay)   +27.. ceros
 Blob de la sala: u8 numero de cajas, por caja 18 bytes tal cual estan en el recurso (8 x s16 de las esquinas ul, ur, lr, ll en x,y; u8 mascara;
   u8 banderas), u16 bytes de la matriz de cajas y la matriz tal cual (listas por caja de origen de ternas (desde, hasta, siguiente) acabadas
   en 0xFF; ScummEngine::getNextBox; la sala 46 la trae truncada), u8 numero de objetos y por objeto 14 bytes: u16 id, u8 x/8, u8 y/8,
@@ -68,6 +68,7 @@ import gameprofile           # noqa: E402
 import lfl2gfx               # noqa: E402
 import scumm3res as R        # noqa: E402
 import vmmodel as M          # noqa: E402
+import vmgame3               # noqa: E402
 
 VERSION = 3
 NUM_SCRIPTS = R.NUM_GLOBAL_SCRIPTS          # 200
@@ -109,6 +110,76 @@ def room_blob(room):
     if len(b) > BLOB_MAX:
         raise ValueError('sala %d: blob de %d bytes' % (room.num, len(b)))
     return bytes(b)
+
+
+GT_ENTRY = 11                                # fase 10d: entrada de la tabla de puertas (gate_table)
+GT_MAX = 2047                                # lo que reserva la pagina CLS_PG (vm_core.asm: GT_MAX - 1, tras el byte de la sala)
+
+
+def gt_pairs(boxes, matrix, rn):
+    """Los pares (caja, siguiente) que puede dar getNextBox en la sala: las ternas de la fila de cada caja con la siguiente < numero de
+    cajas, y el WORKAROUND de la sala 46 (de la 1 a la 0)."""
+    n = len(boxes)
+    p = 1 if matrix and matrix[0] == 0xFF else 0
+    pairs = set()
+    b = 0
+    while b < n and p < len(matrix):
+        while p < len(matrix) and matrix[p] != 0xFF:
+            if p + 2 < len(matrix) and matrix[p + 2] < n:
+                pairs.add((b, matrix[p + 2]))
+            p += 3
+        p += 1
+        b += 1
+    if rn == 46 and n > 1:
+        pairs.add((1, 0))
+    return sorted(pairs)
+
+
+def gt_decode(e, c1, c2):
+    """Una entrada de la tabla -> (gateA, gateB) como vmgame3.get_gates. c1, c2 = esquinas (ul, ur, lr, ll) de las dos cajas."""
+    def gate(line, x, y):
+        if line < 4:
+            return c1[line], (x, y)
+        return (x, y), c2[line - 4]
+    x1, y1, x2, y2 = struct.unpack_from('<4h', e, 3)
+    return gate(e[2] & 15, x1, y1), gate(e[2] >> 4, x2, y2)
+
+
+def gate_table(room):
+    """Fase 10d: getGates de cada par de cajas que la caminata puede pedir (gt_pairs), calculado aqui con vmgame3.get_gates: el Z80 lo copia a
+    la pagina del overlay D al cargar la sala y no hace las 8 getClosestPtOnBox (hasta 0,9 M T por par). u8 entradas y, por entrada (GT_ENTRY),
+    u8 caja 1, u8 caja 2, u8 linea de gateA | linea de gateB << 4 y los dos puntos que no son esquinas (s16 x, y): la linea L < 4 es la esquina L
+    de la caja 1 seguida del punto; L >= 4, el punto seguido de la esquina L - 4 de la caja 2 (como set_gate de geom.asm). Si la sala pide
+    mas de las que caben (GT_MAX), las que sobran se calculan en el Z80 como antes."""
+    boxes, matrix = room.boxes()
+    if not boxes:
+        return b''
+    corners = [((b[0], b[1]), (b[2], b[3]), (b[4], b[5]), (b[6], b[7])) for b in boxes]
+    out = bytearray([0])
+    for b1, b2 in gt_pairs(boxes, matrix, room.num):
+        if len(out) + GT_ENTRY > GT_MAX:
+            print('sala %d: %d pares de cajas no caben en la tabla de puertas' % (room.num, len(gt_pairs(boxes, matrix, room.num)) - out[0]))
+            break
+        c1, c2 = corners[b1], corners[b2]
+        ga, gb = vmgame3.get_gates(c1, c2)
+        e = bytearray([b1, b2, 0]) + bytes(8)
+        for k, g in enumerate((ga, gb)):
+            for line in range(8):
+                if line < 4 and g[0] == c1[line]:
+                    pt = g[1]
+                    break
+                if line >= 4 and g[1] == c2[line - 4]:
+                    pt = g[0]
+                    break
+            else:
+                raise ValueError('sala %d: puerta %d-%d sin esquina' % (room.num, b1, b2))
+            e[2] |= line << (4 * k)
+            struct.pack_into('<hh', e, 3 + 4 * k, *pt)
+        if gt_decode(e, c1, c2) != (ga, gb):
+            raise ValueError('sala %d: puerta %d-%d mal codificada' % (room.num, b1, b2))
+        out += e
+        out[0] += 1
+    return bytes(out)
 
 
 def read_sounds(path):
@@ -199,6 +270,9 @@ def build(ix, costumes_dir=None, sounds=None, game=None, first_page=16):
         maxblob = max(maxblob, len(blob))
         page, addr = add('cajas y objetos de sala', blob)
         struct.pack_into('<BHH', e, 10, page, addr, len(blob))
+        gt = gate_table(room)
+        if gt:
+            struct.pack_into('<BHH', e, 22, *add('puertas de cajas', gt), len(gt))
         mask = lfl2gfx.mask_blob(room.image()[2])
         if mask:
             struct.pack_into('<BH', e, 15, *add('mascaras de profundidad', mask))
@@ -329,6 +403,10 @@ def check(ix, path, costumes_dir=None):
             bad.append('sala %d: medidas o locales distintos' % rn)
         bp, ba, bl = struct.unpack_from('<BHH', e, 10)
         eq('sala %d blob' % rn, d.read(bp, ba, bl), room_blob(room))
+        gp, ga, gl = struct.unpack_from('<BHH', e, 22)
+        gt = gate_table(room)
+        if gl != len(gt) or (gt and d.read(gp, ga, gl) != gt):
+            bad.append('sala %d: tabla de puertas distinta' % rn)
         mask = lfl2gfx.mask_blob(room.image()[2])
         mp, ma = struct.unpack_from('<BH', e, 15)
         if mask:
