@@ -912,17 +912,6 @@ arrow_pix:      defb $0C,$1E,$3F,$0C,$0C,$0C,$0C,$0C       ; 6 pixeles de ancho,
 
 ; espacio, 0-9, A-Z, / : . , ? - " y dos propios (! ')
 
-fill_screen:    ld hl,(scr_base)        ; A = codigo
-                ld (hl),a
-                ld d,h
-                ld e,l
-                inc de
-                ld bc,24*33
-                ldir
-                ld hl,(scr_base)
-                ld (hl),$76
-                ret
-scr_base:       defw 0
 mk_base:        defw 0
 
 ; A = ASCII -> A = indice de glifo

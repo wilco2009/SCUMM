@@ -660,7 +660,7 @@ class GameMixin:
         block = self.object_block(obj)
         return verb_entry(block, verb) if block is not None else 0
 
-    def run_object_script(self, obj, verb, slot=-1):
+    def run_object_script(self, obj, verb, slot=-1, flags=0):
         """runObjectScript de v2: ejecuta el codigo del objeto para el verbo (en la ranura dada si se reutiliza)."""
         if obj == 0 or self.where_is_object(obj) is None:
             return
@@ -674,7 +674,7 @@ class GameMixin:
             return
         s = self.slots[slot]
         s.number, s.code, s.offs = obj, block, offs
-        s.status, s.where, s.delay, s.flags = SS_RUNNING, WIO_ROOM, 0, 0
+        s.status, s.where, s.delay, s.flags = SS_RUNNING, WIO_ROOM, 0, flags
         self.run_nested(slot)
 
     def stop_object_script(self, obj):
@@ -716,14 +716,18 @@ class GameMixin:
                 self.vars[VAR_ACTIVE_VERB] = verb
                 self.vars[VAR_ACTIVE_OBJECT1] = a & 0xFFFF
                 self.vars[VAR_ACTIVE_OBJECT2] = b & 0xFFFF
+                flags = 0
             else:
+                flags = verb          # marca de la ranura: isSpecialVerb / isBackgroundScript (verbo 250) como el verbo con el que se lanzo (250 o 253)
                 verb = 253
+            # una ranura que ya corre el codigo de ese objeto con las mismas marcas (freezeResistant y recursive) se reutiliza
             slot = -1
             for i, ss in enumerate(self.slots):
-                if ss.number == a and ss.status != SS_DEAD and ss.where in (WIO_ROOM, WIO_INVENTORY, WIO_FLOBJECT):
+                if (ss.number == a and ss.status != SS_DEAD and ss.flags == flags
+                        and ss.where in (WIO_ROOM, WIO_INVENTORY, WIO_FLOBJECT)):
                     slot = i
                     break
-            self.run_object_script(a, verb, slot)
+            self.run_object_script(a, verb, slot, flags)
         elif sub == 2:
             self.vars[VAR_SENTENCE_VERB] = verb
             self.vars[VAR_SENTENCE_OBJECT1] = a & 0xFFFF

@@ -893,6 +893,11 @@ def make_scenarios(world, seeds=2):
             sc.append(('pseudo%03d.k%d' % (sid, k), ln + ['LOADROOM 0', 'FRAMES 4 4']))
         for k, r in enumerate((127, 128 + PSEUDO_N - 1, 255)):      # sala real inexistente, pseudo sin definir, fuera de la tabla
             sc.append(('pseudo%03d.e%d' % (sid, k), init(rng) + ['SCRIPT %d' % sid, 'FRAMES 3 5', 'LOADROOM %d' % r]))
+    if world.objects.get(246, (0,))[0] == 11 and world.objects.get(248, (0,))[0] == 11:
+        # Zak, sala 11 (avion): Abrir la puerta del aseo (246) = doSentence(253, 246) dentro del script del verbo: la ranura del verbo
+        # (recursive = 0) no se puede reutilizar para el script especial (recursive = 1); con la luz verde (248 apagado) la puerta se abre
+        for k, cmds in enumerate((['OBJ 246 1'], ['OBJ 246 1', 'FRAMES 3 20', 'OBJ 246 2'])):
+            sc.append(('zak.puerta_aseo%d' % k, ['INIT', 'LOADROOM 11', 'FRAMES 3 5'] + cmds + ['FRAMES 3 30']))
     sc += vmsynth.synth_scenarios()
     sc += walk_scenarios(world, seeds)
     sc += input_scenarios(world, seeds)

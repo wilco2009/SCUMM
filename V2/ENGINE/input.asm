@@ -333,7 +333,12 @@ oe_l:           ld a,(hl)
                 ret z                   ; fin de la tabla
                 ld c,a
                 ld a,(ROS_VERB)
-                cp c
+                cp 250                  ; el verbo especial 250 (script de fondo) busca el codigo del 253
+                jr nz,oe_v
+                inc a
+                inc a
+                inc a
+oe_v:           cp c
                 jr z,oe_f
                 ld a,c
                 cp $FF
@@ -402,7 +407,14 @@ ros_have:       ld de,(ROS_OBJ)
                 ld (APIW),a
                 ld a,(ROS_PAGE)         ; la pagina del bloque, para la ranura
                 ld (APIP),a
-                ld a,(ROS_SLOT)
+                ld a,(ROS_VERB)
+                ld c,a
+                cp 253
+                jr z,ros_m
+                cp 250
+                jr z,ros_m
+                ld c,0                  ; verbo normal: ni freezeResistant ni recursive
+ros_m:          ld a,(ROS_SLOT)
                 jp start_slot_at
 ros_none:       jp restore_win
 ROS_PAGE        equ GSCR+191
@@ -557,9 +569,10 @@ dse_1:          cp 253
                 ld (VAR_ACTIVE_OBJECT1),hl         ; VAR_ACTIVE_OBJECT1
                 ld hl,(ARGS+4)
                 ld (VAR_ACTIVE_OBJECT2),hl         ; VAR_ACTIVE_OBJECT2
+                jr dse_nsp
+dse_sp:         ld h,a                  ; marca que debe tener la ranura que se reutiliza: el verbo especial (250 o 253)
                 jr dse_slot
-dse_sp:         ld a,253
-                ld (ARGS),a
+dse_nsp:        ld h,0
 dse_slot:       ld ix,SLOTS             ; una ranura que ya corre el codigo de ese objeto se reutiliza
                 ld b,NSLOT
                 ld c,0
@@ -573,6 +586,9 @@ dse_l:          ld a,(ix+2)
                 ld a,(ix+0)
                 or a
                 jr z,dse_n
+                ld a,(ix+11)            ; freezeResistant == isBackgroundScript y recursive == isSpecialVerb
+                cp h
+                jr nz,dse_n
                 ld a,(ix+1)
                 cp WIO_ROOM
                 jr z,dse_f

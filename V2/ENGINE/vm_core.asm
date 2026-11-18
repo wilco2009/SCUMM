@@ -37,7 +37,8 @@ WINPG           equ $971F       ; byte: la pagina fisica que tiene la ventana de
 PF_ACT          equ PROF+44     ; perfil: numero de ids de actor (0 = NACTORS)
 OBJOWN          equ $E520       ; dueno de cada objeto (780)
 SLOTS           equ $E900       ; NSLOT x 16
-; ranura: +0 estado, +1 donde, +2/+3 numero, +4 pagina, +5/+6 puntero, +7..+10 retardo (32 bits con signo)
+; ranura: +0 estado, +1 donde, +2/+3 numero, +4 pagina, +5/+6 puntero, +7..+10 retardo (32 bits con signo),
+; +11 marca (runObjectScript: freezeResistant/recursive): el verbo especial 250 o 253 con el que doSentence lanzo el script; si no, 0
 NEST            equ $EA80       ; MAXNEST x 4: numero(2), donde, ranura
 ARGS            equ $EAC0       ; operandos ya resueltos (16 palabras)
 CUR             equ $EB00       ; ranura en ejecucion o $FF
@@ -296,6 +297,7 @@ start_slot_at:                          ; como start_new_slot, pero en la ranura
 start_new_slot:                         ; crea la ranura con APIW/APIN/APIP/APIA y la ejecuta anidada
                 call alloc_slot
                 ret c
+                ld c,0                  ; marca de la ranura (+11)
                 push af
 sns_fill:       ld (hl),SS_RUNNING
                 inc hl
@@ -324,7 +326,7 @@ sns_fill:       ld (hl),SS_RUNNING
                 inc hl
                 ld (hl),a
                 inc hl
-                ld (hl),a
+                ld (hl),c
                 pop af
                 jp run_nested
 
