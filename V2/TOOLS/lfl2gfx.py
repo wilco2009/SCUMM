@@ -167,6 +167,97 @@ def mask_blob(m):
     return bytes(out)
 
 
+def decode_obim_mask(b, src, w, h):
+    """Mascara de profundidad de un objeto de v2 (GdiV2::prepareDrawBitmap): tras los pixeles de su OBIM, el mismo RLE de bytes que la de la sala,
+    por tiras de 8 pixeles y filas (bit 7 = repetir un byte). Devuelve [fila][tira] (bit 7 del byte = pixel de la izquierda; 1 = tapa al personaje)."""
+    run = 1
+    for _ in range(w):
+        for _ in range(h):
+            run -= 1
+            if run == 0:
+                d = b[src]
+                src += 1
+                run = d & 0x7F if d & 0x80 else d >> 4
+                if run == 0:
+                    run = b[src]
+                    src += 1
+    strips = w // 8
+    m = [[0] * strips for _ in range(h)]
+    run = b[src]
+    src += 1
+    x = y = cnt = 0
+    total = strips * h
+    data = 0
+    while cnt < total:
+        flag = run & 0x80
+        r = run & 0x7F
+        if flag:
+            data = b[src]
+            src += 1
+        for _ in range(r):
+            if not flag:
+                data = b[src]
+                src += 1
+            m[y][x] = data
+            y += 1
+            cnt += 1
+            if y >= h:
+                y = 0
+                x += 1
+            if cnt >= total:
+                break
+        if cnt < total:
+            run = b[src]
+            src += 1
+    return m
+
+
+def mask_blob_objs(m, objs):
+    """Como mask_blob (la mascara de la sala) con las de los objetos detras (ENGINE/mask_px.inc, mk_objs): u16 con el desplazamiento de la tabla
+    de objetos desde el principio de la mascara de la sala (la que lleva u8 tiras...), la mascara de la sala (siempre, aunque este vacia), las
+    mascaras de los objetos (por tira, tramos (longitud, valor) hasta sumar el alto) y la tabla: u8 numero de objetos de la sala y, por objeto,
+    tira, tiras, fila, filas y u16 desplazamiento de sus tramos (0: sin mascara que aplicar). objs: por objeto de la sala (en su orden) None o
+    (tira, fila, [fila][tira] de su mascara). Devuelve None si ni la sala ni los objetos tienen mascara."""
+    if not any(any(r) for r in m) and not any(o for o in objs):
+        return None
+    h, strips = len(m), len(m[0])
+    out = bytearray([strips]) + bytearray(2 * strips)
+    for sx in range(strips):
+        col = [m[y][sx] for y in range(h)]
+        if not any(col):
+            continue
+        struct.pack_into('<H', out, 1 + 2 * sx, len(out))
+        i = 0
+        while i < h:
+            j = i
+            while j < h and col[j] == col[i] and j - i < 127:
+                j += 1
+            out += bytes([j - i, col[i]])
+            i = j
+        out.append(0)
+    tab = bytearray([len(objs)])
+    for o in objs:
+        if o is None:
+            tab += bytes(6)
+            continue
+        sx0, y0, om = o
+        oh, ow = len(om), len(om[0])
+        off = len(out)
+        for sx in range(ow):
+            col = [om[y][sx] for y in range(oh)]
+            i = 0
+            while i < oh:
+                j = i
+                while j < oh and col[j] == col[i] and j - i < 127:
+                    j += 1
+                out += bytes([j - i, col[i]])
+                i = j
+        tab += struct.pack('<BBBBH', sx0, ow, y0, oh, off)
+    toff = len(out)
+    out += tab
+    return struct.pack('<H', toff) + bytes(out)
+
+
 def cell_pixels(img, cx, cy):
     return [img[cy * 8 + y][cx * 8 + x] for y in range(8) for x in range(8)]
 

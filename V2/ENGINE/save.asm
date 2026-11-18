@@ -139,6 +139,7 @@ sll_c:          ld a,(de)
                 inc hl
                 inc de
                 djnz sll_c
+                call sv_stashmk         ; lo que no se restaura: los punteros a las mascaras de profundidad de DATA.BIN (ROOMDIR+13), que son de esta compilacion
                 ld hl,$EB00             ; lo que no se restaura: el estado del interprete en este instante
                 ld de,SV_LIVE
                 ld bc,64
@@ -163,6 +164,7 @@ sll_c:          ld a,(de)
                 call f_read_n
                 ld a,(sv_h)
                 call f_close
+                call sv_unstashmk
                 ld hl,SV_LIVE
                 ld de,$EB00
                 ld bc,64
@@ -187,6 +189,30 @@ sll_c:          ld a,(de)
                 call load_slot          ; el script sigue por donde dice su ranura restaurada
                 ld hl,3
                 jp sl_res
+; Las mascaras de profundidad (y las de los objetos) van al final de DATA.BIN (TOOLS/pack_data.py: asi no mueven los scripts y las partidas de antes valen), pero ROOMDIR
+; esta en la zona que guarda la partida: sin esto la partida cargada traeria los punteros de la compilacion con la que se guardo. Se guardan en BACKBUF y se devuelven.
+sv_stashmk:     ld hl,ROOMDIR+13
+                ld de,BACKBUF
+                ld a,64
+ssm_l:          ld bc,3
+                ldir
+                ld bc,13
+                add hl,bc
+                dec a
+                jr nz,ssm_l
+                ret
+sv_unstashmk:   ld hl,BACKBUF
+                ld de,ROOMDIR+13
+                ld a,64
+sum_l:          ld bc,3
+                ldir
+                ex de,hl
+                ld bc,13
+                add hl,bc
+                ex de,hl
+                dec a
+                jr nz,sum_l
+                ret
 sll_bad:        ld a,(sv_h)
                 call f_close
                 ld hl,5

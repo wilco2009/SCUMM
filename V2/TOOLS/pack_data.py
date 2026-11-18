@@ -87,7 +87,8 @@ def scaled_costume(costume2, cost, emap, scales):
     return best_costume(costume2, cost, emap)
 
 
-def room_mask(world, rn):
+def old_room_mask(world, rn):
+    """La mascara de la sala sola, en el formato de antes de las mascaras de objeto (lfl2gfx.mask_blob): solo su tamano, para dejar el hueco (ver build)."""
     import lfl2gfx
     try:
         b = lfl2gfx.load_lfl(os.path.join(world.dir, '%02d.LFL' % rn))
@@ -95,6 +96,55 @@ def room_mask(world, rn):
         raw = []
         lfl2gfx.room_mask_cells(b, w, h, raw)
         return lfl2gfx.mask_blob(raw)
+    except Exception:
+        return None
+
+
+MASK_MAX = 6000                  # una mascara de sala con las de sus objetos ha de caber en una pagina de datos (6 KB)
+
+
+def room_mask(world, rn):
+    """Mascara de profundidad de la sala y de sus objetos (lfl2gfx.mask_blob_objs). Un objeto lleva la suya si tiene imagen y, o la mascara no es
+    toda ceros, o cubre algo de la mascara de la sala o de la de otro objeto (en ScummVM la de un objeto dibujado sustituye a la de la sala bajo el)."""
+    import lfl2gfx
+    import scumm2
+    try:
+        b = lfl2gfx.load_lfl(os.path.join(world.dir, '%02d.LFL' % rn))
+        w, h = struct.unpack_from('<HH', b, 4)
+        raw = []
+        lfl2gfx.room_mask_cells(b, w, h, raw)
+        room = scumm2.Room(world.dir, rn)
+        info = []
+        for o in room.objects:
+            if not o.obim or o.width == 0 or o.height == 0 or o.width % 8 or o.x % 8 or o.y + o.height > h or o.height > 128 or o.x + o.width > w:
+                info.append(None)
+                continue
+            try:
+                info.append((o.x // 8, o.y, lfl2gfx.decode_obim_mask(room.file, o.obim, o.width, o.height)))
+            except Exception:
+                info.append(None)
+
+        def covers(o, p):
+            sx0, y0, om = o
+            return any(om[y][x] for y in range(len(om)) for x in range(len(om[0]))) if p is None else (
+                p[0] < sx0 + len(om[0]) and sx0 < p[0] + len(p[2][0]) and p[1] < y0 + len(om) and y0 < p[1] + len(p[2]))
+        objs = []
+        for i, o in enumerate(info):
+            keep = False
+            if o is not None:
+                sx0, y0, om = o
+                keep = covers(o, None) or any(raw[y][x] for y in range(y0, y0 + len(om)) for x in range(sx0, sx0 + len(om[0])))
+                if not keep:
+                    keep = any(p is not None and j != i and covers(p, None) and covers(o, p) for j, p in enumerate(info))
+            objs.append(o if keep else None)
+        blob = lfl2gfx.mask_blob_objs(raw, objs)
+        while blob and len(blob) > MASK_MAX:         # no cabe en una pagina de datos: se quitan las mascaras de objeto mas grandes (la sala sigue con la suya)
+            sizes = [(sum(len(r) for r in o[2]) * len(o[2]), i) for i, o in enumerate(objs) if o is not None]
+            if not sizes:
+                break
+            objs[max(sizes)[1]] = None
+            blob = lfl2gfx.mask_blob_objs(raw, objs)
+        return blob
     except Exception:
         return None
 
@@ -128,6 +178,7 @@ def build(world, game, first_page=16, include_test=False, sounds=None):
         page, addr = pk.add(block)
         odir[3 * oid:3 * oid + 3] = struct.pack('<BH', page, addr)
     roomdir = bytearray(64 * 16)
+    late = []
     for rn, r in sorted(rooms.items()):
         ent = r.entry_script() if r.encd_off else b''
         ext = r.exit_script() if r.excd_off else b''
@@ -140,9 +191,11 @@ def build(world, game, first_page=16, include_test=False, sounds=None):
             struct.pack_into('<BH', e, 3, *pk.add(ext))
         bp, ba = pk.add(blob)
         struct.pack_into('<BHH', e, 8, bp, ba, len(blob))
-        mk = room_mask(world, rn) if not include_test else None
-        if mk:
-            struct.pack_into('<BH', e, 13, *pk.add(mk))      # mascara de profundidad por pixel (lfl2gfx.mask_blob)
+        if not include_test:
+            old = old_room_mask(world, rn)
+            if old:
+                pk.add(bytes(len(old)))          # sitio de la mascara de la sala de antes (ver masks_late): los scripts siguen donde estaban y las partidas guardadas valen
+            late.append(rn)
         roomdir[16 * rn:16 * rn + 16] = e
     costdir = bytearray(64 * 3)                       # trajes: pagina y direccion de cada uno (0 = sin datos)
     if not include_test:
@@ -164,10 +217,16 @@ def build(world, game, first_page=16, include_test=False, sounds=None):
                     continue
                 costdir[3 * cid:3 * cid + 3] = struct.pack('<BH', *pk.add(blob))
     snd_ref = struct.pack('<BH', *pk.add(sound_table(sounds))) if sounds else bytes(3)
+    # Las mascaras de profundidad (la de la sala y las de sus objetos, room_mask) van al final: asi no desplazan los scripts, que son a lo que apuntan las
+    # partidas guardadas (save.asm). En el sitio donde iban las de antes (solo la de la sala) queda un hueco del mismo tamano.
+    for rn in late:
+        mk = room_mask(world, rn)
+        if mk:
+            struct.pack_into('<BH', roomdir, 16 * rn + 13, *pk.add(mk))      # mascara de profundidad por pixel (lfl2gfx.mask_blob_objs)
     npages = len(pk.pages)
     # marca de los scripts (+13..+15): hash de donde esta cada script en las paginas (SCRDIR, ODIR y el codigo de entrada y salida de las salas),
     # que es lo unico de DATA.BIN a lo que apuntan las partidas guardadas (save.asm). Graficos, paleta, trajes, mascaras y sonidos no la cambian
-    # salvo que desplacen los scripts (las mascaras van entre los codigos de entrada de las salas).
+    # salvo que desplacen los scripts (por eso las mascaras van al final y dejan un hueco donde iban las de antes).
     sig = bytes(scrdir) + bytes(odir) + b''.join(bytes(roomdir[16 * i:16 * i + 6]) for i in range(64)) + struct.pack('<B', first_page)
     stamp = struct.pack('<I', zlib.crc32(sig) & 0xFFFFFFFF)[:3]
     head = b'SDAT' + struct.pack('<BBBBH', 2, npages, first_page, 0, M.PAGE_USABLE) + snd_ref + stamp

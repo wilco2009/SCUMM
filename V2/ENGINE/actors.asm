@@ -425,6 +425,8 @@ acd_nb0:        xor a                   ; mascara de profundidad: solo si la sal
                 ld e,(hl)
                 inc hl
                 ld d,(hl)
+                inc de                  ; la mascara de la sala va detras de la palabra con el desplazamiento de la tabla de objetos
+                inc de
                 ld (ac_mbl),de
                 ld a,(ix+16)
                 ld hl,NBOXES
