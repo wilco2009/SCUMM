@@ -198,7 +198,11 @@ act_c:          ld hl,AC_LF
                 jr c,act_n              ; parado, hablar: no cambian el overlay
 act_s:          ld (hl),a
                 jr act_n
-act_0:          ld (hl),0
+act_0:          ld a,(hl)               ; caminar / inicio: el overlay queda pendiente de quitar (bit 7); ac_draw lo quita salvo que el traje diga que no lo toca
+                or a
+                jr z,act_n
+                or $80
+                ld (hl),a
 act_n:          inc b
                 ld a,b
                 cp NACTORS
@@ -474,6 +478,7 @@ acd_nomk:       ld a,(ix+5)             ; traje
                 ld a,(hl)
                 or a
                 jr z,acd_noov
+                and $7F
                 ld b,a
                 ld a,(ix+10)
                 or a
@@ -497,7 +502,35 @@ acd_nomk:       ld a,(ix+5)             ; traje
                 inc hl
                 or (hl)
                 jr z,acd_noov
-                ld c,b
+                ld a,(ac_id)            ; overlay pendiente de quitar (caminar / inicio)? sigue solo si su lista lleva el bit 7 (no lo tocan esos miembros)
+                ld e,a
+                ld d,0
+                ld hl,AC_OVF
+                add hl,de
+                bit 7,(hl)
+                jr z,acd_ovk
+                push hl
+                ld hl,(ac_blob)
+                inc hl
+                inc hl
+                inc hl
+                ld e,b
+                ld d,0
+                add hl,de
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld hl,(ac_blob)
+                add hl,de
+                ld a,(hl)               ; pasos | bit 7
+                pop hl
+                rla
+                jr c,acd_keep
+                ld (hl),0               ; el overlay se pierde
+                jr acd_noov
+acd_keep:       res 7,(hl)
+acd_ovk:        ld c,b
                 xor a
                 ld (ix+45),a
                 jr acd_anim
@@ -557,9 +590,10 @@ acd_anim:       ld hl,(ac_blob)
                 ret z
                 ld hl,(ac_blob)
                 add hl,de               ; HL = lista de la animacion: pasos y offsets de fotograma
-                ld b,(hl)
+                ld a,(hl)
+                and $7F                 ; el bit 7 es de los overlay que se conservan
+                ld b,a
                 inc hl
-                ld a,b
                 or a
                 ret z
                 ld a,(ix+45)            ; pose = (contador / 8) mod pasos

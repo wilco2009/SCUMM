@@ -264,6 +264,7 @@ def costume_blob(cost, emap, talk=True, two=True, walk=2, ovl=0):
     pool, pool_idx = bytearray(), {}
     pool_off = []
     lists = {}
+    sticky = set()                                     # fotogramas de overlay (animacion 4 * fotograma + direccion) que ni caminar ni inicio tocan
     rest_key = {}
     for anim in range(min(na, 8)):
         if anim >= 4:
@@ -347,6 +348,10 @@ def costume_blob(cost, emap, talk=True, two=True, walk=2, ovl=0):
                         pool += rec
                     body += bytes([p, pool_idx[rec]])
             lists[anim] = [frames[key]]
+            own = {k for k, v in cost.anim_limbs(anim).items() if v is not None}
+            clr = set(cost.anim_limbs(dr)) | set(cost.anim_limbs(8 + dr))        # miembros que cambian caminar e inicio
+            if own and not (own & clr):
+                sticky.add(anim)
     assert len(pool_off) <= 256, 'mas de 256 celdas distintas en un traje'
     body_base = head_len
     lst = bytearray()
@@ -355,7 +360,7 @@ def costume_blob(cost, emap, talk=True, two=True, walk=2, ovl=0):
     head[0] = na
     for anim, offs in lists.items():
         struct.pack_into('<H', head, 3 + 2 * anim, lists_base + len(lst))
-        lst.append(len(offs))
+        lst.append(len(offs) | (0x80 if anim in sticky else 0))      # bit 7: overlay que caminar e inicio no quitan (el motor lo conserva)
         for o in offs:
             lst += struct.pack('<H', o if o == 0xFFFF else body_base + o)
     tab_base = lists_base + len(lst)
