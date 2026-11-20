@@ -1461,12 +1461,12 @@ class VM(GameMixin):
         n = self.vb(P1)
         if n not in self.strings:
             raise VMError(E_RANGE, 'la cadena %d no existe' % n)
-        self.set_result(8 * self.string_chars(self.strings[n]))
+        self.set_result(6 * self.string_chars(self.strings[n]) + 8)      # 10g: 6 pixeles por caracter (la fuente de la interfaz) + 8 (el cursor y 2 de margen: ver gsw_scale); antes 8 por caracter
 
     @staticmethod
     def string_chars(s):
         """CharsetRenderer::getStringWidth (charset.cpp, version 3, arg 0): los caracteres hasta el primer 0 (o salto de linea) sin contar los '@' ni los codigos $FF / $FE;
-        el modelo (y el Z80) cuentan 1 por caracter: 8 pixeles. Fase 9: antes se contaban todos los bytes que no eran 0 ni $FF, aunque vinieran detras del 0 final
+        el modelo (y el Z80) cuentan 1 por caracter: 6 pixeles (10g; antes 8: el dialogo de guardar solo dejaba 21-22 letras). Fase 9: antes se contaban todos los bytes que no eran 0 ni $FF, aunque vinieran detras del 0 final
         (el dialogo de guardar de Indy3 mide con esto el nombre que se esta escribiendo, una cadena de 49 '@' despues de su 0: salia 392 y rechazaba cada tecla)."""
         pos, n = 0, 0
         rd = lambda k: s[k] if k < len(s) else 0
@@ -2425,7 +2425,7 @@ def screen_to_scumm(px, py):
     py = max(0, min(184, py))
     if py < 144:
         return px, py
-    return min(max(px - 8, 0) // 6, 39) * 8, py + 8          # 10a: el texto de la interfaz empieza en el pixel 8 (hr_ui: un byte de margen a cada lado)
+    return min(px // 6, 41) * 8, py + 8          # el texto de la interfaz empieza en el pixel 0 (hr_ui); 42 columnas
 
 
 def screen_event(kind, a, vm=None):
@@ -2487,9 +2487,16 @@ def run_scenario_core(world, lines):
                                 vm.save_game(a[0])
                             elif a[0] in vm.saves:
                                 vm.load_game(a[0])
-                        elif kind == 'room':                    # cargar una sala (el programa: DBG_ROOM, vm_load_room)
-                            vm.cur = 0xFF
+                        elif kind == 'room':                    # 10g: ir a una sala (el programa: DBG_ROOM, vm_dbg_room y dbg_room de ovc5.asm)
+                            vm.cur = 0xFF                       # ScummDebugger::Cmd_Room: la sala del ego, stopAllSounds y startScene
+                            ego = vm.actors[vm.vars[VAR_EGO]]
+                            ego.room = a[0] & 0xFF
+                            vm.snd_log.append('SND f=%d STOP' % vm.frame)
+                            vm.snd_cur = None
+                            vm.snd_next = 0
                             vm.start_scene(a[0])
+                            if not vm.ego_positioned:           # como startScene con loadRoomWithEgo: si los scripts de entrada no lo colocan, putActor (adjustActorPos: a una caja)
+                                vm.put_actor(ego, ego.x, ego.y, vm.cur_room)
                         else:
                             vm.pending.append(screen_event(kind, a, vm))
                     protection_hook(vm)

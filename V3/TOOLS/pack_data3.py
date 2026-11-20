@@ -43,7 +43,8 @@ ROOMDIR, 32 bytes por sala (todo a 0 en las salas que no existen):
   +6  u16 ancho de la sala en pixeles        +8  u8 alto en pixeles (128-200)      +9  u8 numero de scripts locales
   +10 pagina, direccion y u16 tamano del blob de la sala (abajo)       +15 pagina y direccion de la mascara de profundidad (0: no hay)
   +18 pagina y direccion de la tabla de scripts locales: n x (u8 id (>= 200), u8 pagina, u16 direccion)
-  +21 u8 numero de objetos de la sala         +22 pagina, direccion y u16 tamano de la tabla de puertas (gate_table; 0: no hay)   +27.. ceros
+  +21 u8 numero de objetos de la sala         +22 pagina, direccion y u16 tamano de la tabla de puertas (gate_table; 0: no hay)   +27 u8 1: los trajes de la sala son los de
+  COSTDIR3/COSTDIR4 (a 3/4; SMALL_ROOMS)   +28.. ceros
 Blob de la sala: u8 numero de cajas, por caja 18 bytes tal cual estan en el recurso (8 x s16 de las esquinas ul, ur, lr, ll en x,y; u8 mascara;
   u8 banderas), u16 bytes de la matriz de cajas y la matriz tal cual (listas por caja de origen de ternas (desde, hasta, siguiente) acabadas
   en 0xFF; ScummEngine::getNextBox; la sala 46 la trae truncada), u8 numero de objetos y por objeto 14 bytes: u16 id, u8 x/8, u8 y/8,
@@ -86,7 +87,9 @@ PAGE = M.PAGE
 
 SIZES = [('SCRDIR', NUM_SCRIPTS * 3), ('OBJOWN', NUM_OBJECTS), ('OBJST', NUM_OBJECTS), ('OBJCLS', NUM_OBJECTS * 3),
          ('OBJROOM', NUM_OBJECTS), ('ROOMDIR', NUM_ROOMS * ROOM_ENTRY), ('ODIR', NUM_OBJECTS * 3), ('COSTDIR', NUM_COSTUMES * 3),
-         ('COSTDIR2', NUM_COSTUMES * 3), ('BIGDIR', BIG_ENTRIES * 8), ('PROFILE', 256)]
+         ('COSTDIR2', NUM_COSTUMES * 3), ('BIGDIR', BIG_ENTRIES * 8), ('PROFILE', 256),
+         ('COSTDIR3', NUM_COSTUMES * 3), ('COSTDIR4', NUM_COSTUMES * 3)]     # los trajes a 3/4 de SMALL_ROOMS (tras PROFILE: los desplazamientos de arriba no cambian)
+SMALL_ROOMS = frozenset((31, 35, 39, 42, 46, 70, 72, 80, 82, 83))           # salas cuyos actores no caben a tamano real en los 63 sprites (sprbudget3.py estatico): ROOMDIR +27 = 1
 OFFSETS = {}
 _o = 16
 for _n, _s in SIZES:
@@ -283,6 +286,7 @@ def build(ix, costumes_dir=None, sounds=None, game=None, first_page=16):
                 loc += struct.pack('<BBH', sid, p, a)
             struct.pack_into('<BH', e, 18, *add('tablas de scripts locales', bytes(loc)))
         e[21] = len(room.objects)
+        e[27] = 1 if rn in SMALL_ROOMS else 0
         t['ROOMDIR'][ROOM_ENTRY * rn:ROOM_ENTRY * rn + ROOM_ENTRY] = e
         for o in room.objects:
             if o.id >= NUM_OBJECTS:
@@ -295,7 +299,7 @@ def build(ix, costumes_dir=None, sounds=None, game=None, first_page=16):
     ncost = nextra = 0
     if costumes_dir:
         for cid in range(NUM_COSTUMES):
-            for tag, table in (('', 'COSTDIR'), ('X', 'COSTDIR2')):
+            for tag, table, small_table in (('', 'COSTDIR', 'COSTDIR3'), ('X', 'COSTDIR2', 'COSTDIR4')):
                 path = os.path.join(costumes_dir, 'cost', 'COST%03d%s.bin' % (cid, tag))
                 if os.path.exists(path):
                     with open(path, 'rb') as f:
@@ -303,6 +307,16 @@ def build(ix, costumes_dir=None, sounds=None, game=None, first_page=16):
                     t[table][3 * cid:3 * cid + 3] = struct.pack('<BH', *add('trajes' if not tag else 'trajes (extra)', blob))
                     ncost += 1 if not tag else 0
                     nextra += 1 if tag else 0
+                small = os.path.join(costumes_dir, 'cost34', 'COST%03d%s.bin' % (cid, tag))
+                if os.path.exists(small) and os.path.exists(path):
+                    with open(small, 'rb') as f:
+                        sblob = f.read()
+                    if sblob == blob:
+                        t[small_table][3 * cid:3 * cid + 3] = t[table][3 * cid:3 * cid + 3]
+                    else:
+                        t[small_table][3 * cid:3 * cid + 3] = struct.pack('<BH', *add('trajes a 3/4' if not tag else 'trajes a 3/4 (extra)', sblob))
+                elif os.path.exists(path):
+                    t[small_table][3 * cid:3 * cid + 3] = t[table][3 * cid:3 * cid + 3]
     # tabla de sonidos: siempre (la fase 5b la necesita para el temporizador de musica del arranque): con SOUNDS.TXT trae duraciones y banderas; sin el, solo
     # las banderas que salen del recurso: bit 7 existe y bit 3 "es una cancion" (el recurso pasa de SONG_BYTES: la regla del modelo, vmgame3.SOUND_SONG_BYTES)
     snd_tab = bytearray(read_sounds(sounds) if sounds else bytes(256 * 8))
@@ -442,6 +456,15 @@ def check(ix, path, costumes_dir=None):
                     n['trajes'] += 1 if not tag else 0
                 elif page:
                     bad.append('traje %d%s: entrada sin fichero' % (cid, tag))
+                st3 = d.tab('COSTDIR4' if tag else 'COSTDIR3', cid, 3)
+                p34 = os.path.join(costumes_dir, 'cost34', 'COST%03d%s.bin' % (cid, tag))
+                if not os.path.exists(p34):
+                    p34 = pth
+                if os.path.exists(p34):
+                    with open(p34, 'rb') as f:
+                        want = f.read()
+                    sp3, sa3 = struct.unpack('<BH', st3)
+                    eq('traje %d%s a 3/4' % (cid, tag), d.read(sp3, sa3, len(want)), want)
     sp, sa = struct.unpack_from('<BH', d.b, 10)
     if sp:
         st = d.read(sp, sa, 2048)

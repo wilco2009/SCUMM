@@ -32,6 +32,19 @@ actors_run:     ld a,(gf_have)
                 ld (aq_cnt),a
                 ld (aq_xn),a
                 ld (aq_xm),a
+                ld a,(CURROOM)          ; ROOMDIR +27 de la sala: 1 = trajes a 3/4 (SMALL_ROOMS, pack_data3.py)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld de,COLD_ROOMDIR+27
+                add hl,de
+                ld de,aq_small
+                ld bc,1
+                call cold_rd
                 ld a,(aq_hold)          ; sala nueva: los sprites siguen apagados hasta saber donde va la camara
                 or a
                 jr z,au_run
@@ -498,9 +511,17 @@ aq_find:        ld l,a
                 add hl,de
                 ld (aq_anim),hl
                 ld hl,COLD_COSTDIR
-                call aq_cd
+                ld a,(aq_small)
+                or a
+                jr z,aq_f1
+                ld hl,SM_COSTDIR
+aq_f1:          call aq_cd
                 ret nc
                 ld hl,COLD_COSTDIR2
+                ld a,(aq_small)
+                or a
+                jr z,aq_cd
+                ld hl,SM_COSTDIR2
 aq_cd:          ld a,(aq_cost)
                 ld e,a
                 ld d,0
@@ -513,8 +534,18 @@ aq_cd:          ld a,(aq_cost)
                 add hl,bc
                 ld de,aq_ce
                 ld bc,3
+                ld a,(aq_small)
+                or a
+                jr nz,aq_cs
                 call cold_rd
-                ld a,(aq_ce)
+                jr aq_cr
+aq_cs:          call cls_open           ; salas a 3/4: las tablas estan en CLS_PG; por la ventana (bloque 1), no por el bloque 0, que es este overlay
+                ld a,h                  ; (10g: mapear CLS_PG en el bloque 0 quitaba el overlay D de debajo y el Z80 se iba por encima de $8000)
+                add a,WINDOW/256
+                ld h,a
+                ldir
+                call cls_close
+aq_cr:          ld a,(aq_ce)
                 or a
                 scf
                 ret z                   ; sin blob

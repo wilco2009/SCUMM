@@ -42,6 +42,7 @@ aq_dr           equ ACVV+50             ; palabra: fila (con signo) de la ventan
 aq_dv           equ ACVV+52             ; valor del tramo
 aq_mt           equ ACVV+53             ; 8 bytes: la mascara de la celda
 aq_k            equ ACVV+61             ; tira que se decodifica
+aq_small        equ ACVV+63             ; 1: la sala usa los trajes a 3/4 (ROOMDIR +27)
 MKBUF           equ ACVV+64             ; 8 tiras de 64 filas
 AC_ACTOR_END    equ MKBUF+512
 AC_MAXSPR       equ 63                  ; el sprite 63 es el cursor

@@ -456,7 +456,7 @@ int main(int argc, char** argv) {
     if (blk[0] == 0 && (z80.pc.w == 0x02E7 || z80.pc.w == 0x0207)) {           // SET_FAST y SLOW_FAST de la ROM: el arnes no tiene ROM, vuelve sin hacer nada
       z80.pc.w = rd16(z80.sp.w); z80.sp.w += 2; continue;
     }
-    static const char* ts_bp = getenv("TS_BP"); if (ts_bp && z80.pc.w == (unsigned)strtol(ts_bp, 0, 16) && (!getenv("TS_BPA") || (z80.af.w >> 8) == (unsigned)strtol(getenv("TS_BPA"), 0, 16))) {   // TS_BP=direccion (hex): para ahi e imprime los ultimos PC, SP y la pila
+    static const char* ts_bp = getenv("TS_BP"); if (ts_bp && z80.pc.w == (unsigned)strtol(ts_bp, 0, 16) && (!getenv("TS_BPF") || frames_done >= atoi(getenv("TS_BPF"))) && (!getenv("TS_BPA") || (z80.af.w >> 8) == (unsigned)strtol(getenv("TS_BPA"), 0, 16))) {   // TS_BP=direccion (hex): para ahi e imprime los ultimos PC, SP y la pila; TS_BPF=fotograma minimo
       printf("TS_BP pc=%04X sp=%04X af=%04X bc=%04X de=%04X hl=%04X ix=%04X iy=%04X; pila:", z80.pc.w, z80.sp.w, z80.af.w, z80.bc.w, z80.de.w, z80.hl.w, z80.ix.w, z80.iy.w);
       for (int k = 0; k < 6; k++) printf(" %04X", rd16(z80.sp.w + 2 * k));
       { unsigned cs = rd16(S("CURSLOT")); printf("%cCUR=%d slot=%04X num=%d where=%d", 10, rd(S("CUR")), cs, rd16(cs + 2), rd(cs + 3)); printf(" RESMAP:"); for (int q = 0; q < 12; q++) printf(" %d", rd(S("RESMAP") + q)); printf("%c", 10); }

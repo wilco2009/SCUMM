@@ -2,7 +2,7 @@
 ;  hrui.asm - la interfaz en HiRes (rama hires16), 40 columnas de 6 pixeles. La interfaz escribe en UIVB (40 x 8, las filas UI_R0..23) y los mensajes
 ;  en MSGB (TXT_ROWS x 40; mientras tx_on tapan las filas TXT_ROW.. de la interfaz). hr_ui, una vez por fotograma, pinta en el bitmap y los atributos los
 ;  grupos de 4 caracteres (4 x 6 = 24 pixeles = 3 bytes) que han cambiado desde la ultima vez (HRUI_PREV guarda los codigos pintados). El texto va centrado
-;  (un byte de margen a cada lado: 240 de 256 pixeles). La fuente (TILES, scumm.asm) son las columnas 1-6 de los glifos de la ROM del ZX81, 6 bits por linea.
+;  (desde el byte 0 de la linea: 240 de 256 pixeles, sin margen a la izquierda). La fuente (TILES, scumm.asm) son las columnas 1-6 de los glifos de la ROM del ZX81, 6 bits por linea.
 ;  Texto blanco brillante sobre negro (los atributos son de 8 pixeles).
 ; =====================================================================
 HRUI_PREV       equ $DEC0               ; 8 filas x 40 columnas: el codigo que hay pintado en cada celda (en el bloque de atributos: sitio libre)
@@ -122,11 +122,10 @@ hg_cp:          ld bc,8
                 inc hl
                 pop bc
                 djnz hg_c
-                ld a,(hu_g)             ; destino: fila hu_r de la zona de la interfaz, byte 1 + 3 * grupo, linea 0
+                ld a,(hu_g)             ; destino: fila hu_r de la zona de la interfaz,                 byte 3 * grupo, linea 0
                 ld c,a
                 add a,a
                 add a,c
-                inc a
                 ld l,a
                 ld a,(hu_r)
                 add a,(HR_BM>>8)+UI_R0
@@ -172,7 +171,6 @@ hg_l:           ld a,(ix+0)             ; x1 << 2 | x2 >> 4
                 ld c,a
                 add a,a
                 add a,c
-                inc a
                 ld l,a
                 ld a,(hu_r)
                 add a,(HR_ATT>>8)+UI_R0

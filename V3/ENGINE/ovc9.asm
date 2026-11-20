@@ -547,3 +547,27 @@ fwn_b:          ld a,(hl)
                 sbc hl,de
                 ld (wr_cnt),hl
                 jr fwn_l
+
+; 10g: DBG_ROOM (ir a la sala APIN). ScummDebugger::Cmd_Room de ScummVM: la sala del ego, stopAllSounds (el bucle principal) y startScene. Ademas, si los scripts
+; de entrada no colocan al ego (EGOPOS), putActor(ego, ego.x, ego.y, sala), como el final de startScene con loadRoomWithEgo: adjustActorPos lo lleva a una caja
+dbg_room:       ld bc,(VAR_EGO)
+                call chk_actor          ; IX = ego
+                ld a,(APIN)
+                ld (ix+A_ROOM),a
+                ld c,a
+                call ovc_start
+                ld a,(EGOPOS)
+                or a
+                ret nz
+                ld bc,(VAR_EGO)
+                call chk_actor
+                ld l,(ix+A_X)
+                ld h,(ix+A_X+1)
+                ld (SC+0),hl
+                ld l,(ix+A_Y)
+                ld h,(ix+A_Y+1)
+                ld (SC+2),hl
+                ld a,(CURROOM)
+                ld c,a
+                ld hl,OVB_PUTACT
+                jp call_ovb

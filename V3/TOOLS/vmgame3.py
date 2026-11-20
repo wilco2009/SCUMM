@@ -1234,8 +1234,8 @@ class GameMixin:
 
     def verb_text_len(self, vs):
         """Columnas (de 8 px de SCUMM = una celda de 6 px de la pantalla) que ocupa el nombre del verbo ya convertido (convertMessageToString:
-        los codigos $FF cuentan como sus bytes), con tope de 40 (el ancho de la pantalla de interfaz)."""
-        return min(len(self.convert_message_to_string(vs.name)) - 1, 40)
+        los codigos $FF cuentan como sus bytes), con tope de 42 (el ancho de la pantalla de interfaz)."""
+        return min(len(self.convert_message_to_string(vs.name)) - 1, 42)
 
     def draw_verb(self, slot):
         """ScummEngine::drawVerb (solo lo que ve la entrada): un verbo visible (activo o atenuado) fija el ancho de su rectangulo al dibujarse.
@@ -1476,9 +1476,9 @@ class GameMixin:
             self.ev(EV_TEXT, [1, s['xpos'], s['ypos'], s['color'],
                               (1 if s['center'] else 0) | (2 if s['overhead'] else 0), str_value(self._strip0(buf))])
             # ScummVM (drawString): despues de pintar, xpos = el final del texto, y el siguiente print sin `at` sigue desde ahi (el dialogo de guardar de Indy3
-            # pone el cursor "_" asi, detras del nombre). 8 pixeles por byte del texto convertido; centrado: el texto se extiende la mitad hacia cada lado
+            # pone el cursor "_" asi, detras del nombre). 6 pixeles por byte del texto convertido (la fuente de la capa de texto; el original usa 8: 10g); centrado: el texto se extiende la mitad hacia cada lado
             n = len(self._strip0(buf))
-            s['xpos'] = s16(s['xpos'] + (4 * n if s['center'] else 8 * n))
+            s['xpos'] = s16(s['xpos'] + (3 * n if s['center'] else 6 * n))
         # slots 2 y 3: mensajes de depuracion y cuadros de dialogo: no hay nada en el juego real
 
     # ------------------------------------------------------------------------------------------ camara

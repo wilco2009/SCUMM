@@ -45,6 +45,7 @@ OVC_SENTADD     equ 12                  ; doSentence desde fuera
 OVC_MOVECAM     equ 15                  ; moveCamera (fase 5b)
 OVC_SLOAD       equ 18                  ; fase 9: guardar / cargar (C = el byte a del opcode saveLoadGame; ovc9.asm)
 OVC_NAME1       equ 21                  ; fase 9: el nombre de una partida en una cadena (saveLoadVars 2)
+OVC_DBGROOM     equ 24                  ; 10g: ir a la sala APIN (DBG_ROOM; ovc9.asm)
 OVD_WALK        equ 0                   ; overlay D
 OVD_ADJUST      equ 3
 OVD_STARTWALK   equ 6
@@ -203,10 +204,11 @@ ml_nd:          ld hl,(DBG_ROOM)
                 ld a,h
                 or l
                 jr z,ml_nr
-                ld (APIN),hl
+                ld (APIN),hl            ; 10g: como el comando room del depurador de ScummVM (dbg_room, ovc9.asm): la sala del ego, parar los sonidos y startScene
                 ld hl,0
                 ld (DBG_ROOM),hl
-                call vm_load_room
+                call snd_stopall
+                call vm_dbg_room
 ml_nr:          ld hl,(DBG_SND)
                 ld a,h
                 or a
@@ -362,10 +364,17 @@ restart:        ld sp,STACK             ; el juego empieza de nuevo (SHIFT + R):
                 ld (sm_ov),a
                 jp sc_quit
 
+; 10g: DBG_ROOM -> dbg_room (overlay C) con la pila de la API (un error vuelve aqui, como vm_load_room)
+vm_dbg_room:    ld (TOPSP),sp
+                ld a,$FF
+                ld (CUR),a
+                ld hl,OVC_DBGROOM
+                jp call_ovc
+
 ; ESPACIO: pausa. PAUSA arriba hasta que se vuelve a pulsar ESPACIO (el mensaje que hubiera se guarda y se restaura)
 do_pause:       ld hl,UIVB
                 ld de,UIBUF
-                ld bc,40
+                ld bc,42
                 ldir
                 ld hl,pause_txt
                 ld de,UIVB
@@ -399,7 +408,7 @@ dpa_u:          call wait_vs
                 ld (ik_prev),a
                 ld hl,UIBUF
                 ld de,UIVB
-                ld bc,40
+                ld bc,42
                 ldir
                 call hr_ui
                 ld a,1

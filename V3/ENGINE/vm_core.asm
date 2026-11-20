@@ -137,6 +137,8 @@ CLS_PG          equ 47          ; pagina fisica fria con OBJCLS (3 bytes por obj
 GT_OFF          equ $0C00       ; fase 10d: en la pagina CLS_PG, tras OBJCLS (3.000 B), la tabla de puertas de la sala: u8 sala (ROOMRES) y
 GT_MAX          equ 2048        ; la tabla de pack_data3.gate_table (hasta GT_MAX - 1 bytes; igual alli). gt_load (ovc5.asm) la copia al
 GT_ENTRY        equ 11          ; cargar la sala o una partida y gates (geom.asm) la consulta por la ventana (cls_open)
+SM_COSTDIR      equ 5120        ; en CLS_PG, tras la tabla de puertas (GT_OFF + GT_MAX): COSTDIR3 (129 x 3) y COSTDIR4 (hasta 5894): los trajes a 3/4 de las salas con ROOMDIR +27 = 1 (ovd_act.asm: aq_find)
+SM_COSTDIR2     equ SM_COSTDIR+387
 ROOMPAL         equ $F520       ; fase 8: _roomPalette y _shadowPalette (16 bytes cada una, identidad al empezar; roomOps 2 y 4); las lee el programa para reprogramar la paleta de la FPGA
 SHADOWPAL       equ ROOMPAL+16
 OB_SZ           equ 14          ; registro de un objeto de la sala (blob): id (2), x/8, y/8, ancho/8, alto/8, padre, estado del padre, x e y de acercamiento
@@ -1051,6 +1053,25 @@ do_jump:        ld a,(de)
 no_jump:        inc de
                 inc de
                 ld (SPTR),de
+                ret
+
+; 10g: HL = HL * 6 (el ancho de un texto: 6 pixeles por caracter; getStringWidth, el avance de xpos de print y la capa de texto de txtlayer.asm). Conserva BC
+mul6hl:         push de
+                ld d,h
+                ld e,l
+                add hl,hl
+                add hl,de
+                add hl,hl
+                pop de
+                ret
+
+; 10g: HL = caracteres -> HL = ancho de getStringWidth: 6 * caracteres + 8 (6 de la fuente de la interfaz; los 8 son el cursor del dialogo de guardar (6) y 2 de margen: el dialogo
+; de Indy3 deja escribir mientras el ancho sea <= 175, y asi el cursor queda como mucho en la celda 23, sin tocar el borde derecho del cuadro, que esta en la 24)
+gsw_scale:      call mul6hl
+                push de
+                ld de,8
+                add hl,de
+                pop de
                 ret
 
 ; comparacion con signo: HL = a, BC = b -> carry si a < b, Z si a == b

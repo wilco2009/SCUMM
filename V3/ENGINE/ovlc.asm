@@ -14,8 +14,12 @@
                 IF PROGRAM
                 jp sl_entry             ; OVC_SLOAD (+18): guardar / cargar desde fuera de un script (C = el byte a del opcode; el bucle principal con DBG_SAVE; fase 9)
                 jp sl_name1             ; OVC_NAME1 (+21): saveLoadVars 2: el nombre de una partida en una cadena (SC+9 = id; SC+4 = el primero del rango; fase 9)
+                jp dbg_room             ; OVC_DBGROOM (+24): ir a la sala APIN (DBG_ROOM del bucle principal; 10g)
                 ELSE
                 ret                     ; (el nucleo de pruebas no guarda: el resultado del opcode es el del modelo sin partidas)
+                nop
+                nop
+                ret
                 nop
                 nop
                 ret

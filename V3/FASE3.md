@@ -973,7 +973,7 @@ Sin commit.
 - No era `findObject`: los dos clics eran el mismo (230, 128), pero el modelo lo resolvia en x = 294 (objeto 168) y el Z80 en x = 230 (167). Causa: **`in_poll` copia `IT_X/IT_Y` a `cur_x/cur_y` con cualquier suceso de prueba**, y `mk_events.py` ponia (0, 0) a las teclas: el F5 del fotograma 2.100 llevaba el cursor a x = 0, `pan_update` (cursor < 100) apagaba la ventana movil y el clic caia en x = 230. El modelo (como el raton real) no mueve el cursor con una tecla y seguia con la ventana corrida +64 desde el `move 240` del 1.900.
 - Arreglo: `mk_events.py` da a las teclas la ultima posicion del raton. Ademas el modelo apaga la ventana movil al cambiar de sala (`VM.start_scene` -> `pan_on = False`), como hace `ov_clear` (`evh_room`) del Z80 (diferencia real, aunque aqui no era la causa).
 - Resultado: `build_boot.sh 2400 "" ev_dialogo2.txt` **2.401/2.401** y 63 ordenes de sonido iguales; `ev_save.txt` 701/701. Hay que **borrar `build/sdboot/SAVE*.SAV` antes** de cada prueba con guardado (una partida vieja en la SD cambia el primer dialogo).
-- **"El dialogo corta el nombre a 22 letras"** (anotado en la 10e) sigue sin mirar: no es de esta subtarea.
+- **"El dialogo corta el nombre a 22 letras"**: resuelto en la 10g (28).
 
 ### Diferencias que quedan con ScummVM en lo que usa Indy3 (sin arreglar)
 1. **`oldRoomEffect`** (25 usos): el cambio de sala es un corte; ScummVM hace barridos/disolvencias (`_switchRoomEffect`, `fadeIn`).
@@ -983,7 +983,7 @@ Sin commit.
 5. **Escala de los actores y sprites extra (D6)**: reparto aproximado de sprites (hasta 63 + extra de la FPGA), postura por contador (no por el reloj de ScummVM), sin escala por caja.
 6. **Variable indexada de 16 bits** (ScummVM suma en 32; solo difiere en casos sin sentido) y `getNextBox` de la sala 46 con pseudosalas.
 7. **Ventana movil** (256 de 320 px): no existe en ScummVM; las coordenadas del raton se corrigen con `pan_px`.
-8. **Cargar dentro de un script anidado** sin probar; el dialogo de guardar corta el nombre a 22 letras.
+8. **Cargar dentro de un script anidado** sin probar; el dialogo de guardar cortaba el nombre a 22 letras (resuelto en la 10g: 28).
 9. **Mutaciones de guardar (`mut_fase9.py`)** pendientes de la validacion final.
 
 ### Lo que faltaria para Loom EGA (no hay ficheros: lista de riesgos)
@@ -993,3 +993,37 @@ Sin commit.
 - **Pseudosalas, `oldRoomEffect` y `cursorCommand`** con mas peso (Loom usa mucho los efectos de sala); el corte seco se veria.
 - **Limites del Z80** medidos solo con Indy3 (ranuras 24, verbos 52, objetos locales, 63 sprites): repetir `sprbudget3.py` y `medir_recursos.py` con los datos de Loom.
 - **Workarounds de ScummVM especificos de Loom** (p. ej. `o5_loadRoom` sala 29) que no se han copiado.
+
+## Fase 10g: el nombre del dialogo de guardar (2026-11-18)
+Peticion: quitar el recorte a 22 letras, que el nombre pueda ser algo mas largo, y arreglar el cursor (con el nombre lleno borraba la linea vertical de la derecha y, al borrar una letra, el cursor se quedaba).
+- **Causa del limite:** el script local 200 de la sala 14 solo deja escribir mientras `getStringWidth(nombre) <= 175`, y modelo y Z80 median 8 pixeles por caracter (el original usa 8): 22 letras. Pero la capa de texto (`txtlayer.asm`) dibuja con la fuente de 6 pixeles en celdas de 8, asi que sobraba sitio.
+- **Cambio (6 pixeles de verdad):** (1) la capa compone cada caracter a 6 pixeles (`ov_text_col` calcula, para cada columna de 8, los dos caracteres que caen en ella con su desplazamiento; `ov_row` ya admitia desplazamientos con signo); (2) `print` avanza `xpos` 6 pixeles por byte (centrado, 3): el cursor `_` se pone detras del nombre sin el hueco de 2 px; (3) `getStringWidth` = **6 * caracteres + 8** (6 del cursor y 2 de margen) en modelo (`vmmodel3.o_getStringWidth`, `vmgame3.print_string`) y Z80 (`mul6hl` y `gsw_scale` en `vm_core.asm`, residente; el overlay B no cambia de tamano). Con el limite 175 del script salen **28 letras** y el cursor queda como mucho en la celda 23, sin tocar el borde derecho del cuadro (celda 24).
+- **Textos de mas de 24 caracteres:** la capa tiene entradas de 26; `ov_text_add` parte un texto largo en trozos de 24 (144 px = 18 celdas: cada trozo empieza alineado), hasta 48 (`UIBUF`).
+- **Fondo:** una fila de un texto sin pixeles ya no toca la celda (antes la dejaba en blanco y con el cursor en la celda del borde se llevaba la linea vertical).
+- Una caja borra un texto si lo cubre entero con su ancho real (6 por caracter, antes 8).
+- Residente hasta `$7D44` (quedan 700 B hasta `$8000`); overlay B sin cambios.
+- **Pruebas:** nucleo sala 1 1.395/1.395; `ev_dialogo2.txt` (nombre de 33 letras: ahora acepta 28) 2.401/2.401 con 45 ordenes de sonido iguales; `ev_save.txt` 701/701. Capturas con `nombre.sh` / `nombre2.sh` (`ev_nombre30.txt`: 30 teclas; `ev_nombre30b.txt`: 30 y borrar): 28 letras + cursor con el borde derecho intacto; al borrar el cursor retrocede y no queda el viejo. **Sin probar en la placa.** No se ha pasado `mut_fase9.py` ni la bateria completa.
+- Efecto de usuario (manual): el nombre de una partida puede tener hasta 28 letras (antes 22).
+- **Correccion (mismo dia):** el inicio del texto seguia redondeado a la celda de 8 (`+ 4` y `and $F8`), y el cursor (x = x del nombre + 6 por letra) quedaba corrido hasta 4 px. Ahora la x es exacta (`+ 4`, sin redondear) y `ov_text_col` admite un inicio cualquiera dentro de la celda (de uno a tres caracteres por columna). Captura: el cursor queda pegado a la ultima letra y el borde izquierdo y derecho siguen. `ev_dialogo2.txt` 2.401/2.401 y nucleo 1.395/1.395 otra vez. Residente hasta `$7D8D`.
+
+## Fase 10h - interfaz sin margen, 42 columnas y mensajes partidos por palabras
+
+- hr_ui pinta desde el byte 0 (antes 1). UIVB pasa a 8x42 ($98F0), HRUI_PREV a $DEB0; el grupo 10 de cada fila tiene 2 caracteres (252 px). Tope de verbos y clics a 42/41.
+- ut_wrap: los mensajes de las filas 0-1 saltan de linea antes de una palabra que no cabe.
+- Regresion: Barnett 1751/1751, check_hr 0 distintos. Sin probar en placa.
+
+## Fase 10i - personajes a tamano real (3/4 solo en las salas que no caben) y DBG_ROOM
+
+- Los trajes se convierten a tamano real (costume3.py: C2.SCALE (1,1); COST_SMALL=1 los saca a 3/4 en preview_hr\cost34). v2 sigue a 3/4.
+- Salas cuyos actores no caben en los 63 sprites a tamano real (sprbudget3.py estatico): 31, 35, 39, 42, 46, 70, 72, 80, 82, 83 (pack_data3.SMALL_ROOMS). Sus trajes son los de cost34: ROOMDIR +27 = 1 y tablas COSTDIR3/COSTDIR4 (tras PROFILE en DATA.BIN; el loader las carga en CLS_PG +5120, SM_COSTDIR). No se pierden posturas.
+- ovd_act.asm: actors_run lee ROOMDIR +27 (aq_small) y aq_find busca en COSTDIR/2 o en COSTDIR3/4. sprites3.py (Blobs.find/Ref.small) y sprbudget3.py lo copian. DATA.BIN pasa de ~653 KB a ~1,12 MB.
+- Depuracion: escribir la sala (palabra) en $87C4 (DBG_ROOM; DBG_START $87C2, DBG_SND $87C6) carga esa sala sin recolocar a Indy.
+- Regresion: Barnett 1751/1751, check_hr 0 distintos. Sin probar en placa.
+
+## Fase 10g, fallo 1: `DBG_ROOM` (2026-11-20)
+- **Causa:** `DBG_ROOM` hacia solo `startScene` (`vm_load_room`): el ego se quedaba en la sala de antes y no salia. En el arnes no habia cuelgue (Z80 = modelo). El intento anterior (script sintetico 199 en `DATA.BIN` con `dbg_room.hex`, `CUTSP` a 1 y un segundo `loadRoom` fuera del script) se ha quitado: era el candidato del cuelgue en la placa.
+- **Ahora (ScummVM, `ScummDebugger::Cmd_Room`):** la sala del ego = la nueva, `stopAllSounds` y `startScene`. Ademas, si los scripts de entrada no colocan al ego (`_egoPositioned`), `putActor(ego, x, y, sala)` como el final de `startScene` con `loadRoomWithEgo` (`adjustActorPos` lo mete en una caja). Z80: `vm_dbg_room` (`scumm.asm`) -> `OVC_DBGROOM` (+24) -> `dbg_room` (`ovc9.asm`); modelo: suceso `room` de `BOOT` (`vmmodel3.py`). `compila_scumm.bat` ya no mete el 199 en `DATA.BIN`.
+- **Uso:** con el juego ya en marcha (despues de la intro), escribir la sala como palabra en `$87C4` (`DBG_ROOM`). Arnes: linea `fotograma room n` en el fichero de sucesos (`ev_dbgroom20/70/15.txt`).
+- **El cuelgue (fallo de la 10i, no de `DBG_ROOM`):** en las salas a 3/4 (`SMALL_ROOMS`: 31, 35, 39, 42, 46, 70, 72, 80, 82, 83) `aq_find` (`ovd_act.asm`, `aq_cs`) mapeaba `CLS_PG` en el **bloque 0, donde corre el propio overlay D**: el Z80 ejecutaba basura y acababa por encima de `$8000` (sala 70, al segundo fotograma). Ahora lee `COSTDIR3/4` por la ventana (`cls_open` / `cls_close`). Tambien pasaba entrando en esas salas jugando. Ademas `sprites3.py` habia perdido `lst = []` en la 10i (`check_spr` fallaba en todas las escenas).
+- **Pruebas** (`build_boot.sh 1500`, salto en el fotograma 1.300 desde Barnett): sala 20 **1.501/1.501** (4 ordenes de sonido iguales), sala 70 **1.501/1.501** (37 iguales; antes del arreglo de `aq_cs`, codigo por encima de `$8000` en el 1.302), sala 15 (Venecia, con clic y tecla despues) **1.501/1.501** (7 iguales). `actscen.sh 1 "70,20" 4`: **30 escenas, 0 distintas**. Modelo: Indy visible en las tres y el juego responde (la 70 es una escena que pasa sola a la 71). Sin probar en la placa ni en EightyOne.
+- **Memoria:** residente hasta `$7E17` (+18 B; **488 B libres** hasta `$8000`); overlay C +60 B de codigo (sigue en 5.632 B); D 7.225 B (-3); B sin cambios.

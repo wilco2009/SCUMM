@@ -778,9 +778,7 @@ gw_8:           ld a,b                  ; while (text[pos++] == ' ') {}
                 jr z,gw_8
                 jr gw_l
 gw_e:           ex de,hl
-                add hl,hl
-                add hl,hl
-                add hl,hl
+                call gsw_scale          ; 10g: 6 pixeles por caracter + 8 (antes 8 por caracter)
                 ld b,h
                 ld c,l
                 jp set_res
@@ -902,12 +900,12 @@ vd_draw:        ld a,(ix+V_ID)
                 ld hl,(CM_LEN)
                 ld a,h
                 or a
-                ld a,40
+                ld a,42
                 jr nz,vd_s
                 ld a,l
-                cp 41
+                cp 43
                 jr c,vd_s
-                ld a,40
+                ld a,42
 vd_s:           ld (ix+V_LEN),a
                 pop de
                 ret

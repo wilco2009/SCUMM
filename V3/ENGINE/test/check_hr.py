@@ -85,19 +85,20 @@ for s in range(34):
                 print('  distinto: pantalla col %d (mundo %d) linea %d: %02X/%02X, esperado %02X/%02X' % (s, w, y, got[0], got[1], bm[y], at[y]))
 # fase 7: fuera de la sala (filas 0-1 y 18-23) esta la pantalla de texto de la interfaz: lo que pinta hr_ui (ui3.asm) de UIVB (8 filas x 40 columnas de 6 pixeles; la fila r
 # de UIVB va a la fila de pantalla r si r < 2 y a r + 16 si no) con la fuente font_tiles (los codigos 208-255; los demas, vacio). Solo se comprueba el bitmap.
-uivb = lg[sym['UIVB']:sym['UIVB'] + 320]
+uivb = lg[sym['UIVB']:sym['UIVB'] + 336]
 ft = lg[sym['font_tiles']:sym['font_tiles'] + 384]
 nz = 0
 for r in range(8):
     srow = r if r < 2 else r + 16
     for ln in range(8):
         bits = []
-        for c in range(40):
-            code = uivb[r * 40 + c]
+        for c in range(42):
+            code = uivb[r * 42 + c]
             if 80 <= code < 128: code += 128                 # 10a: letra de un verbo atenuado (el mismo glifo, otro atributo)
             g8 = ft[(code - 208) * 8 + ln] if code >= 208 else 0
             bits += [(g8 >> (5 - k)) & 1 for k in range(6)]
-        exp = bytes(1) + bytes(sum(bits[b * 8 + k] << (7 - k) for k in range(8)) for b in range(30)) + bytes(1)      # 240 pixeles = 30 bytes con un byte de margen a cada lado
+        bits += [0] * 4
+        exp = bytes(sum(bits[b * 8 + k] << (7 - k) for k in range(8)) for b in range(32))      # 252 pixeles desde el byte 0
         got = bytes(sh[base + (srow * 8 + ln) * 32 + b] for b in range(32))
         checked += 32
         if got != exp:

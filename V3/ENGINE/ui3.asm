@@ -10,7 +10,8 @@
 ;  SHIFT + 5 6 7 8 = mover el cursor (izquierda, abajo, arriba, derecha); SHIFT + ESPACIO = ESC (salir de la escena cortada / boton derecho); SHIFT + X = salir al BASIC;
 ;  SHIFT + R = reiniciar el juego. SHIFT + S = F5 (guardar y cargar). Con raton Bluetooth (mouse.asm) mueve el cursor y los botones son los clics.
 ; =====================================================================
-UIVB            equ $9900               ; 8 filas x 40 columnas de codigos de glifo (0 = vacio)
+UI_COLS         equ 42                  ; columnas de 6 pixeles: 42 * 6 = 252 de los 256 pixeles de la pantalla
+UIVB            equ $98F0               ; 8 filas x 42 columnas de codigos de glifo (0 = vacio); hasta $9A3F (UIBUF)
 UIV             equ $9A80               ; variables (UIV..UIV+63)
 ui_dirty        equ UIV+0               ; 1: hay que volver a componer los verbos
 tx_on           equ UIV+1               ; 1: hay un mensaje en pantalla (filas 0-1)
@@ -39,7 +40,9 @@ ui_chg          equ UIV+34              ; 1: UIVB ha cambiado (o la pantalla se 
 ui_dimf         equ UIV+35              ; 10a: el verbo que se escribe esta atenuado (curmode 2): sus letras van a UIVB con el codigo - 128 (80-127)
 ui_dimc         equ UIV+36              ; el atributo de los atenuados (ega2chroma[dimcolor del verbo]; Indy3: 8, gris oscuro)
 hu_dim          equ UIV+37              ; hu_group: el grupo que se pinta lleva alguna letra atenuada
-HRUI_PREV       equ $DEC0               ; 8 filas x 40 columnas: el codigo que hay pintado en cada celda (en el bloque de atributos: sitio libre)
+hu_n            equ UIV+38              ; caracteres del grupo que se pinta (4; el ultimo de cada fila, el 10, tiene 2)
+hu_tmp          equ UIV+39              ; 4 codigos: los 2 del ultimo grupo y 2 vacios
+HRUI_PREV       equ $DEB0               ; 8 filas x 42 columnas: el codigo que hay pintado en cada celda (en el bloque de atributos: sitio libre; hasta $DFFF)
 HU_GL           equ HR_ATT+$1900        ; 4 glifos x 8 lineas
 GLYPH0          equ 210                 ; codigos 210-255: la fuente (46 glifos); el 210 es el espacio
 ARROW_UP        equ 208
@@ -53,7 +56,7 @@ TILES           equ font_tiles-ARROW_UP*8
 ; ---------------------------------------------------------------------
 ui_init:        ld hl,UIVB              ; UIVB y las variables, a cero
                 ld de,UIVB+1
-                ld bc,320-1
+                ld bc,8*UI_COLS-1
                 ld (hl),0
                 ldir
                 ld hl,UIV
@@ -164,21 +167,12 @@ uc_bl:          ld a,GLYPH0
                 ret
 
 ; borra la pantalla de texto (UIVB) desde la fila A hasta el final
-ui_clear_from:  ld l,a
-                ld h,0
-                ld d,h
-                ld e,l
-                add hl,hl
-                add hl,hl
-                add hl,de
-                add hl,hl
-                add hl,hl
-                add hl,hl               ; * 40
+ui_clear_from:  call hu_mul42
                 ld de,UIVB
                 add hl,de
                 push hl
                 ex de,hl
-                ld hl,UIVB+320
+                ld hl,UIVB+8*UI_COLS
                 or a
                 sbc hl,de               ; bytes que quedan
                 ld b,h
@@ -282,18 +276,11 @@ uv_nd:          ld l,(ix+V_LEFT)        ; columna = left / 8
                 or a
                 ret nz
                 ld a,l
-                cp 40
+                cp UI_COLS
                 ret nc
                 ld (ui_col),a
-                ld a,c                  ; destino = UIVB + 40 * fila + columna
-                add a,a
-                add a,a
-                add a,c
-                ld l,a
-                ld h,0
-                add hl,hl
-                add hl,hl
-                add hl,hl
+                ld a,c                  ; destino = UIVB + UI_COLS * fila + columna
+                call hu_mul42
                 ld a,(ui_col)
                 ld e,a
                 ld d,0
@@ -312,7 +299,7 @@ uv_nd:          ld l,(ix+V_LEFT)        ; columna = left / 8
                 ret z
                 ld a,(ui_col)
                 ld c,a
-                ld a,40
+                ld a,UI_COLS
                 sub c
                 ld c,a                  ; C = columnas que caben
                 ld hl,UIBUF
@@ -390,6 +377,7 @@ ut_l:           ld a,(hl)
                 inc hl
                 push hl
                 push bc
+                call ut_wrap
                 call ut_put
                 pop bc
                 pop hl
@@ -403,7 +391,7 @@ ut_clr:         xor a
                 ld (tx_row),a
                 ld hl,UIVB              ; filas 0 y 1
                 ld de,UIVB+1
-                ld bc,79
+                ld bc,2*UI_COLS-1
                 ld (hl),0
                 ldir
                 ld a,1
@@ -415,7 +403,7 @@ ut_put:         cp 13
                 jr z,ut_nl
                 ld c,a
                 ld a,(tx_col)
-                cp 40
+                cp UI_COLS
                 jr c,ut_w
                 call ut_nl
                 ld a,(tx_row)
@@ -430,16 +418,7 @@ ut_w:           or a
 ut_ok:          ld a,(tx_row)
                 cp 2
                 ret nc
-                ld l,a
-                ld h,0
-                ld d,h
-                ld e,l
-                add hl,hl
-                add hl,hl
-                add hl,de
-                add hl,hl
-                add hl,hl
-                add hl,hl
+                call hu_mul42
                 ld a,(tx_col)
                 ld e,a
                 ld d,0
@@ -459,6 +438,49 @@ ut_nl:          xor a
                 inc (hl)
                 ret
 
+; partir por palabras: A = el caracter que va a escribirse, HL = el siguiente en PGBUF, B = los que quedan contando este. Si es la primera letra de una palabra que
+; no cabe en lo que queda de la fila (y cabe en una fila), salta de linea antes. Conserva A
+ut_wrap:        push af
+                ld a,(tx_col)
+                or a
+                jr z,uw_r
+                pop af
+                push af
+                cp ' '
+                jr z,uw_r
+                cp 13
+                jr z,uw_r
+                dec hl                  ; HL = este caracter
+                ld de,PGBUF
+                or a
+                sbc hl,de
+                add hl,de               ; (conserva HL; Z si es el primero de la pagina)
+                jr z,uw_w
+                dec hl
+                ld a,(hl)
+                inc hl
+                cp ' '
+                jr nz,uw_r              ; sigue una palabra ya empezada
+uw_w:           ld c,0                  ; C = letras de la palabra
+uw_c:           ld a,(hl)
+                cp ' '
+                jr z,uw_e
+                cp 13
+                jr z,uw_e
+                inc c
+                inc hl
+                djnz uw_c
+uw_e:           ld a,c
+                cp UI_COLS+1
+                jr nc,uw_r              ; no cabe ni en una fila entera: se parte donde toque
+                ld a,(tx_col)
+                add a,c
+                cp UI_COLS+1
+                jr c,uw_r
+                call ut_nl
+uw_r:           pop af
+                ret
+
 ; ---------------------------------------------------------------------
 ;  hr_ui: pinta UIVB en el bitmap y los atributos (solo los grupos de 4 caracteres que han cambiado desde la ultima vez). Fila r de UIVB -> fila hu_srow(r)
 ;  de la pantalla. (La fuente: TILES; blanco brillante sobre negro; las filas 0-1 con el color del que habla mientras hay mensaje.)
@@ -467,21 +489,27 @@ hr_ui:          push ix
                 xor a
                 ld (hu_r),a
 hu_row:         ld a,(hu_r)
-                call hu_mul40
+                call hu_mul42
                 ld de,UIVB
                 add hl,de
                 push hl                 ; origen
                 ld a,(hu_r)
-                call hu_mul40
+                call hu_mul42
                 ld de,HRUI_PREV
                 add hl,de
                 ex de,hl                ; DE = lo pintado
                 pop hl
                 xor a
                 ld (hu_g),a
-hu_gr:          push hl
+hu_gr:          ld a,(hu_g)             ; 10 grupos de 4 caracteres (3 bytes) y uno de 2 (el byte 30 y la mitad del 31)
+                cp 10
+                ld a,4
+                jr nz,hu_n4
+                ld a,2
+hu_n4:          ld (hu_n),a
+                push hl
                 push de
-                ld c,4
+                ld c,a
 hu_cmp:         ld a,(de)
                 cp (hl)
                 jr nz,hu_diff
@@ -491,7 +519,9 @@ hu_cmp:         ld a,(de)
                 jr nz,hu_cmp
                 pop de
                 pop hl
-                ld bc,4
+                ld a,(hu_n)
+                ld c,a
+                ld b,0
                 add hl,bc
                 ex de,hl
                 add hl,bc
@@ -501,9 +531,12 @@ hu_diff:        pop de
                 pop hl
                 ldi
                 ldi
+                ld a,(hu_n)
+                cp 2
+                jr z,hu_d2
                 ldi
                 ldi                     ; lo nuevo pasa a lo pintado
-                ld (hu_src),hl
+hu_d2:          ld (hu_src),hl
                 push hl
                 push de
                 call hu_group
@@ -512,7 +545,7 @@ hu_diff:        pop de
 hu_next:        ld a,(hu_g)
                 inc a
                 ld (hu_g),a
-                cp 10
+                cp 11
                 jr nz,hu_gr
                 ld a,(hu_r)
                 inc a
@@ -522,16 +555,17 @@ hu_next:        ld a,(hu_g)
                 pop ix
                 ret
 
-hu_mul40:       ld l,a                  ; A * 40 -> HL
+hu_mul42:       ld l,a                  ; A * 42 -> HL (destruye DE)
                 ld h,0
                 ld e,l
                 ld d,h
                 add hl,hl
                 add hl,hl
-                add hl,de
-                add hl,hl
-                add hl,hl
-                add hl,hl
+                add hl,de               ; 5
+                add hl,hl               ; 10
+                add hl,hl               ; 20
+                add hl,de               ; 21
+                add hl,hl               ; 42
                 ret
 
 hu_srow:        cp 2                    ; fila de UIVB -> fila de la pantalla (0, 1, 18-23)
@@ -542,10 +576,24 @@ hu_srow:        cp 2                    ; fila de UIVB -> fila de la pantalla (0
 ; pinta el grupo hu_g de la fila hu_r: los 4 codigos estan antes de (hu_src)
 hu_group:       xor a
                 ld (hu_dim),a
+                ld a,(hu_n)
+                cp 2
                 ld hl,(hu_src)
+                jr z,hg_h
                 ld bc,-4
                 add hl,bc
-                ld de,HU_GL
+                jr hg_go
+hg_h:           dec hl                  ; el grupo de 2: sus dos codigos y dos vacios
+                dec hl
+                ld de,hu_tmp
+                ldi
+                ldi
+                xor a
+                ld (de),a
+                inc de
+                ld (de),a
+                ld hl,hu_tmp
+hg_go:          ld de,HU_GL
                 ld b,4
 hg_c:           push bc
                 push hl
@@ -577,11 +625,10 @@ hg_cp:          ld bc,8
                 inc hl
                 pop bc
                 djnz hg_c
-                ld a,(hu_g)             ; destino: fila de pantalla, byte 1 + 3 * grupo, linea 0
+                ld a,(hu_g)             ; destino: fila de pantalla,                 byte 3 * grupo, linea 0
                 ld c,a
                 add a,a
                 add a,c
-                inc a
                 ld l,a
                 ld a,(hu_r)
                 call hu_srow
@@ -619,8 +666,12 @@ hg_l:           ld a,(ix+0)             ; x1 << 2 | x2 >> 4
                 rrca
                 rrca
                 or (ix+24)
-                ld (hl),a
-                ld de,30
+                ld c,a
+                ld a,(hu_g)
+                cp 10
+                jr z,hg_s3              ; el grupo 10 no tiene tercer byte (caeria en la linea siguiente)
+                ld (hl),c
+hg_s3:          ld de,30
                 add hl,de
                 inc ix
                 djnz hg_l
@@ -628,7 +679,6 @@ hg_l:           ld a,(ix+0)             ; x1 << 2 | x2 >> 4
                 ld c,a
                 add a,a
                 add a,c
-                inc a
                 ld l,a
                 ld a,(hu_r)
                 call hu_srow
@@ -636,12 +686,16 @@ hg_l:           ld a,(ix+0)             ; x1 << 2 | x2 >> 4
                 ld h,a
                 ld b,8
                 call hu_clr
-hg_a:           ld (hl),a
+                ld c,a
+hg_a:           ld (hl),c
                 inc hl
-                ld (hl),a
+                ld (hl),c
                 inc hl
-                ld (hl),a
-                ld de,30
+                ld a,(hu_g)
+                cp 10
+                jr z,hg_a3
+                ld (hl),c
+hg_a3:          ld de,30
                 add hl,de
                 djnz hg_a
                 ret
@@ -754,18 +808,15 @@ ic_if:          add a,8
                 ld h,0
                 ld (INEV+3),hl
                 ld a,(cur_x)
-                sub 8                   ; 10a: hr_ui pinta el texto con un byte de margen (columna c en el pixel 8 + 6 * c): sin restarlo la caja de un verbo
-                jr nc,ic_m              ; quedaba 8 pixeles a la izquierda de la palabra (solo respondia su mitad izquierda)
-                xor a
-ic_m:           ld c,0
+                ld c,0                  ; hr_ui pinta la columna c en el pixel 6 * c (sin margen)
 ic_d:           sub 6
                 jr c,ic_e
                 inc c
                 jr ic_d
 ic_e:           ld a,c
-                cp 40
+                cp UI_COLS
                 jr c,ic_c
-                ld a,39
+                ld a,UI_COLS-1
 ic_c:           ld l,a
                 ld h,0
                 add hl,hl

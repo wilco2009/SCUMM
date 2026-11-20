@@ -56,6 +56,8 @@ import lfl2gfx as L          # noqa: E402
 import scumm3dis as D        # noqa: E402
 import scumm3res as R        # noqa: E402
 
+C2.SCALE = (3, 4) if os.environ.get('COST_SMALL') else (1, 1)   # v3: tamano real (v2 sigue a 3/4: costume2.SCALE); COST_SMALL=1: el juego reducido a 3/4 de las salas que no caben (pack_data3.SMALL_ROOMS)
+
 INIT, WALK, STAND, TALK_START, TALK_STOP = 1, 2, 3, 4, 5      # Actor::initActor, version >= 3
 COST_MAX = 6100                                                # lo que cabe en una pagina de datos (pack_data.COST_MAX)
 CELLS_MAX = 256                                                # el indice de celda del blob es un u8

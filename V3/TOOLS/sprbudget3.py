@@ -79,7 +79,7 @@ def static(data, rooms):
         per = []
         for c in rows[rn]['costumes']:
             walk = anyp = 0
-            for table in ('COSTDIR', 'COSTDIR2'):
+            for table in (('COSTDIR3', 'COSTDIR4') if rn in S.P3.SMALL_ROOMS else ('COSTDIR', 'COSTDIR2')):
                 b = ref.b.blob(table, c)
                 if not b:
                     continue
@@ -107,6 +107,7 @@ def dynamic(world, data, rooms, frames=250):
     ref = S.Ref(data)
     out = {}
     for rn in rooms:
+        ref.small = 1 if rn in S.P3.SMALL_ROOMS else 0
         lines = [l for l in M.boot_snapshot(world) if l.startswith(('SETVAR ', 'PSEUDO '))]
         trace, vm = M.run_scenario_core(world, ['INIT'] + lines + ['LOADROOM %d' % rn])
         if trace and trace[-1].startswith('ERR'):
@@ -133,7 +134,7 @@ def dynamic(world, data, rooms, frames=250):
                     blob, fo0 = p0
                     # la postura mas grande entre los pasos de su animacion (la lista de pasos esta antes del fotograma elegido: se busca en el blob)
                     cost = a.costume
-                    f = ref.b.find(cost, a.frame * 4 + S.new_dir_to_old_dir(a.facing)) or ref.b.find(cost, a.stand_frame * 4 + S.new_dir_to_old_dir(a.facing))
+                    f = ref.b.find(cost, a.frame * 4 + S.new_dir_to_old_dir(a.facing), ref.small) or ref.b.find(cost, a.stand_frame * 4 + S.new_dir_to_old_dir(a.facing), ref.small)
                     bl, o = f
                     for st in range(bl[o]):
                         fo = struct.unpack_from('<H', bl, o + 1 + 2 * st)[0]

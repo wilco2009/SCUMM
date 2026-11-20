@@ -166,10 +166,8 @@ print_free:
                 ld h,a
                 ENDIF
                 ld (EVARGS+10),hl
-                ld hl,(CM_LEN)          ; fase 9: xpos avanza el ancho del texto (8 pixeles por byte; centrado, la mitad): vmgame3.print_string
-                add hl,hl
-                add hl,hl
-                add hl,hl
+                ld hl,(CM_LEN)          ; fase 9: xpos avanza el ancho del texto (6 pixeles por byte desde la 10g; centrado, la mitad): vmgame3.print_string
+                call mul6hl
                 ld a,(WRK+W_CEN)
                 or a
                 jr z,pf_adv

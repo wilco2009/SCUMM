@@ -67,11 +67,11 @@ class Blobs:
                 self.cache[key] = self.d.read(page, addr, self.d.page_bytes - (addr - P3.WINDOW))
         return self.cache[key]
 
-    def find(self, cost, anim):
-        """(blob, offset de la lista) de la animacion en el principal o el extra; None si no esta."""
+    def find(self, cost, anim, small=0):
+        """(blob, offset de la lista) de la animacion en el principal o el extra (a 3/4 en las salas con ROOMDIR +27 = 1); None si no esta."""
         if anim > 255:
             return None
-        for table in ('COSTDIR', 'COSTDIR2'):
+        for table in (('COSTDIR3', 'COSTDIR4') if small else ('COSTDIR', 'COSTDIR2')):
             b = self.blob(table, cost)
             if not b or anim >= b[0]:
                 continue
@@ -125,6 +125,7 @@ class Ref:
     def __init__(self, data, blobs=None):
         self.d = data
         self.b = blobs or Blobs(data)
+        self.small = 0
 
     def room_mask(self, room_entry):
         mp, ma = struct.unpack_from('<BH', room_entry, 15)
@@ -138,6 +139,7 @@ class Ref:
         Devuelve la lista de sprites [(x, y, pix, mask, color)] (los indices son sus posiciones)."""
         mblob = self.room_mask(room_entry)
         lst = []
+        self.small = room_entry[27]
         for a in range(1, NACT):
             r = actors[a]
             if r[A_ROOM] != room or not r[A_VIS]:
@@ -188,11 +190,11 @@ class Ref:
         facing = r[A_FACING] | (r[A_FACING + 1] << 8)
         d = new_dir_to_old_dir(facing)
         frame = r[A_FRAME]
-        f = self.b.find(cost, frame * 4 + d)
+        f = self.b.find(cost, frame * 4 + d, self.small)
         if f is None:
             if r[A_STAND] == frame:
                 return None
-            f = self.b.find(cost, r[A_STAND] * 4 + d)
+            f = self.b.find(cost, r[A_STAND] * 4 + d, self.small)
             if f is None:
                 return None
         blob, o = f

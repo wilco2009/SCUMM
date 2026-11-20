@@ -68,10 +68,15 @@ load_data:      call dp_close
                 ld hl,PROF                      ; el perfil del juego (V3/TOOLS/pack_data3.py + V2/TOOLS/gameprofile.py)
                 ld bc,256
                 call ld_rd
+                ld a,CLS_PG                     ; COSTDIR3 y COSTDIR4 (trajes a 3/4 de las salas SMALL_ROOMS): en CLS_PG tras la tabla de puertas
+                call map_phys
+                ld hl,WINDOW+SM_COSTDIR
+                ld bc,774
+                call ld_rd
                 ld a,62
                 call map_phys                   ; (una pagina de la cache, aun vacia: el relleno no puede ir a la pagina fria)
                 ld hl,(ld_hdr+13)               ; el relleno hasta el final de la zona de tablas (TABLES): a la ventana
-                ld de,16+600+1000+1000+3000+1000+3200+3000+387+387+32+256
+                ld de,16+600+1000+1000+3000+1000+3200+3000+387+387+32+256+774
                 or a
                 sbc hl,de
                 ld b,h
