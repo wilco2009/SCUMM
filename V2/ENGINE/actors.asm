@@ -477,12 +477,25 @@ acd_nomk:       ld a,(ix+5)             ; traje
                 add hl,de
                 ld a,(hl)
                 or a
-                jr z,acd_noov
-                and $7F
+                jr nz,acd_ovs
+                ld b,a                  ; sin overlay y caminando: sus poses de caminar (clave = direccion) de las paginas del traje, salvo que este hablando (acd_wov)
+                ld a,(ix+10)
+                or a
+                jp nz,acd_noov
+                ld a,(HAVEMSG)
+                or a
+                jp z,acd_wov
+                ld a,(ac_id)
+                ld e,a
+                ld a,(VAR_TALK_ACTOR)
+                cp e
+                jp z,acd_noov
+                jp acd_wov
+acd_ovs:        and $7F
                 ld b,a
                 ld a,(ix+10)
                 or a
-                jr z,acd_noov           ; caminando no
+                jp z,acd_wov            ; caminando con overlay: sus poses de caminar con el overlay puesto (acd_wov)
                 ld a,b
                 add a,a
                 add a,a
@@ -490,7 +503,7 @@ acd_nomk:       ld a,(ix+5)             ; traje
                 ld b,a
                 ld hl,(ac_blob)
                 cp (hl)
-                jr nc,acd_noov
+                jp nc,acd_noov
                 inc hl
                 inc hl
                 inc hl
@@ -501,7 +514,7 @@ acd_nomk:       ld a,(ix+5)             ; traje
                 ld a,(hl)
                 inc hl
                 or (hl)
-                jr z,acd_noov
+                jp z,acd_noov
                 ld a,(ac_id)            ; overlay pendiente de quitar (caminar / inicio)? sigue solo si su lista lleva el bit 7 (no lo tocan esos miembros)
                 ld e,a
                 ld d,0
@@ -528,12 +541,101 @@ acd_nomk:       ld a,(ix+5)             ; traje
                 rla
                 jr c,acd_keep
                 ld (hl),0               ; el overlay se pierde
-                jr acd_noov
+                jp acd_noov
 acd_keep:       res 7,(hl)
 acd_ovk:        ld c,b
                 xor a
                 ld (ix+45),a
-                jr acd_anim
+                jp acd_anim
+acd_wov:        ld hl,(ac_blob)         ; B = fotograma de overlay (0: ninguno), C = direccion. Tras las listas de animaciones del traje: pagina y direccion de su directorio de poses de caminar
+                push hl                 ; con overlay (TOOLS/costume2.py, walk_overlay_blob; pagina 0: no hay): u8 n y n x (4 * fotograma + direccion, pagina, direccion); cada una es un traje con
+                ld hl,(ac_cpage-1)      ; esa direccion (animacion = direccion) con las poses de caminar con ese fotograma puesto. Si algo falla se vuelve al traje de siempre
+                push hl
+                ld hl,(ac_blob)
+                ld e,(hl)
+                ld d,0
+                inc hl
+                inc hl
+                inc hl
+                add hl,de
+                add hl,de
+                ld a,(hl)
+                or a
+                jr z,acd_wn
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                push bc
+                push de
+                call map_page
+                pop hl
+                pop bc
+                ld a,(hl)
+                inc hl
+                or a
+                jr z,acd_wf
+                ld e,a
+                ld a,b                  ; clave: 4 * fotograma + direccion
+                add a,a
+                add a,a
+                add a,c
+                ld d,a
+acd_ws:         ld a,(hl)
+                cp d
+                jr z,acd_wy
+                inc hl
+                inc hl
+                inc hl
+                inc hl
+                dec e
+                jr nz,acd_ws
+                jr acd_wf
+acd_wy:         inc hl
+                ld a,(hl)
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld (ac_blob),de
+                ld (ac_cpage),a
+                push bc
+                call map_page
+                pop bc
+                ld hl,(ac_blob)
+                inc hl
+                inc hl
+                inc hl
+                ld e,c
+                ld d,0
+                add hl,de
+                add hl,de
+                ld a,(hl)
+                inc hl
+                or (hl)
+                jr z,acd_wf
+                pop hl                  ; vale: sus poses de caminar. Como en ScummVM (_animSpeed 0 en v2) cada fotograma avanza una pose: acd_anim divide el contador
+                pop hl                  ; entre 8, asi que aqui suma 7 y acd_walk 1 mas
+                ld a,(ix+45)
+                add a,7
+                ld (ix+45),a
+                jp acd_walk
+acd_wf:         pop hl
+                ld a,h
+                ld (ac_cpage),a
+                pop hl
+                ld (ac_blob),hl
+                push bc
+                call map_page
+                pop bc
+acd_wn2:        ld a,b                  ; no hay esas poses: si llevaba un overlay que no se conserva al caminar, la caminata sola; si no, la pose de siempre
+                or a
+                jp z,acd_noov
+                ld b,0
+                jp acd_wov
+acd_wn:         pop hl
+                pop hl
+                jr acd_wn2
 acd_noov:       ld a,(HAVEMSG)          ; hablando: la animacion 4 + direccion (la boca), si el traje la tiene
                 or a
                 jr z,acd_nt

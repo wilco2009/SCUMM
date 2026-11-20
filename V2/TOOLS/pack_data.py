@@ -47,13 +47,13 @@ SYNTH_ROOM = 60
 COST_MAX = 6100                                  # lo que cabe en una pagina de datos
 
 
-def best_costume(costume2, cost, emap, must=()):
+def best_costume(costume2, cost, emap, must=(), walks=(4, 3, 2, 1)):
     """El traje mas completo que cabe en una pagina: primero las dos poses de la boca, luego solo la abierta, luego sin boca; con cada una, las
     poses de caminar (4, 3, 2 o 1 por direccion). Siempre con los fotogramas de overlay `must` (el pelo y el sombrero del vendedor: sin ellos sale a
     medias); luego se anaden los demas que quepan. Si no cabe devuelve el mas pequeno (el que llama lo descarta) o, con `must`, None."""
     blob = None
     for talk, two in ((True, True), (True, False), (False, False)):
-        for walk in (4, 3, 2, 1):
+        for walk in walks:
             try:
                 blob = costume2.costume_blob(cost, emap, talk=talk, two=two, walk=walk, ovl=list(must))
             except (AssertionError, ValueError):       # mas de 256 celdas distintas
@@ -74,17 +74,42 @@ def best_costume(costume2, cost, emap, must=()):
     return None if must else blob
 
 
-def scaled_costume(costume2, cost, emap, scales):
+def scaled_costume(costume2, cost, emap, scales, walks=(4, 3, 2, 1)):
     """El traje con la primera escala de la lista (de mayor a menor) en la que caben sus fotogramas de overlay imprescindibles; si en ninguna, con la
     primera sin ellos."""
     must = costume2.overlay_wanted(cost)
     for sc in scales:
         costume2.SCALE = sc
-        blob = best_costume(costume2, cost, emap, must)
+        blob = best_costume(costume2, cost, emap, must, walks)
         if blob is not None:
             return blob
     costume2.SCALE = scales[0]
-    return best_costume(costume2, cost, emap)
+    return best_costume(costume2, cost, emap, (), walks)
+
+
+def walk_blob_fit(costume2, cost, emap, f, dr, caps=(8, 6, 4, 3, 2, 1)):
+    """Las poses de caminar (con el fotograma de overlay f; 0 = sin overlay) de una direccion: tantas como quepan en una pagina; None si ni una."""
+    for wk in caps:
+        try:
+            wb = costume2.walk_overlay_blob(cost, emap, f, dr, walk=wk)
+        except (AssertionError, ValueError):
+            continue
+        if wb is None:
+            return None
+        if len(wb) <= COST_MAX:
+            return wb
+    return None
+
+
+def walk_pages(costume2, cost, emap, pk):
+    """Las poses de caminar de las 4 direcciones en paginas aparte (clave = direccion): bytes del directorio (clave, pagina, direccion)."""
+    ent = bytearray()
+    for dr in range(4):
+        if cost.merged(dr):
+            wb = walk_blob_fit(costume2, cost, emap, 0, dr)
+            if wb is not None:
+                ent += bytes([dr]) + struct.pack('<BH', *pk.add(wb))
+    return ent
 
 
 def old_room_mask(world, rn):
@@ -210,11 +235,23 @@ def build(world, game, first_page=16, include_test=False, sounds=None):
                 try:
                     scales = [tuple(int(x) for x in e.split('/')) for e in tr.get('escala_%d' % cid, tr.get('escala', '3/4')).split(',')]     # escala_N = n/d[,n/d...]: un traje concreto; con varias, la primera en la que quepa entero
                     cost = costume2.Costume(scumm2.resource(world.dir, ixd, 'costume', cid))
-                    blob = scaled_costume(costume2, cost, emap, scales)
+                    blob = scaled_costume(costume2, cost, emap, scales, (1,))       # el traje de reposo solo con una pose de caminar: las de caminar van en paginas aparte (abajo)
+                    ent = walk_pages(costume2, cost, emap, pk)
+                    if len(ent) < 4 * len([1 for dr in range(4) if cost.merged(dr)]):
+                        blob = scaled_costume(costume2, cost, emap, scales)      # alguna direccion no cabe aparte: el traje de siempre, con sus poses de caminar dentro
                 except Exception:
                     continue
                 if len(blob) > 6100:                      # no cabe en una pagina: ese traje se queda con el rectangulo
                     continue
+                dr_ent = bytearray(ent)
+                for f, dr in sorted(set(costume2.sticky_overlays(cost))):          # las poses de caminar con el overlay que se conserva (casco de Melissa): una pagina por fotograma y direccion (clave 4 * fotograma + direccion)
+                    wb = walk_blob_fit(costume2, cost, emap, f, dr)
+                    if wb is not None:
+                        dr_ent += bytes([4 * f + dr]) + struct.pack('<BH', *pk.add(wb))
+                if dr_ent:                                 # directorio (u8 n y n x clave, pagina, direccion) enlazado en la cabecera del traje
+                    blob = bytearray(blob)
+                    struct.pack_into('<BH', blob, 3 + 2 * blob[0], *pk.add(bytes([len(dr_ent) // 4]) + bytes(dr_ent)))
+                    blob = bytes(blob)
                 costdir[3 * cid:3 * cid + 3] = struct.pack('<BH', *pk.add(blob))
     snd_ref = struct.pack('<BH', *pk.add(sound_table(sounds))) if sounds else bytes(3)
     # Las mascaras de profundidad (la de la sala y las de sus objetos, room_mask) van al final: asi no desplazan los scripts, que son a lo que apuntan las

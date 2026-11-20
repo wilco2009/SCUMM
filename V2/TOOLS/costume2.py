@@ -254,7 +254,7 @@ def overlay_wanted(cost):
     return out
 
 
-def costume_blob(cost, emap, talk=True, two=True, walk=2, ovl=0):
+def costume_blob(cost, emap, talk=True, two=True, walk=2, ovl=0, ext=(0, 0)):
     """Datos de un traje para el Z80. Cabecera: u8 numero de animaciones, u16 offset de la tabla del fondo de celdas y, por animacion, u16 offset de
     su lista (0: no existe). La lista: u8 pasos y, por paso, u16 offset del fotograma. Fotograma: s8 dx, s8 dy, u8 cw, u8 ch, u8 n y n referencias
     (u8 cx | cy << 4, u8 indice en el fondo). El fondo de celdas (comun a todos los fotogramas del traje: una celda repetida se guarda una vez):
@@ -267,7 +267,7 @@ def costume_blob(cost, emap, talk=True, two=True, walk=2, ovl=0):
     ofr = list(ovl) if isinstance(ovl, (list, tuple)) else overlay_frames(cost)[:ovl]
     if ofr:
         na = max(na, 4 * max(ofr) + 4)
-    head_len = 3 + 2 * na
+    head_len = 3 + 2 * na + 3                          # tras las listas de animaciones: pagina y direccion del traje 'caminando con overlay' (walk_overlay_blob; pagina 0: no hay)
     body = bytearray()
     frames = {}
     pool, pool_idx = bytearray(), {}
@@ -367,11 +367,88 @@ def costume_blob(cost, emap, talk=True, two=True, walk=2, ovl=0):
     lists_base = body_base + len(body)
     head = bytearray(head_len)
     head[0] = na
+    head[3 + 2 * na] = ext[0]
+    struct.pack_into('<H', head, 4 + 2 * na, ext[1])
     for anim, offs in lists.items():
         struct.pack_into('<H', head, 3 + 2 * anim, lists_base + len(lst))
         lst.append(len(offs) | (0x80 if anim in sticky else 0))      # bit 7: overlay que caminar e inicio no quitan (el motor lo conserva)
         for o in offs:
             lst += struct.pack('<H', o if o == 0xFFFF else body_base + o)
+    tab_base = lists_base + len(lst)
+    pool_base = tab_base + 2 * len(pool_off)
+    struct.pack_into('<H', head, 1, tab_base)
+    tab = b''.join(struct.pack('<H', pool_base + o) for o in pool_off)
+    return bytes(head) + bytes(body) + bytes(lst) + tab + bytes(pool)
+
+
+def sticky_overlays(cost):
+    """Fotogramas de overlay (animacion 4 * fotograma + direccion) que ni caminar ni inicio quitan: miembros que ellos no tocan (el casco, el sombrero)."""
+    out = []
+    for f in overlay_frames(cost):
+        for dr in range(4):
+            anim = 4 * f + dr
+            if anim > cost.num_anim:
+                continue
+            own = {k for k, v in cost.anim_limbs(anim).items() if v is not None}
+            clr = set(cost.anim_limbs(dr)) | set(cost.anim_limbs(8 + dr))
+            if own and not (own & clr):
+                out.append((f, dr))
+    return out
+
+
+def walk_overlay_blob(cost, emap, f, dr0, walk=4):
+    """Las poses de CAMINAR de un fotograma de overlay que se conserva al caminar (sticky_overlays): las de caminar con los miembros del fotograma f puestos
+    (el casco de Melissa en Marte), de una direccion. Datos aparte (otra pagina); mismo formato que costume_blob con la direccion como animacion 0-3. None si no hay."""
+    wanted = [(f, dr0)] if not f else [(f, dr) for g, dr in sticky_overlays(cost) if (g, dr) == (f, dr0)]       # f = 0: la caminata sola de esa direccion
+    if not wanted:
+        return None
+    na = 4
+    head_len = 3 + 2 * na + 3
+    body, frm, pool, pool_idx, pool_off, lists = bytearray(), {}, bytearray(), {}, [], {}
+    for f, dr in wanted:
+        anim = dr
+        limbs = dict(cost.merged(dr))
+        if f:
+            limbs.update(cost.anim_limbs(4 * f + dr))
+        limbs = {k: v for k, v in limbs.items() if v}
+        seq = cost.steps(limbs) if limbs else []
+        if len(seq) > walk:
+            seq = [seq[i * len(seq) // walk] for i in range(walk)]
+        offs = []
+        for pos in seq:
+            fr = cells_of(cost.render(limbs, pos, mirror=MIRROR_OLD_DIR[dr] if dr < 2 else False), emap_of(cost, emap))
+            if fr is None:
+                offs.append(0xFFFF)
+                continue
+            gx, gy, cw, ch, cells = fr
+            key = (gx, gy, cw, ch, tuple((p, tuple(a), tuple(m), tuple(c)) for p, a, m, c in cells))
+            if key not in frm:
+                frm[key] = len(body)
+                body += struct.pack('<bbBBB', max(-128, min(127, gx)), max(-128, min(127, gy)), cw, ch, len(cells))
+                for p, pix, mask, col in cells:
+                    full = all(m == 0xFF for m in mask)
+                    uni = len(set(col)) == 1
+                    rec = bytes([(1 if full else 0) | (2 if uni else 0)]) + bytes(pix) + (b'' if full else bytes(mask)) + (bytes(col[:1]) if uni else bytes(col))
+                    if rec not in pool_idx:
+                        pool_idx[rec] = len(pool_off)
+                        pool_off.append(len(pool))
+                        pool += rec
+                    body += bytes([p, pool_idx[rec]])
+            offs.append(frm[key])
+        if offs:
+            lists[anim] = offs
+    if not lists:
+        return None
+    assert len(pool_off) <= 256, 'mas de 256 celdas distintas en un traje'
+    lst = bytearray()
+    head = bytearray(head_len)
+    head[0] = na
+    lists_base = head_len + len(body)
+    for anim, offs in lists.items():
+        struct.pack_into('<H', head, 3 + 2 * anim, lists_base + len(lst))
+        lst.append(len(offs))
+        for o in offs:
+            lst += struct.pack('<H', o if o == 0xFFFF else head_len + o)
     tab_base = lists_base + len(lst)
     pool_base = tab_base + 2 * len(pool_off)
     struct.pack_into('<H', head, 1, tab_base)
