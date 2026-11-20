@@ -2425,7 +2425,7 @@ def screen_to_scumm(px, py):
     py = max(0, min(184, py))
     if py < 144:
         return px, py
-    return min(px // 6, 41) * 8, py + 8          # el texto de la interfaz empieza en el pixel 0 (hr_ui); 42 columnas
+    return min(px // 6, 41) * 8 + 7, (py | 7) + 8          # el texto de la interfaz empieza en el pixel 0 (hr_ui); 42 columnas
 
 
 def screen_event(kind, a, vm=None):

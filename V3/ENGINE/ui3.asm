@@ -803,7 +803,8 @@ ic_pp:          pop de
 ic_np:          add hl,de
                 ld (INEV+1),hl
                 ret
-ic_if:          add a,8
+ic_if:          or 7                    ; 10g: el clic cae al final de la celda de 8 lineas (y) y de 8 pixeles (x): un verbo cuyo top / left no es multiplo de 8 se pinta en la celda de abajo / de la izquierda y
+                add a,8                 ; con y = top de la celda no se acertaba (frases de las conversaciones)
                 ld l,a
                 ld h,0
                 ld (INEV+3),hl
@@ -822,6 +823,9 @@ ic_c:           ld l,a
                 add hl,hl
                 add hl,hl
                 add hl,hl
+                set 2,l
+                set 1,l
+                set 0,l                 ; + 7
                 ld (INEV+1),hl
                 ret
 
