@@ -20,6 +20,7 @@
                 jp dk_mask
                 jp ms_poll
                 jp ov_err
+                jp ov_drawobj
 
 ov_init:        call sdx_ini
                 xor a                   ; paleta de 16 de la FPGA (POKE 2063/2064/2066/2067): los 16 colores de Chroma, pero el 6 (amarillo)
@@ -133,3 +134,102 @@ sme_k:          call sc_wait_key
                 IF $ > $2000
                 defb EL_OVERLAY_NO_CABE_EN_8_KB
                 ENDIF
+
+; drawObject de v2: lleva al objeto a (x, y) si x no es $FF, lo marca como dibujado y apaga los demas objetos de la sala que
+; ocupan el mismo rectangulo. ARGS: objeto, x, y
+ov_drawobj:
+                ld a,(NOBJS)
+                or a
+                ret z
+                ld (FO_N),a
+                xor a
+                ld (FO_I),a
+dro_find:       ld a,(FO_I)
+                call fo_rec
+                ld e,(ix+0)
+                ld d,(ix+1)
+                ld hl,(ARGS)
+                or a
+                sbc hl,de
+                jr z,dro_found
+                ld hl,FO_I
+                inc (hl)
+                ld a,(FO_N)
+                cp (hl)
+                jr nz,dro_find
+                ret
+dro_found:      push ix
+                pop iy
+                ld a,(ARGS+2)           ; x = $FF: no se mueve; si no, el objeto se dibuja en (x*8, y*8) como en ScummVM (o2_drawObject)
+                cp $FF
+                jr z,dro_nomove
+                ld c,a
+                ld a,(ARGS+4)
+                ld b,a
+                cp (iy+6)
+                jr nz,dro_mv
+                ld a,c
+                cp (iy+5)
+                jr z,dro_nomove
+dro_mv:         ld (iy+5),c
+                ld (iy+6),b
+                ld a,(FO_I)             ; el registro del .GFX (columna, linea) sigue al objeto; sin registro, solo cambia la posicion
+                ld hl,hv_nobj
+                cp (hl)
+                jr nc,dro_mvd
+                cp 84
+                jr nc,dro_mvd
+                ld e,a
+                ld d,0
+                ld l,e
+                ld h,d
+                add hl,hl
+                add hl,de
+                add hl,hl               ; * 6
+                ld de,HR_OBJREC+2
+                add hl,de
+                ld (hl),c               ; columna
+                inc hl
+                ld a,b
+                add a,a
+                add a,a
+                add a,a
+                ld (hl),a               ; linea (pixeles)
+dro_mvd:        ld a,1
+                ld (gd_full),a          ; la sala se compone entera (los dos sitios del objeto)
+                ld (gd_pending),a
+dro_nomove:     xor a
+                ld (FO_I),a
+dro_loop:       ld a,(FO_I)
+                call fo_rec
+                push ix
+                pop de
+                push iy
+                pop hl
+                or a
+                sbc hl,de
+                jr z,dro_next
+                ld a,(ix+5)
+                cp (iy+5)
+                jr nz,dro_next
+                ld a,(ix+6)
+                cp (iy+6)
+                jr nz,dro_next
+                ld a,(ix+7)
+                cp (iy+7)
+                jr nz,dro_next
+                ld a,(ix+8)
+                cp (iy+8)
+                jr nz,dro_next
+                ld l,(ix+0)
+                ld h,(ix+1)
+                call fo_state
+                res 3,(hl)
+dro_next:       ld hl,FO_I
+                inc (hl)
+                ld a,(FO_N)
+                cp (hl)
+                jr nz,dro_loop
+                ld c,8
+                jp st_set
+

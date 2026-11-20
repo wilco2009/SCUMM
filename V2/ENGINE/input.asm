@@ -749,65 +749,9 @@ od_okp:
                 or a
                 ret
 
-; drawObject de v2 (sin cambiar de sitio al objeto): lo marca como dibujado y apaga los demas objetos de la sala que
-; ocupan el mismo rectangulo. ARGS: objeto, x, y
+; drawObject de v2 (el codigo esta en el overlay: ov_drawobj, overlay.asm)
 h_o2_drawObject:
-                ld a,(NOBJS)
-                or a
-                ret z
-                ld (FO_N),a
-                xor a
-                ld (FO_I),a
-dro_find:       ld a,(FO_I)
-                call fo_rec
-                ld e,(ix+0)
-                ld d,(ix+1)
-                ld hl,(ARGS)
-                or a
-                sbc hl,de
-                jr z,dro_found
-                ld hl,FO_I
-                inc (hl)
-                ld a,(FO_N)
-                cp (hl)
-                jr nz,dro_find
-                ret
-dro_found:      push ix
-                pop iy
-                xor a
-                ld (FO_I),a
-dro_loop:       ld a,(FO_I)
-                call fo_rec
-                push ix
-                pop de
-                push iy
-                pop hl
-                or a
-                sbc hl,de
-                jr z,dro_next
-                ld a,(ix+5)
-                cp (iy+5)
-                jr nz,dro_next
-                ld a,(ix+6)
-                cp (iy+6)
-                jr nz,dro_next
-                ld a,(ix+7)
-                cp (iy+7)
-                jr nz,dro_next
-                ld a,(ix+8)
-                cp (iy+8)
-                jr nz,dro_next
-                ld l,(ix+0)
-                ld h,(ix+1)
-                call fo_state
-                res 3,(hl)
-dro_next:       ld hl,FO_I
-                inc (hl)
-                ld a,(FO_N)
-                cp (hl)
-                jr nz,dro_loop
-                ld c,8
-                jp st_set
+                jp OVL_DRAWOBJ
 
 ; getObjectOwner: ARGS: resultado, objeto
 h_o5_getObjectOwner:
