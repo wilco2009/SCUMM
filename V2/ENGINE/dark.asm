@@ -24,25 +24,38 @@ dk_entry:       or a
 dk_frame:       ld a,(gf_have)
                 or a
                 ret z
-                ld a,(hv_drawn)
-                or a
-                ret z
                 IF DKTEST
                 ld hl,4                 ; prueba: sin luz y con linterna, sea cual sea la variable
                 ELSE
                 ld hl,(VAR_CURRENT_LIGHTS)
                 ENDIF
+                ld a,(hv_dark)
+                ld c,a                  ; C = lo que habia: la sala pintada (o por pintar) con esa oscuridad
                 bit 1,l
                 jr z,dkf_dark
                 xor a                   ; con luz
                 ld (hv_dark),a
                 ld (dk_pok),a
                 ld (dk_ok),a
-                ret
+                ld a,c
+                or a
+                ret z
+                jr dkf_redraw           ; estaba a oscuras: hay que pintar la sala con luz
 dkf_dark:       ld a,1
                 ld (hv_dark),a
-                call dk_win
-                ld a,(dk_ok)            ; ¿ha cambiado algo de lo que hay pintado?
+                call dk_win             ; la ventana ya lista aunque la sala aun no este pintada (la primera vez la pinta gd_update despues de esto)
+                ld a,(hv_drawn)
+                or a
+                ret z
+                ld a,c
+                or a
+                jr nz,dkf_cmp
+                xor a                   ; tenia luz: la sala entera se vuelve a pintar a oscuras
+                ld (dk_pok),a
+                ld a,1
+                ld (gd_pending),a
+                ld (gd_full),a
+dkf_cmp:        ld a,(dk_ok)            ; ¿ha cambiado algo de lo que hay pintado?
                 ld hl,dk_pok
                 cp (hl)
                 jr nz,dkf_ch
@@ -70,6 +83,13 @@ dkf_dark:       ld a,1
                 sbc hl,de
                 jr nz,dkf_ch
 dkf_same:       ret
+dkf_redraw:     ld a,(hv_drawn)
+                or a
+                ret z
+                ld a,1                  ; cambio de luces: la sala entera se vuelve a pintar (gd_update)
+                ld (gd_pending),a
+                ld (gd_full),a
+                ret
 dkf_ch:         ld a,255                ; columnas a reescribir: [dk_lo, dk_hi]
                 ld (dk_lo),a
                 xor a
