@@ -43,6 +43,7 @@ class Costume:
         self.mirror = bool(data[5] & 0x80)
         if self.format != 0x58:
             raise ValueError('formato %02X sin soporte' % self.format)
+        self.pal0 = data[6]             # paleta del traje: ScummVM hace _palette[hdr.palette[0]] = _palette[0] (el indice 1, el contorno, es NEGRO, no el azul del EGA)
         self.cmds = u16(data, 7)
         self.limb_tab = [u16(data, 9 + 2 * i) for i in range(16)]
         self.anim_tab = [u16(data, 41 + 2 * i) for i in range(self.num_anim + 1)]
@@ -161,6 +162,14 @@ class Costume:
 
 SCALE = (3, 4)        # factor de escala de los personajes (numerador, denominador)
 MIRROR_OLD_DIR = (True, False)   # anim % 4 == 0 (izquierda) se dibuja en espejo y 1 (derecha) tal cual (_drawActorToRight = direccion != 0 de ScummVM)
+
+
+def emap_of(cost, emap):
+    """Indice de pixel del traje -> codigo Chroma, con el indice de la paleta del traje (pal0) como negro (el color 0 del EGA)."""
+    m = list(emap)
+    if cost.pal0:
+        m[cost.pal0] = emap[0]
+    return m
 
 
 def cells_of(parts, emap):
@@ -293,7 +302,7 @@ def costume_blob(cost, emap, talk=True, two=True, walk=2, ovl=0):
         offs = []
         for limbs, pos in poses:
             parts = cost.render(limbs, pos, mirror=mir)
-            fr = cells_of(parts, emap)
+            fr = cells_of(parts, emap_of(cost, emap))
             if fr is None:
                 offs.append(0xFFFF)
                 continue
@@ -328,7 +337,7 @@ def costume_blob(cost, emap, talk=True, two=True, walk=2, ovl=0):
             seq = cost.steps(limbs) if limbs else []
             if not seq:
                 continue
-            fr = cells_of(cost.render(limbs, seq[0], mirror=MIRROR_OLD_DIR[dr] if dr < 2 else False), emap)
+            fr = cells_of(cost.render(limbs, seq[0], mirror=MIRROR_OLD_DIR[dr] if dr < 2 else False), emap_of(cost, emap))
             if fr is None:
                 continue
             gx, gy, cw, ch, cells = fr
