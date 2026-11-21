@@ -1,12 +1,17 @@
 ; ---------------------------------------------------------------------------------------------------------------------------
 ;  Cache por demanda de las paginas de datos. Las tablas del juego guardan paginas VIRTUALES (dp_first + n de DATA.BIN, cada una de 6 KB
-;  en el fichero desde LD_TABLES); la RAM extendida tiene 47 paginas fisicas para ellas (16-62 menos la 50, la del overlay; el indice
-;  de la cache es la pagina fisica - 16). map_page_x trae una pagina a la RAM cuando no esta y desaloja con el algoritmo del reloj
+;  en el fichero desde LD_TABLES); la RAM extendida tiene 45 paginas fisicas para ellas: 16-49 y 52-62 (la 50 es el overlay 1, la 51 el
+;  overlay 2 y la 63 el monitor del depurador, que la FPGA protege de escrituras del Z80 cuando esta armado: una pagina de datos cargada
+;  ahi se quedaria con el monitor y basura). Indice de la cache = fisica - 16, y - 2 desde la 52. map_page_x trae una pagina a la RAM
+;  cuando no esta y desaloja con el algoritmo del reloj
 ;  (un bit de uso por pagina). Asi el juego puede ser mayor que la RAM y el arranque no lee el fichero entero.
 ; ---------------------------------------------------------------------------------------------------------------------------
 DP_PHYS0        equ 16                  ; primera pagina fisica de la cache
-DP_OVLIDX       equ OVL_PAGE-DP_PHYS0   ; el indice de la pagina del overlay: no se usa
-DP_NIDX         equ 47                  ; indices 0-46: paginas fisicas 16-62
+DP_OVLIDX       equ OVL_PAGE-DP_PHYS0   ; el primer indice que va despues de los dos overlays (fisica 52)
+DP_NIDX         equ 45                  ; indices 0-44: paginas fisicas 16-49 y 52-62 (nunca la 63)
+                IF OVL2_PAGE-OVL_PAGE-1
+                defb OVL2_TIENE_QUE_IR_DETRAS_DE_OVL_PAGE   ; la cache se salta las dos paginas seguidas OVL_PAGE y OVL_PAGE+1
+                ENDIF
 CMD_FSEEK       equ 54
 
 dp_first:       defb 0
@@ -53,7 +58,11 @@ map_page_x:     push hl
                 jr z,mpx_miss
                 ld c,a                  ; esta: se marca como usada y se mapea
                 sub DP_PHYS0
-                ld e,a
+                cp DP_OVLIDX
+                jr c,mpx_hi
+                dec a                   ; desde la 52 el indice es 2 menos (la misma cuenta que al cargarla)
+                dec a
+mpx_hi:         ld e,a
                 ld hl,PREF
                 add hl,de
                 ld (hl),1
@@ -69,10 +78,7 @@ mpx_raw:        ld a,e
 mpx_miss:       ld a,e
                 ld (dp_v),a
 mpx_ck:         ld a,(dp_hand)          ; el reloj: la primera pagina sin bit de uso (a las usadas se les quita)
-                cp DP_OVLIDX
-                jr nz,mpx_c1
-                inc a
-mpx_c1:         cp DP_NIDX
+                cp DP_NIDX
                 jr c,mpx_c2
                 xor a
 mpx_c2:         ld c,a                  ; C = indice
@@ -107,7 +113,8 @@ mpx_free:       ld a,(dp_v)
                 add a,DP_PHYS0
                 cp OVL_PAGE
                 jr c,mpx_ph
-                inc a                   ; despues de la 50 los indices se desplazan una pagina
+                inc a                   ; desde la 50 los indices se desplazan dos paginas (los dos overlays)
+                inc a
 mpx_ph:         ld c,a                  ; C = pagina fisica
                 ld hl,PMAP
                 add hl,de

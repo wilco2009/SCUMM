@@ -1240,12 +1240,12 @@ h_o2_setObjPreposition:
                 ld (hl),a
                 jp restore_win
 
-; getObjPreposition (R, W1): la preposicion del objeto (bits 5-7 del byte 12 de su bloque); 0 si no esta en la sala ni en un inventario
+; getObjPreposition (R, W1): la preposicion del objeto (bits 5-7 del byte 12 de su bloque); $FF si no esta en la sala ni en un inventario (o2_getObjPreposition de ScummVM)
 h_o2_getObjPreposition:
                 ld hl,(ARGS+2)
                 ld c,12
                 call objbyte
-                ld c,0
+                ld c,$FF
                 jr c,gp_w
                 rlca
                 rlca
