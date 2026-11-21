@@ -26,9 +26,9 @@ host_ops:       ld c,a
                 cp $33
                 jp z,ho_roomops
                 cp $52
-                jr z,ho_fol
+                jp z,ho_fol
                 cp $24
-                jr z,ho_ego
+                jp z,ho_ego
                 ld a,c
                 cp $CC                  ; pseudoRoom
                 jr z,ho_pseudo
@@ -79,8 +79,29 @@ ho_ego:         ld a,2                  ; loadRoomWithEgo: la camara salta al pr
                 ld (cam_fol),a
                 ld a,1
                 ld (cam_new),a
+                push ix                 ; (el nucleo usa IX)
+                call he_pos
+                pop ix
                 ret
-ho_fol:         ld a,2                  ; actorFollowCamera (setCameraFollows + setCameraAt, camera.cpp:34-48,62-86): sigue al actor; no se esta moviendo hacia el (modo 2)
+he_pos:         ld a,(VARS)             ; o2_loadRoomWithEgo (script_v2.cpp:1461-1463): camera._cur.x = camera._dest.x = x del protagonista, en el acto: lo que un script haga a
+                call cp_act             ; continuacion (panCameraTo, setCameraAt) parte de ahi. El salto de la ventana (cam_new) espera a que la sala este lista (cam_update)
+                ret nc
+                call actor_addr
+                ld a,(CURROOM)
+                cp (ix+0)
+                ret nz
+                ld l,(ix+1)
+                ld h,(ix+2)
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld (cam_cx),hl
+                jp cm_clamp
+ho_fol:         push ix                 ; (el nucleo usa IX)
+                call hf_do
+                pop ix
+                ret
+hf_do:          ld a,2                  ; actorFollowCamera (setCameraFollows + setCameraAt, camera.cpp:34-48,62-86): sigue al actor; no se esta moviendo hacia el (modo 2)
                 ld (cam_mode),a
                 ld a,(ARGS)
                 ld (cam_fol),a
@@ -327,7 +348,19 @@ cs_end:         pop bc
 cam_update:     ld a,(gf_have)
                 or a
                 ret z
+                ld a,(cam_new)          ; salto pendiente tras cargar la sala con la camara ya fijada por un script (modos 0 y 1): la ventana salta a cam_cx;
+                or a                    ; en los modos 2 y 3 lo hace cm_fol sobre el actor
+                jr z,cu_a
                 ld a,(cam_mode)
+                cp 2
+                jr nc,cu_a
+                xor a
+                ld (cam_new),a
+                ld a,3
+                ld (ac_hold),a
+                call cm_clamp
+                jp cm_snap
+cu_a:           ld a,(cam_mode)
                 cp 1
                 jr z,cm_pan
                 cp 2
