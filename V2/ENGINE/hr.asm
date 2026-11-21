@@ -56,7 +56,9 @@ hv_c1            equ HV+33
 hv_ch            equ HV+34
 hv_dark         equ HV+35               ; 1: la sala esta a oscuras (dark.asm): hr_put oscurece los atributos de lo que dibuja
 hv_top          equ HV+36               ; 1: el texto de los mensajes va arriba (filas 0-3, fijas, sin scroll): hr_stride no pinta la sala en ellas
-hv_drawn        equ HV+31               ; 0: la sala aun no se ha dibujado (se dibuja ya en su sitio: el salto de la camara, o gd_update si nadie la mueve)
+hv_pon          equ HV+37               ; 1: _roomPalette de ScummVM distinta de la identidad (roomOps subop 2): hr_put remapea los atributos con hv_ptab (dark.asm, rp_remap)
+hv_ptab         equ $8790               ; 16 bytes, alineados a 16: color de Chroma de los atributos -> color de Chroma con el que se pinta
+hv_drawn        equ HV+31              ; 0: la sala aun no se ha dibujado (se dibuja ya en su sitio: el salto de la camara, o gd_update si nadie la mueve)
 
 ; ---------------------------------------------------------------------
 ;  Pagina de la sala -> ventana de datos; hr_unmap devuelve la que habia
@@ -277,7 +279,8 @@ hs_l:           ld a,(hl)
 ; HR_COLBUF a la columna de pantalla A (0-31), al bufer de la derecha (32) o al de la izquierda ($FF)
 hr_put:         ld (hv_s),a
                 ld a,(hv_dark)
-                or a
+                ld hl,hv_pon            ; oscuridad o colores de sala cambiados (roomOps)
+                or (hl)
                 jr z,hp_nd
                 ld a,(hv_s)
                 call OVL_DKMASK         ; los atributos de lo que queda fuera de la linterna, a 0
@@ -529,6 +532,7 @@ gf_load_room:   ld a,(EVARGS)
                 ld (hv_ndl),a
                 ld (hv_nobj),a
                 ld (hv_drawn),a
+                ld (hv_pon),a           ; startScene: _roomPalette[i] = i
                 ld (2090),a
                 ld h,a
                 ld l,a

@@ -253,8 +253,50 @@ dkw_6:          ld (dk_r0),a
                 ld (dk_ok),a
                 ret
 
+; roomOps subop 2 (_roomPalette): hv_ptab[color de Chroma] = color de Chroma con el que se pinta (los atributos de la sala se componen con indices de Chroma:
+; ega2chroma). Remapea tinta y papel de los 128 atributos de HR_COLBUF (fondo y objetos; los personajes son sprites y no se tocan, como en ScummVM).
+; hv_ptab esta alineada a 16: la direccion de una entrada es hv_ptab | nibble.
+rp_remap:       ld de,HR_COLBUF+128
+                ld b,128
+                ld h,hv_ptab>>8
+rpr_l:          ld a,(de)
+                rrca
+                rrca
+                rrca
+                rrca
+                and $0F
+                or hv_ptab&$FF
+                ld l,a
+                ld a,(hl)               ; papel nuevo
+                rlca
+                rlca
+                rlca
+                rlca
+                ld c,a
+                ld a,(de)
+                and $0F
+                or hv_ptab&$FF
+                ld l,a
+                ld a,(hl)               ; tinta nueva
+                or c
+                ld (de),a
+                inc de
+                djnz rpr_l
+                ret
+
 ; A = columna de pantalla (0-31; 32 y mas: las de entrada del scroll, siempre negras): pone a 0 los atributos de HR_COLBUF que quedan fuera de la ventana
-dk_mask:        cp 32
+; hr_put la llama con la columna compuesta si hay oscuridad (hv_dark) o colores de sala cambiados (hv_pon, roomOps subop 2): primero el remapeo, luego la oscuridad
+dk_mask:        push af
+                ld a,(hv_pon)
+                or a
+                call nz,rp_remap
+                ld a,(hv_dark)
+                or a
+                jr nz,dm_go0
+                pop af
+                ret
+dm_go0:         pop af
+                cp 32
                 jr nc,dm_all
                 ld c,a
                 ld a,(dk_ok)

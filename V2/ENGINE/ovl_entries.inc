@@ -1,4 +1,7 @@
 ; GENERADO A MANO: entradas del overlay (tabla de saltos al principio de la pagina mapeada en el bloque 0)
+OVL2_PAGE       equ 51                  ; pagina fisica del overlay 2 (snd.asm y save.asm; overlay2.asm): solo se mapea en el bloque 0 mientras se ejecuta; la 50 vuelve al salir
+OV2_COPY        equ $0C00               ; bytes del overlay 2 que copia ov_init a su pagina (tope del tamano de overlay2.bin)
+SV_FIN          equ $9797               ; 1: una carga de partida acabo bien y falta restaurar la sala y el script (ho_saveload, overlay.asm)
 OVL_PAGE        equ 50                  ; pagina fisica del overlay (la 63 es del depurador: no usar)
 OVL_UI_INIT     equ 0
 OVL_UI_UPDATE   equ 3
@@ -15,3 +18,6 @@ OVL_DKMASK      equ 33
 OVL_MOUSE       equ 36                  ; raton Bluetooth (mouse.asm): A = bit 4 boton izquierdo, bit 5 derecho (0 si no hay raton)
 OVL_ERR        equ 39                  ; error fatal (ov_err): se escribe y espera una tecla
 OVL_DRAWOBJ    equ 42                  ; drawObject (ov_drawobj, overlay.asm)
+OVL_CMNAME     equ 45                  ; codigos de texto 5 y 6 (ui_cmname, ui.asm)
+OVL_NOSTART    equ 48                  ; startScript: Z si el perfil prohibe arrancar el script E en esta sala (ui_nostart)
+OVL_AFPX      equ 51                  ; getActorFromPos: carry si la franja x (DE, en unidades de 8 px) cae en las que dibuja el actor IX / C (ov_afpx, overlay.asm)

@@ -35,6 +35,8 @@ def spec_for(name):
 def handler_for(name):
     if name in vmgame.GameMixin.GAME_OPS or name in vmmodel.CORE or name in vmmodel.STATE_OPS:
         return 'h_' + name
+    if name == 'o2_setObjPreposition':
+        return 'h_o2_setObjPreposition'      # input.asm: escribe en el bloque del objeto (no es del anfitrion)
     toks = scummdis._SPEC.get(name, '').split()
     if toks and toks[0] == 'R':
         return 'h_host_r'

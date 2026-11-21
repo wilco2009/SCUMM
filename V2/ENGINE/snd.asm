@@ -142,7 +142,7 @@ snd_tick:       ld a,(sdx_cur)
                 and l
                 inc a
                 ret z                   ; 65535: no acaba solo
-                ld a,(DELTA)
+                ld a,(ml_acc)         ; fotogramas reales de 50 Hz de esta vuelta
                 ld e,a
                 ld d,0
                 or a
@@ -352,7 +352,7 @@ sdx_mtimer:      push bc
                 jr z,sdx_mt_x
                 ld b,h
                 ld c,l                  ; BC = intervalo
-                ld a,(DELTA)
+                ld a,(ml_acc)         ; fotogramas reales de 50 Hz de esta vuelta
                 ld l,a
                 ld h,0
                 add hl,hl
@@ -379,13 +379,4 @@ sdx_mt_x:           pop hl
                 pop de
                 pop bc
                 ret
-
-sdx_ini:         xor a
-                ld (fl_xs),a
-                ld (fl_ys),a
-                ld (dk_ok),a
-                ld (sdx_tstep),a
-                ld (sdx_tstep+1),a
-                ld (sdx_cur),a
-                ld (sdx_next),a
-                ret
+; (sdx_ini, que pone a cero las variables del sonido, esta en overlay.asm: lo llama ov_init antes de que el overlay 2 este en su pagina)

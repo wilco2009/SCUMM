@@ -18,18 +18,25 @@ if /i "%1"=="zak" set G=ZAK
 if /i "%1"=="zack" set P=..\preview_zak_hr
 if /i "%1"=="zack" set G=ZAK
 echo Juego: %G% (datos de %P%)
-rem montaje en tres pasos: el overlay (overlay.asm) necesita las direcciones del programa (scumm.sym) y el programa incluye overlay.bin al final
+rem montaje: el overlay 1 (overlay.asm) necesita las direcciones del programa (scumm.sym), el overlay 2 (overlay2.asm: sonido y guardar/cargar) las del programa y del overlay 1 (overlay.sym), y el programa incluye overlay2.bin y overlay.bin al final
 if not exist overlay.bin type nul > overlay.bin
+if not exist overlay2.bin type nul > overlay2.bin
 pasmo scumm.asm scumm.bin scumm.sym || goto error
 python ..\TOOLS\savestamp.py scumm.sym save.asm > savestamp.inc || goto error
 rem (savestamp.inc: marca de las partidas guardadas, solo variables de datos; no caducan al recompilar)
 pasmo overlay.asm overlay.bin overlay.sym || goto error
+pasmo overlay2.asm overlay2.bin overlay2.sym || goto error
 pasmo scumm.asm scumm.bin scumm.sym || goto error
 set S=%BASE%\SCUMM\V2
 set D=%S%\%G%
+rem solo Zak: "compila_scumm.bat zak 23" (o "zak 23 40 30" con la posicion X Y de Zak) DEPURACION: arranca sin intro en esa sala; ver README.md de V2
 rem el perfil del juego (games\*.cfg) va dentro de DATA.BIN: se regenera siempre para que un cambio en el .cfg llegue a la SD
 if /i "%G%"=="MANIAC" python ..\TOOLS\pack_data.py ..\ManiacMansionDOS %P%\DATA.BIN --game ..\games\maniac.cfg --sounds %P%\snd >nul || goto error
-if /i "%G%"=="ZAK" python ..\TOOLS\pack_data.py "..\Zak McKracken" %P%\DATA.BIN --game ..\games\zak.cfg --sounds %P%\snd >nul || goto error
+set DR=
+if not "%2"=="" set DR=--debug-room %2
+if not "%3"=="" set DR=%DR%,%3,%4
+if not "%DR%"=="" if /i "%G%"=="ZAK" echo *** DEPURACION: Zak arranca sin intro en la sala %2 %3 %4 (compila sin el segundo argumento para el juego normal) ***
+if /i "%G%"=="ZAK" python ..\TOOLS\pack_data.py "..\Zak McKracken" %P%\DATA.BIN --game ..\games\zak.cfg --sounds %P%\snd %DR% >nul || goto error
 if not exist "%D%\DATA\SND" mkdir "%D%\DATA\SND"
 copy /y scumm.bin "%S%\SCUMM.BIN" >nul || goto error
 copy /y SCUMM.B81 "%D%\%G%.B81" >nul || goto error

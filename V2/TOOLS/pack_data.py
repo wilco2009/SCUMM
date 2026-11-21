@@ -2,10 +2,11 @@
 """Empaqueta los datos NO graficos de Maniac Mansion (scripts, codigo de objetos, cajas y objetos de cada sala,
 dueno y estado de los objetos) en DATA.BIN, que el programa del ZX81 carga de la SD al arrancar.
 
-Uso: pack_data.py DIRECTORIO_LFL SALIDA.BIN --game perfil.cfg [--sounds DIR] [--first-page N] [--all]
+Uso: pack_data.py DIRECTORIO_LFL SALIDA.BIN --game perfil.cfg [--sounds DIR] [--first-page N] [--all] [--debug-room N[,X,Y]]
   --sounds      carpeta de sound2vgm.py (SOUNDS.TXT con prioridad, duracion y bucle de cada sonido)
   --game        perfil del juego (SCUMM/V2/games/*.cfg, ver gameprofile.py): lo unico propio del juego que lee el motor
   --first-page  primera pagina de la RAM extendida que ocupan los datos (16 por omision)
+  --debug-room  SOLO DEPURACION (Zak): arranca sin intro en la sala N con Zak (ver debug_boot_script); sin ella los datos no cambian
   --all         incluye los scripts y salas sinteticos de las pruebas (ids >= 180 y salas >= 60), con el mismo
                 reparto en paginas que world.bin (pruebas del cargador: --first-page 8)
 
@@ -190,9 +191,37 @@ def sound_table(path):
     return bytes(t)
 
 
-def build(world, game, first_page=16, include_test=False, sounds=None):
+def debug_boot_script(world, spec):
+    """SOLO DEPURACION (--debug-room N[,X,Y]): script de arranque de Zak que se salta la intro y deja a Zak en la sala N con el usuario activo.
+    = la preparacion del script 1 original (antes de la cutscene, bytes 0-86) + la inicializacion del juego del script 108 (hasta su bifurcacion, byte 616)
+    + el 'Zak en la sala N' del script 108 (putActorInRoom, putActor, actorFollowCamera, animateActor; bytes 656-667 con la sala y la posicion cambiadas)
+    + su final (doSentence 251, drawSentence, cursorCommand: interfaz y cursor activos; bytes 742-748). Sin X,Y, Zak va al centro de la primera caja que se pueda pisar."""
+    parts = [int(v) for v in spec.replace(':', ',').split(',')]
+    room = parts[0]
+    r = world.rooms[room]
+    if len(parts) >= 3:
+        x, y = parts[1], parts[2]
+    else:
+        bx = [b for b in r.boxes if not b[7] & 0x80] or list(r.boxes)
+        if bx:
+            b = bx[0]
+            x, y = (b[2] + b[3] + b[4] + b[5]) // 4, (b[0] + b[1]) // 2
+        else:                                     # sala sin cajas (p.ej. la 45): la posicion de la cama de la sala 1; mejor dar X,Y
+            x, y = 20, 56
+    s1, s108 = world.scripts[1], world.scripts[108]
+    assert s1[87] == 0x40 and s108[616] == 0xA8 and s108[656:659] == bytes((0x2D, 1, 1)) and s108[742:749] == bytes.fromhex('19fbac6001f7a0'), 'no es el Zak de DOS esperado'
+    tail = bytearray(s108[656:668])
+    tail[2] = room
+    tail[4:7] = bytes((1, x, y))                  # putActor 1, x, y
+    return s1[:87] + s108[:616] + bytes(tail) + s108[742:749]
+
+
+def build(world, game, first_page=16, include_test=False, sounds=None, debug_room=None):
     pk = M.Packer(first_page=first_page)
     scripts = {i: c for i, c in world.scripts.items() if include_test or i < SYNTH_SCRIPT}
+    if debug_room:
+        scripts[1] = debug_boot_script(world, debug_room)
+        print('*** DEPURACION: Zak arranca en la sala %s (sin intro) ***' % debug_room)
     rooms = {n: r for n, r in world.rooms.items() if include_test or n < SYNTH_ROOM}
     scrdir = bytearray(256 * 3)
     for i, code in sorted(scripts.items()):
@@ -291,7 +320,8 @@ def main():
     d, out = args[0], args[1]
     world = M.World(d)
     sounds = args[args.index('--sounds') + 1] + '/SOUNDS.TXT' if '--sounds' in args else None
-    data, npages = build(world, game, first, test, sounds)
+    dbg = args[args.index('--debug-room') + 1] if '--debug-room' in args else None
+    data, npages = build(world, game, first, test, sounds, dbg)
     with open(out, 'wb') as f:
         f.write(data)
     print('%s: %d paginas de %d bytes desde la %d, %d bytes' % (out, npages, M.PAGE_USABLE, first, len(data)))

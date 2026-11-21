@@ -23,7 +23,7 @@ SV_LEN_E        equ $2000
 SV_LEN_O        equ $0290
 SV_LEN_I        equ $9500-INVSL
 
-ho_saveload:    ld a,(ARGS+2)
+sv_saveload:    ld a,(ARGS+2)
                 and $E0
                 ld hl,100               ; 0: numero de ranuras
                 jp z,sl_res
@@ -184,9 +184,8 @@ sll_c:          ld a,(de)
                 ld (sdx_next),a
                 ld a,(SS_REAL)
                 ld (EVARGS),a
-                call gf_load_room       ; la imagen de la sala restaurada
-                ld a,(CUR)
-                call load_slot          ; el script sigue por donde dice su ranura restaurada
+                ld a,1                  ; la sala y el script se restauran fuera (ho_saveload, overlay.asm): aqui el bloque 0 es el overlay 2 y gf_load_room llama al overlay 1
+                ld (SV_FIN),a
                 ld hl,3
                 jp sl_res
 ; Las mascaras de profundidad (y las de los objetos) van al final de DATA.BIN (TOOLS/pack_data.py: asi no mueven los scripts y las partidas de antes valen), pero ROOMDIR

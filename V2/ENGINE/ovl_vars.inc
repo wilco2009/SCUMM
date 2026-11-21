@@ -98,6 +98,8 @@ ac_wb           equ $DC80           ; palabra: ventana de campos del sprite que 
 ac_xd           equ SPRX+30           ; XD_MARK: se han usado sprites extra, que pisan las variables del sistema del ZX81 ($4000-$41FF); al salir, reset
 XD_MARK         equ $5A
 SPRX            equ $4000               ; entradas de los sprites extra (POKE 2129 = 2 -> bloque $4000; entrada j = SPRX + 32 * j)
+ac_pm           equ $94EA               ; 16 bytes: la paleta del actor que se dibuja, de codigo Chroma a codigo Chroma (ac_mkpal); dentro de lo libre entre AC_LC y BACKBUF
+ac_pf           equ $94FA               ; 0: el actor lleva la paleta de identidad (no hay que remapear los colores de sus celdas)
 AC_MAX          equ 78                  ; ranuras de sprite de los personajes: 63 normales (el 63 es el cursor) y 15 extra (entradas 0 y 2-15)
 AC_OVF          equ $9490           ; NACTORS bytes: el fotograma de overlay de cada actor (0: ninguno): el ultimo que no es caminar, parado, inicio ni hablar
 AC_LF           equ $94B0           ; NACTORS bytes: el fotograma (ix+10) de cada actor la ultima vez que se miro

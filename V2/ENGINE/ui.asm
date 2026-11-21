@@ -14,6 +14,11 @@ NVERBS          equ 15
 UI_COLS         equ 40                  ; la zona de abajo es de 40 columnas (como el original): se pinta en un bufer virtual (UIVB, de la fila UI_R0 a la 23) y la
 UI_R0           equ 16                  ; pantalla muestra 32 de ellas desde UI_OFF (0 u 8); el cursor en un borde cambia de ventana (ui_scroll)
 UIVB            equ $9900
+; color de cada caracter de las filas 1-3 de la zona (los verbos; la fila 0 no se usa), valor XOR $0F del atributo de Chroma (0 = blanco brillante $0F, la botonera de siempre;
+; 1 = $0E amarillo: el verbo bajo el cursor, hicolor de ScummVM (_hiLiteColorVerbArrow = 14); 7 = $08 gris: verbo en modo 2, dimcolor 8). hrui.asm lo pasa a los
+; atributos de cada celda de 8 pixeles (OR de los dos caracteres que toca). UI_HOV (detras) = verbo bajo el cursor. Sitio libre, fuera de lo que se guarda
+UIAT            equ $9A40
+UI_HOV          equ UIAT+160
 
 ; ---- A = ranura -> IX
 ui_entry:       ld l,a
@@ -36,11 +41,9 @@ ui_init:        ld hl,UI_DIRTY
                 ld a,1
                 ld (UI_CURSOR),a
                 ld hl,UIVB
-                ld de,UIVB+1
+                ld a,BLANK
                 ld bc,0+(24-UI_R0)*UI_COLS-1
-                ld (hl),BLANK
-                ldir
-                ret
+                jp ui_fill
 
 ; ------------------------------------------------------------------------------------------ cursorCommand
 ; ARGS: palabra; el byte alto es el estado de usuario (ver USERSTATE_* de ScummVM)
@@ -161,38 +164,13 @@ uv_mode:        ld a,(ARGS+2)           ; verbo
                 ld (UI_DIRTY),a
                 ret
 
-; IX = verbo -> HL = lo que se escribe en la zona de verbos (la etiqueta corta o el texto)
-ui_label:       push bc                 ; conserva BC y DE (ui_click guarda en E el desplazamiento dentro del texto)
-                push de
-                call ui_label0
-                pop de
-                pop bc
-                ret
-ui_label0:      jr ul_none              ; con 40 columnas siempre el texto completo (ya no hay etiquetas cortas)
-                ld a,(ix+0)
-                ld hl,(PF_SHORT)
-                ld de,PROF
-                add hl,de
-ul_l:           ld c,(hl)
-                inc hl
-                bit 7,c
-                jr nz,ul_none
-                cp c
-                jr z,ul_ok
-ul_s:           ld a,(hl)
-                inc hl
-                or a
-                jr nz,ul_s
-                ld a,(ix+0)
-                jr ul_l
-ul_ok:          ret
-ul_none:        push ix
+; IX = verbo -> HL = lo que se escribe en la zona de verbos (con 40 columnas siempre el texto completo: ya no hay etiquetas cortas). Conserva BC y DE
+ui_label:       push ix
                 pop hl
-                ld a,l
-                add a,4
-                ld l,a
-                ret nc
-                inc h
+                inc hl
+                inc hl
+                inc hl
+                inc hl
                 ret
 ; id de verbo y etiqueta (Maniac Mansion: Push 9, Pull 10, Give 3, Open 1, Close 2, Read 12, Walk to 13, Pick up 14, What is 15,
 ; Unlock 8, New kid 7, Use 11, Turn on 4, Turn off 5, Fix 6)
@@ -228,7 +206,8 @@ ui_sentence:    ld a,(UI_DIRTY)
 
 ; ------------------------------------------------------------------------------------------------ pantalla
 ; cada fotograma, fuera de los scripts
-ui_update:      ld hl,VAR_SENTENCE_VERB           ; si cambia la frase, se vuelve a escribir
+ui_update:      call ui_hover
+                ld hl,VAR_SENTENCE_VERB           ; si cambia la frase, se vuelve a escribir
                 ld de,UI_PREV
                 ld b,8
 uu_c:           ld a,(de)
@@ -301,38 +280,34 @@ ux3:            ld a,l
 
 ; HL = direccion de pantalla de la fila A, columna 0
 ui_row:         sub UI_R0
-                ld l,a
-                ld h,0
-                ld e,l
-                ld d,h
-                add hl,hl
-                add hl,hl
-                add hl,de               ; * 5
-                add hl,hl
-                add hl,hl
-                add hl,hl               ; * 40
+                call hu_mul40           ; * 40 (hrui.asm)
                 ld de,UIVB
                 add hl,de
                 ret
 
 ui_clear_row:   call ui_row
+                ld a,BLANK
+                ld bc,UI_COLS-1
+ui_fill:        ld (hl),a               ; A en BC + 1 bytes desde HL
                 ld d,h
                 ld e,l
                 inc de
-                ld bc,UI_COLS-1
-                ld (hl),BLANK
                 ldir
                 ret
 
 ; ---- los verbos
-ui_draw_verbs:  ld a,(PF_VROW)
-                call ui_clear_row
-                ld a,(PF_VROW)
-                inc a
-                call ui_clear_row
-                ld a,(PF_VROW)
-                add a,2
-                call ui_clear_row
+ui_draw_verbs:  ld a,(PF_VROW)          ; las 3 filas: en blanco, colores a normal (UIAT) y todo se vuelve a pintar (HRUI_PREV: el color solo no cambia los codigos)
+                call ui_row
+                ld a,BLANK
+                call udv_f              ; (ldir deja HL 119 bytes mas alla)
+                ld de,HRUI_PREV-UIVB-(3*UI_COLS-1)
+                add hl,de
+                ld a,$FF
+                call udv_f
+                ld de,UIAT-HRUI_PREV-(3*UI_COLS-1)
+                add hl,de
+                xor a
+                call udv_f
                 ld a,(UI_IFACE)
                 bit 7,a
                 ret z
@@ -346,6 +321,18 @@ udv_l:          push bc
                 add ix,de
                 pop bc
                 djnz udv_l
+                ret
+udv_f:          ld bc,3*UI_COLS-1       ; A en las 3 filas de verbos desde HL
+                jr ui_fill
+
+; verbo bajo el cursor (UI_HOV, 0 = ninguno): si cambia, los verbos se vuelven a escribir (checkV2MouseOver de ScummVM)
+ui_hover:       call ui_vhit
+                ld hl,UI_HOV
+                cp (hl)
+                ret z
+                ld (hl),a
+                ld hl,UI_DIRTY
+                set 0,(hl)
                 ret
 
 ; IX = verbo: se escribe hasta donde empieza el siguiente de su fila (o hasta el borde)
@@ -404,7 +391,16 @@ udw_te:         pop hl                  ; HL = texto
                 jr c,udw_m
                 ld a,c
 udw_m:          ld b,a                  ; B = caracteres a escribir
-                push hl
+                ld a,(UI_HOV)           ; C = color (UIAT): 1 el verbo bajo el cursor, 7 un verbo en modo 2 (atenuado), 0 el normal
+                cp (ix+0)
+                ld c,0
+                jr nz,udw_k
+                inc c
+udw_k:          ld a,(ix+3)
+                cp 2
+                jr nz,udw_a
+                ld c,7
+udw_a:          push hl
                 push bc
                 ld a,(ix+2)
                 call ui_row
@@ -423,6 +419,11 @@ udw_c:          ld a,b
                 jr nz,udw_p
                 ld a,' '
 udw_p:          call put_chr
+                push hl
+                ld hl,UIAT-UIVB-1
+                add hl,de
+                ld (hl),c
+                pop hl
                 dec b
                 jr udw_c
 
@@ -535,9 +536,7 @@ ui_objname:     ld de,NOBJ
                 pop hl
                 inc hl
                 inc hl
-                ld de,UI_NAME
-                ld b,31
-                jr on_c
+                jr on_c0
 on_orig:        pop hl
                 ld a,h
                 or a
@@ -562,9 +561,7 @@ on_orig:        pop hl
                 push de
                 call map_page
                 pop hl
-                ld de,UI_NAME
-                ld b,31
-                jr on_c
+                jr on_c0
 on_obj:         ld e,l
                 ld d,h
                 add hl,hl
@@ -589,7 +586,7 @@ on_obj:         ld e,l
                 ld b,0
                 ex de,hl
                 add hl,bc               ; HL = nombre
-                ld de,UI_NAME
+on_c0:          ld de,UI_NAME
                 ld b,31
 on_c:           ld a,(hl)
                 inc hl
@@ -624,15 +621,98 @@ on_end:         xor a
 on_none:        scf
                 ret
 
+; ---- codigos de texto 5 y 6 de los mensajes (convertVerbMessage / convertNameMessage de ScummVM). Entrada: C = el codigo (5 o 6), CMVAR = la variable,
+;      DE = destino en el bufer de mensajes (convert_msg, game.asm). Salida: DE avanzado con el nombre; ERR si el bufer se llena. Conserva BC y HL.
+;      El valor 0 (o sin nombre) no da nada. Los nombres se copian tal cual con la conversion de on_c (el bit 7 = un espacio detras)
+ui_cmname:      push bc
+                push hl
+                push de
+                ld a,(CMVAR)
+                call read_var           ; BC = valor
+                ld a,b
+                or c
+                jr z,cmn_zero
+                ld hl,4
+                add hl,sp
+                ld a,(hl)               ; el codigo (el C guardado)
+                ld h,b
+                ld l,c
+                call ui_nameof          ; HL = verbo / objeto o actor -> UI_NAME (carry si no tiene); mueve la ventana de datos
+                push af
+                ld a,(CUR)              ; y la cadena del script sigue en su pagina: se vuelve a mapear
+                call slot_addr
+                ld de,4
+                add hl,de
+                ld a,(hl)
+                call map_page
+                pop af
+                pop de
+                jr c,cmn_fin
+                ld hl,UI_NAME
+cmn_l:          ld a,(hl)
+                or a
+                jr z,cmn_fin
+                inc hl
+                call emit_a
+                ld a,(ERR)
+                or a
+                jr z,cmn_l
+                jr cmn_fin
+cmn_zero:       pop de
+cmn_fin:        pop hl
+                pop bc
+                ret
+
+; ---- no arrancar el script E si la sala es la del perfil (PF_NOSTART, startScript): Z si no se arranca (conserva DE)
+ui_nostart:     ld hl,PF_NOSTART
+                ld b,4
+uns_l:          ld a,(hl)
+                inc hl
+                or a
+                jr z,uns_n
+                cp e
+                jr nz,uns_n
+                ld a,(CURROOM)
+                cp (hl)
+                ret z
+uns_n:          inc hl
+                djnz uns_l
+                or 1
+                ret
+
+; ---- codigos de texto 5 y 6 de los mensajes (convert_msg, game.asm): A = 5 verbo / 6 objeto o actor, HL = su valor -> UI_NAME; carry si no tiene
+ui_nameof:      cp 5
+                jp nz,ui_objname        ; convertNameMessage: getObjOrActorName
+                ld a,h                  ; convertVerbMessage: el texto del verbo con ese id (el de la ranura, de hasta 11 caracteres)
+                or a
+                jr nz,on_none
+                ld a,l
+                call ui_find
+                jr nc,on_none
+                push ix
+                pop hl
+                ld de,4
+                add hl,de
+                ld de,UI_NAME
+                ld bc,12
+                ldir
+                ld a,(UI_NAME)
+                or a
+                jr z,on_none
+                ret
+
 ; ---- clic en la parte de abajo de la pantalla (cur_y >= 128): fila 16 frase, 17-19 verbos
-ui_click:       ld a,(UI_CURSOR)
+ui_hrow:        ld a,(UI_CURSOR)        ; C = fila del cursor; Z si no hay cursor (o la fila 0)
                 or a
                 ret z
                 ld a,(cur_y)
                 srl a
                 srl a
-                srl a                   ; fila
+                srl a
                 ld c,a
+                ret
+ui_click:       call ui_hrow
+                ret z
                 ld hl,PF_SROW
                 cp (hl)
                 jr nz,uk_v
@@ -644,6 +724,19 @@ uk_v:           ld hl,PF_VROW
                 ret c
                 cp 3
                 jp nc,uk_inv
+                call ui_vhit
+                ld l,a
+                ld h,0
+                ld a,1                  ; zona de verbos (HL = verbo, 0 si no hay)
+                jr uk_set
+; A = el verbo clicable (modo 1) bajo el cursor, 0 si no hay (o el cursor no esta en las filas de los verbos)
+ui_vhit:        call ui_hrow
+                jr z,uk_nv
+                ld a,c
+                ld hl,PF_VROW
+                sub (hl)
+                cp 3
+                jr nc,uk_nv
                 ld a,(cur_x)
                 call ui_xcol
                 ld b,a                  ; columna
@@ -681,18 +774,16 @@ uk_sc:          ld a,(hl)
                 jr nz,uk_hit
 uk_nx:          inc hl
                 jr uk_sc
-uk_hit:         ld l,(ix+0)
-                ld h,0
-                ld a,1                  ; zona de verbos
-                jr uk_set
+uk_hit:         ld a,(ix+0)
+                ret
 uk_n:           push de
                 ld de,VT_SIZE
                 add ix,de
                 pop de
                 dec d
                 jr nz,uk_l
-                ld hl,0                 ; en la zona de verbos pero sin verbo
-                ld a,1
+uk_nv:          xor a
+                ret
 uk_set:         ld (INP_AREA),a
                 ld (INP_VAL),hl
                 ld a,1

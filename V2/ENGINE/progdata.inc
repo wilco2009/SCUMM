@@ -20,3 +20,8 @@ REMAP3:         defb $00,$00,$02,$00,$01,$03,$02,$00,$01,$01,$02,$00,$01,$03,$02
                 defb $02,$01,$02,$00,$01,$03,$02,$00,$03,$00,$03,$00,$01,$03,$02,$00
 ; el perfil del juego (SCUMM/V2/games/*.cfg): lo carga el cargador de DATA.BIN; el motor no tiene nada propio de un juego
 PROF:           defs 256
+; datos del overlay (overlay.asm, hrui.asm): solo se leen, y por encima de $8000 no ocupan sitio en el overlay (de 8 KB)
+; paleta de 16: por color de Chroma {BRIGHT,G,R,B}, byte bajo {G,B} y alto {BRIGHT,R} (densidades 0-15; ver claude/planning/pdm_color.md)
+ov_pal16:       defb $00,$00,$0F,$00,$00,$0F,$0F,$0F,$F0,$00,$FF,$00,$70,$1F,$FF,$0F
+                defb $00,$F0,$0F,$F0,$00,$FF,$0F,$FF,$F0,$F0,$FF,$F0,$F0,$FF,$FF,$FF
+hu_zero:        defs 8,0                ; el glifo en blanco de la interfaz (los codigos < 208)

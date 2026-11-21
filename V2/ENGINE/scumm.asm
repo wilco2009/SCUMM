@@ -148,6 +148,8 @@ scumm_main:     di
                 ld hl,tx_nodata
                 call sc_fatal
 sm_ok1:         call act_init           ; el perfil (recien cargado) puede dar menos ids de actor
+                ld hl,(PF_SPEED)        ; VAR_MACHINE_SPEED del perfil (resetScummVars de ScummVM: Zak = 0x7FFF, la intro "elaborada" sincronizada con la musica)
+                ld (VARS+12),hl
                 ld a,'J'
                 call sc_mark            ; J: datos cargados
                 IF DEMO
@@ -174,41 +176,36 @@ main_loop:      ld a,(mk_first)
                 ld (mk_first),a
                 ld a,'O'
                 call sc_mark            ; O: primer fotograma
-ml_go:          xor a                   ; scummLoop dura VAR_TIMER_NEXT jiffies (1/60 s, minimo 1): al menos 5/6 de ese numero de fotogramas
-                ld (ml_acc),a
+ml_go:          xor a                   ; scummLoop(delta): delta en jiffies (1/60 s) como ScummVM; un fotograma de 50 Hz = 6/5 de jiffy
+                ld (ml_acc),a           ; fotogramas de esta vuelta (los lee el sonido)
+                ld (DELTA),a            ; jiffies de esta vuelta
 ml_w:           call wait_vs
+                ld c,a
                 ld hl,ml_acc
                 add a,(hl)
                 ld (hl),a
-                ld a,(VAR_TIMER_NEXT)
+ml_f:           ld a,(ml_jr)            ; resto en quintos de jiffy que arrastra la vuelta anterior (no se pierden fracciones)
+                add a,6
+                ld hl,DELTA
+ml_q:           cp 5
+                jr c,ml_qq
+                sub 5
+                inc (hl)
+                jr ml_q
+ml_qq:          ld (ml_jr),a
+                dec c
+                jr nz,ml_f
+                ld a,(VAR_TIMER_NEXT)   ; la vuelta dura al menos VAR_TIMER_NEXT jiffies (minimo 1, tope 40)
                 cp 40
                 jr c,ml_t
                 ld a,40
-ml_t:           ld l,a
-                ld h,0
-                ld d,h
-                ld e,l
-                add hl,hl
-                add hl,hl
-                add hl,de               ; * 5
-                ld de,3
-                add hl,de
-                ld b,0                  ; / 6
-ml_d:           ld de,6
-                or a
-                sbc hl,de
-                jr c,ml_dd
-                inc b
-                jr ml_d
-ml_dd:          ld a,b
-                or a
+ml_t:           or a
                 jr nz,ml_n
                 inc a
-ml_n:           ld b,a                  ; B = fotogramas que debe durar
-                ld a,(ml_acc)
+ml_n:           ld b,a
+                ld a,(hl)
                 cp b
                 jr c,ml_w
-                ld (DELTA),a
                 call hr_frame           ; el hardware sigue a la camara nada mas empezar el fotograma: el fino y el movimiento de memoria tienen que cambiar con el haz fuera de la pantalla
                 ld hl,(DBG_START)       ; depuracion: un numero de script escrito aqui desde el emulador se arranca en este fotograma
                 ld a,h
@@ -246,6 +243,7 @@ ml_nd:          call vm_frame
                 jp scumm_main
 rs_flag:        defb 0
 ml_acc:         defb 0
+ml_jr:          defb 0
 sm_err:         call OVL_ERR            ; el mensaje de error esta en el overlay (ov_err, overlay.asm): deja sitio al residente
 
 sc_quit:        call dp_close           ; el DATA.BIN se cierra
@@ -506,18 +504,10 @@ kr_set:         ld (cur_x),hl
                 cpl
                 and c
                 ld b,a
-                bit 5,b                 ; boton derecho en la escena: cancela la frase y camina
+                bit 5,b                 ; boton derecho (input.cpp, v0-v3): es la tecla ESC (salta la cutscene) y no hace clic de escena ni cancela la frase
                 jr z,kr_lc
-                ld a,(cur_y)
-                cp 128
-                jr nc,kr_end
-                ld a,(UI_CURSOR)
-                or a
-                jr z,kr_end
-                push bc
-                call reset_sentence
-                pop bc
-                jr kr_scene
+                call kr_esc
+                jr kr_end
 kr_lc:          bit 4,b
                 jr z,kr_end
                 ld a,(cur_y)
@@ -614,6 +604,9 @@ kd_v:
                 call z,vm_abort_cutscene
 kd_end:         pop bc
                 ret
+kr_esc:         push bc                 ; como la tecla 9: VAR_CUTSCENEEXIT_KEY a la zona 4 y aborta la cutscene (si la variable es 0 no hace nada)
+                ld de,(VAR_CUTSCENEEXIT_KEY)
+                jr kd_v
 k_prev2:        defw 0
 cur_x:          defb 124
 cur_y:          defb 64
@@ -1121,15 +1114,13 @@ evt_esc:        ld hl,(TXTSTART)
 evt_nl:         call tx_newline
                 jr evt_l
 
-; el color del mensaje: el de habla del actor VAR_TALK_ACTOR (EGA -> Chroma), o blanco si no habla un actor o su color es el 0
-tx_setclr:      ld a,$0F
-                ld (tx_clr),a
-                ld a,(VAR_TALK_ACTOR)
-                or a
-                ret z
+; el color del mensaje: el de habla del actor VAR_TALK_ACTOR (EGA -> Chroma); si no habla un actor (nadie, $FF), _string[0].color, que guarda
+; actorOps(0, color, 5) en el campo +11 del registro del actor 0 (ScummVM: actorTalk con actor $FF). Blanco si el color es el 0
+tx_setclr:      ld a,(VAR_TALK_ACTOR)
                 call cp_act
-                ret nc
-                call actor_addr
+                jr c,sc_a
+                xor a
+sc_a:           call actor_addr
                 ld a,(ix+11)
                 and 15
                 ld e,a
@@ -1138,8 +1129,9 @@ tx_setclr:      ld a,$0F
                 add hl,de
                 ld a,(hl)
                 or a
-                ret z
-                ld (tx_clr),a
+                jr nz,sc_s
+                ld a,$0F
+sc_s:           ld (tx_clr),a
                 ret
 
 ; A = caracter: antes de escribirlo, si empieza palabra y no cabe en la fila, pasa a la siguiente.
@@ -1295,6 +1287,7 @@ ac_sp:          defb 0           ; fin del programa (el resto del codigo esta en
                 include "tables.inc"
                 include "progdata.inc"
                 org $A000               ; la imagen del overlay se carga en el area del bitmap (aun vacia): $8700-$9AFF son variables
+OVERLAY2_IMAGE: incbin "overlay2.bin"           ; el overlay 2 (sonido y guardar/cargar): ov_copy2 (overlay.asm) lo copia a su pagina; va el primero para que su direccion no dependa del tamano del overlay 1
 OVERLAY_IMAGE:  incbin "overlay.bin"
 OVERLAY_END:
 FONT6:          incbin "../../COMMON/font6.bin"      ; la fuente de 6 pixeles (EXAMPLES/EXPLORER/specfont6.bin); solo hace falta hasta que init_font la copia a TILES

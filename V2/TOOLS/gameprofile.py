@@ -14,13 +14,15 @@ Formato del bloque (little endian):
   +20  10 x u16: valor de VAR_KEYPRESS para las teclas 1 2 3 4 5 6 7 8 9 0 (0: sin uso)
   +40  2 x u16: objetos que getState da siempre por abiertos (bit 8 del estado; 0 = ninguno)
   +44  numero de ids que son actores (0 = 25, como Maniac Mansion); los demas numeros son objetos
-  +45  los textos
+  +45  u16 valor inicial de VAR_MACHINE_SPEED (variable 6): ScummVM lo pone a 0x7FFF en Zak (intro sincronizada con la musica); 0 en los demas
+  +47  4 x (script, sala): scripts que startScript no arranca si la sala actual es esa (script 0 = sin usar); Zak: 15 en la sala 45
+  +55  los textos
 """
 import struct
 import sys
 
 SIZE = 256
-FIRST_TEXT = 45
+FIRST_TEXT = 55
 KEYS = '1234567890'
 
 
@@ -85,6 +87,10 @@ def build(path):
     for i, o in enumerate([int(x) for x in c.get('objetos', {}).get('abiertos', '').split(',') if x.strip()][:2]):
         struct.pack_into('<H', out, 40 + 2 * i, o)
     out[44] = int(c.get('objetos', {}).get('actores', '0') or 0)
+    struct.pack_into('<H', out, 45, int(c.get('variables', {}).get('maquina', '0') or 0, 0))
+    for i, e in enumerate([x for x in c.get('scripts', {}).get('no_arrancar', '').split(',') if x.strip()][:4]):
+        sc, _, rm = e.partition(':')
+        out[47 + 2 * i], out[48 + 2 * i] = int(sc), int(rm)
     return bytes(out)
 
 

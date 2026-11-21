@@ -56,6 +56,7 @@ HOSTVEC         equ $EB6F       ; palabra: rutina de las instrucciones que van a
 EVVEC           equ $EB6B       ; palabra: rutina que atiende los sucesos del back-end (vm_init la pone a ev_null)
 TXTSTART        equ $EB6D       ; palabra: donde empieza, en el bufer de texto, lo que escribe display_dialog esta vez
 ACTORS          equ $EF00       ; NACTORS x ASIZE
+ACTPAL          equ $E830       ; paleta de cada actor (actorOps SO_PALETTE; 8 bytes por actor = 16 nibbles): el nibble del indice i guarda i XOR color, asi 0 = la paleta de identidad (_palette[i] = i)
 ROOMDIR         equ $F400       ; 64 x 16: pagina de entrada, direccion, pagina de salida, direccion, ancho,
                                 ;          pagina, direccion y tamano de los datos de cajas y objetos
 MSGBUF          equ $F800       ; MSGBUF_SIZE bytes
@@ -386,7 +387,10 @@ h_o2_actorOps:                          ; ARGS: actor, argumento, subopcode [, d
                 jr nz,ao_1
                 ld a,b
                 cp 5
-                ret z                   ; actor 0 y color: es el color del texto, sin actor
+                jr nz,ao_1
+                ld a,(ARGS+2)           ; actor 0 y color: _string[0].color, el color del texto sin actor; vive en el campo +11 del registro del actor 0 (tx_setclr)
+                ld (ACTORS+11),a
+                ret
 ao_1:
                 push bc
                 call deref_actor
@@ -396,11 +400,11 @@ ao_1:
                 cp 1
                 jr z,ao_sound
                 cp 4
-                jr z,ao_cost
+                jp z,ao_cost
                 cp 5
-                jr z,ao_color
+                jp z,ao_color
                 cp 2
-                ret z                   ; paleta: sin soporte todavia
+                jp z,ao_pal
                 cp 3
                 jr z,ao_name            ; nombre: el interfaz lo muestra en la frase (y los codigos de texto 6)
                 ld a,E_RANGE
@@ -432,8 +436,60 @@ ao_sound:
                 ld (ix+14),a
                 ret
 ao_cost:
+                call ao_palrst          ; setActorCostume: _palette[i] = i
                 ld a,(ARGS+2)
                 jp set_costume
+; la paleta del actor (ACTPAL + 8 * actor)
+ao_palad:       ld a,(ARGS)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld de,ACTPAL
+                add hl,de
+                ret
+ao_palrst:      push ix
+                call ao_palad
+                ld b,8
+aopr_l:         ld (hl),0
+                inc hl
+                djnz aopr_l
+                pop ix
+                ret
+; SO_PALETTE: ARGS+2 = color, ARGS+6 = indice del traje: _palette[indice] = color (solo los 16 colores de v2)
+ao_pal:         ld a,(ARGS+6)
+                cp 16
+                ret nc
+                ld c,a
+                call ao_palad           ; HL = paleta
+                ld a,c
+                srl a
+                ld e,a
+                ld d,0
+                add hl,de               ; byte del indice
+                ld a,(ARGS+2)
+                and 15
+                xor c                   ; nibble = color XOR indice
+                and 15
+                bit 0,c
+                jr z,aop_lo
+                rlca
+                rlca
+                rlca
+                rlca
+                ld b,a
+                ld a,(hl)
+                and $0F
+                or b
+                ld (hl),a
+                ret
+aop_lo:         ld b,a
+                ld a,(hl)
+                and $F0
+                or b
+                ld (hl),a
+                ret
 ao_color:
                 ld a,(ARGS+2)
                 ld (ix+11),a
@@ -574,7 +630,7 @@ cm_expand:
                 jr z,cm_int
                 cp 7
                 jr z,cm_str
-                jr cm_space             ; 5 y 6: sin soporte todavia
+                jp cm_name              ; 5 (verbo) y 6 (objeto o actor)
 cm_int:
                 push bc
                 push hl
@@ -632,6 +688,9 @@ cm_end:
                 xor a
                 ld (de),a
                 ret
+cm_name:                                ; convertVerbMessage / convertNameMessage (5 y 6): C = el codigo, CMVAR = la variable, DE = bufer -> DE; el overlay (ui_cmname, ui.asm)
+                call OVL_CMNAME
+                jp cm_space
 
 ; ---- escribir el mensaje (CHARSET_1 de ScummVM, sin dibujar)
 talker_ix:                              ; getTalkingActor + derefActorSafe: IX = actor, o carry si no hay

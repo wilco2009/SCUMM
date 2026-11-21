@@ -303,6 +303,105 @@ acc_miss:       ld a,(ac_n)
                 ret
 
 ; DE = firma del actor IX: lo que ac_draw lee de el, de la camara y de quien habla
+; la paleta del actor ac_id (ACTPAL + 8 * actor; nibble i = i XOR _palette[i]) -> ac_pm: codigo Chroma del color EGA i del traje -> codigo Chroma de _palette[i].
+; ac_pf = 0 si es la identidad. El indice 12 no se cambia (ScummVM: _palette[12] = 12 en v2). Conserva IX.
+ac_mkpal:       ld a,(ac_id)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld de,ACTPAL
+                add hl,de
+                push hl
+                xor a
+                ld b,8
+ampk_c:         or (hl)
+                inc hl
+                djnz ampk_c
+                pop hl
+                ld (ac_pf),a
+                ret z
+                ld c,0                  ; C = indice
+ampk_l:         ld a,c
+                srl a
+                ld e,a
+                ld d,0
+                push hl
+                add hl,de
+                ld a,(hl)
+                pop hl
+                bit 0,c
+                jr z,ampk_n
+                rrca
+                rrca
+                rrca
+                rrca
+ampk_n:         and 15
+                xor c                   ; A = _palette[C]
+                ld b,a
+                ld a,c
+                cp 12
+                jr nz,ampk_v
+                ld b,12
+ampk_v:         push hl
+                ld hl,ega2chroma
+                ld e,b
+                add hl,de
+                ld b,(hl)               ; B = Chroma del color nuevo
+                ld hl,ega2chroma
+                ld e,c
+                add hl,de
+                ld e,(hl)               ; E = Chroma del color del traje
+                ld hl,ac_pm
+                add hl,de
+                ld (hl),b
+                pop hl
+                inc c
+                ld a,c
+                cp 16
+                jr nz,ampk_l
+                ret
+
+; A = byte de color de una celda (tinta en el nibble alto, papel en el bajo) -> A remapeado con ac_pm si el actor tiene paleta propia. Conserva todo lo demas
+acd_pmap:       push af
+                ld a,(ac_pf)
+                or a
+                jr nz,apm_go
+                pop af
+                ret
+apm_go:         pop af
+                push bc
+                push de
+                push hl
+                ld e,a
+                and 15
+                ld c,a
+                ld b,0
+                ld hl,ac_pm
+                add hl,bc
+                ld d,(hl)               ; D = papel nuevo
+                ld a,e
+                rrca
+                rrca
+                rrca
+                rrca
+                and 15
+                ld c,a
+                ld hl,ac_pm
+                add hl,bc
+                ld a,(hl)
+                rlca
+                rlca
+                rlca
+                rlca
+                and $F0
+                or d
+                pop hl
+                pop de
+                pop bc
+                ret
+
 ac_hash:        ld hl,(ac_cam)
                 ld a,(ix+1)
                 call ach
@@ -334,6 +433,25 @@ ac_hash:        ld hl,(ac_cam)
                 ld a,(HAVEMSG)
                 call ach
                 ld a,(VAR_TALK_ACTOR)
+                call ach
+                push bc                 ; la paleta del actor (SO_PALETTE) cambia el dibujo
+                push hl
+                ld a,(ac_id)
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld bc,ACTPAL
+                add hl,bc
+                ld b,8
+                xor a
+ach_p:          add a,(hl)
+                rlca
+                inc hl
+                djnz ach_p
+                pop hl
+                pop bc
                 call ach
                 ld a,(ac_id)
                 ld e,a
@@ -400,7 +518,8 @@ ac_bptr:        ld a,(ac_id)            ; HL = la entrada del actor en ACB (inpu
                 add hl,de
                 ret
 
-ac_draw:        call ac_bptr            ; sin rectangulo hasta que se sepa cual es
+ac_draw:        call ac_mkpal
+                call ac_bptr            ; sin rectangulo hasta que se sepa cual es
                 xor a
                 jr c,acd_nb0
                 ld (hl),a
@@ -917,7 +1036,9 @@ acd_m1:         ld de,ac_mt
 acd_c0:         ld a,(ac_fl)
                 bit 1,a
                 jr z,acd_c1
-                ld c,(hl)               ; color uniforme
+                ld a,(hl)               ; color uniforme
+                call acd_pmap
+                ld c,a
                 ld a,4
                 call ac_wbo
                 ex de,hl
@@ -928,8 +1049,19 @@ acd_c2:         ld (hl),c
                 jp acd_skip
 acd_c1:         ld a,4
                 call ac_wbo
+                ld a,(ac_pf)
+                or a
+                jr nz,acd_c1m
                 ld bc,8
                 ldir
+                jr acd_skip
+acd_c1m:        ld b,8
+acd_c1l:        ld a,(hl)
+                call acd_pmap
+                ld (de),a
+                inc hl
+                inc de
+                djnz acd_c1l
 acd_skip:       ld hl,(ac_nx)
                 pop bc
                 dec b

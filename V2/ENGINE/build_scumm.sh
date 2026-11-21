@@ -3,9 +3,11 @@
 #   1. scumm.asm (con el overlay.bin anterior o vacio)  2. overlay.asm (usa scumm.sym)  3. scumm.asm otra vez
 cd "$(dirname "$0")" || exit 1
 [ -f overlay.bin ] || : > overlay.bin
+[ -f overlay2.bin ] || : > overlay2.bin
 pasmo scumm.asm scumm.bin scumm.sym || exit 1
 python -I ../TOOLS/savestamp.py scumm.sym save.asm > savestamp.inc || exit 1     # marca de las partidas guardadas (solo variables de datos)
 pasmo overlay.asm overlay.bin overlay.sym || exit 1
+pasmo overlay2.asm overlay2.bin overlay2.sym || exit 1     # el overlay 2 (sonido, guardar/cargar) usa overlay.sym
 pasmo scumm.asm scumm.bin scumm.sym || exit 1
 cp scumm.bin test/build/scumm.bin; cp scumm.sym test/build/scumm.sym
-echo "programa hasta: $(grep -i '^ac_sp' scumm.sym)   overlay: $(stat -c %s overlay.bin) bytes"
+echo "programa hasta: $(grep -i '^ac_sp' scumm.sym)   overlay 1: $(stat -c %s overlay.bin) bytes (de 8192), overlay 2: $(stat -c %s overlay2.bin) bytes (de OV2_COPY = $((0xC00)))"

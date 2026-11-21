@@ -137,6 +137,13 @@ hu_tkey:        ld a,$7F                ; B (flanco): salta el mensaje en pantal
                 jr z,ht_nb
                 ld hl,0
                 ld (TALKDLY),hl
+                ld hl,(CUTPTR)          ; ademas, con una cutscene con override en marcha, la B es el clic derecho (ESC, scumm.asm kr_esc)
+                ld a,h
+                or l
+                jr z,ht_nb
+                push de
+                call kr_esc
+                pop de
 ht_nb:          ld a,$FB
                 in a,(254)
                 and $10
@@ -152,15 +159,13 @@ ht_nb:          ld a,$FB
                 xor 1
                 ld (hv_top),a
                 ld hl,HRUI_PREV         ; todo se vuelve a pintar
-                ld de,HRUI_PREV+1
+                ld a,$FF
                 ld bc,8*40-1
-                ld (hl),$FF
-                ldir
+                call ui_fill
                 ld hl,TOPPREV
-                ld de,TOPPREV+1
+                ld a,$FF
                 ld bc,TXT_ROWS*40-1
-                ld (hl),$FF
-                ldir
+                call ui_fill
                 ld a,(UI_DIRTY)         ; el inventario se vuelve a dibujar
                 or 4
                 ld (UI_DIRTY),a
@@ -288,18 +293,48 @@ hg_l:           ld a,(ix+0)             ; x1 << 2 | x2 >> 4
                 add a,c
                 add a,HR_ATT>>8
                 ld h,a
-                ld b,8
-                call hu_clr
-hg_a:           ld (hl),a
-                inc hl
-                ld (hl),a
-                inc hl
-                ld (hl),a
-                ld de,30
+                call hu_clr             ; B, C, D = los atributos de las 3 celdas de 8 pixeles del grupo
+                ld b,a
+                ld c,a
+                ld d,a
+                jr nc,hg_a              ; los mensajes: un solo color
+                ld a,(hu_r)
+                dec a
+                cp 3
+                jr nc,hg_a              ; la frase y el inventario: blanco
+                push hl                 ; la interfaz (filas 0-3): el color de cada celda sale de UIAT (ui.asm), OR de los dos caracteres que toca:
+                ld hl,(hu_src)          ; celda 0 = caracteres 0 y 1 del grupo, celda 1 = 1 y 2, celda 2 = 2 y 3 (6 pixeles por caracter, 8 por celda)
+                ld de,UIAT-UIVB-4
                 add hl,de
-                djnz hg_a
+                ld a,(hl)
+                inc hl
+                or (hl)
+                xor $0F
+                ld b,a
+                ld a,(hl)
+                inc hl
+                or (hl)
+                xor $0F
+                ld c,a
+                ld a,(hl)
+                inc hl
+                or (hl)
+                xor $0F
+                ld d,a
+                pop hl
+hg_a:           ld e,8
+hg_l2:          ld (hl),b
+                inc hl
+                ld (hl),c
+                inc hl
+                ld (hl),d
+                ld a,l                  ; siguiente linea (32 bytes mas abajo)
+                add a,30
+                ld l,a
+                dec e
+                jr nz,hg_l2
                 ret
-; A = atributo del texto de la fila hu_r: blanco brillante, o (los mensajes) el color del que habla
+; A = atributo del texto de la fila hu_r: blanco brillante (carry: es la zona de la interfaz) o (los mensajes, sin carry) el color del que habla
 hu_clr:         ld a,(tx_on)
                 or a
                 jr z,hc_w
@@ -313,7 +348,8 @@ hu_clr:         ld a,(tx_on)
                 cp TXT_ROW-UI_R0
                 jr c,hc_w
 hc_t:           ld a,(tx_clr)
+                or a
                 ret
 hc_w:           ld a,$0F
+                scf
                 ret
-hu_zero:        defs 8,0

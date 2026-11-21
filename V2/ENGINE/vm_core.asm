@@ -34,7 +34,9 @@ OBJST           equ $E200       ; estado de cada objeto (780)
 PF_OPEN         equ PROF+40     ; perfil del juego: dos objetos (u16, 0 = ninguno) que getState da siempre por abiertos (bit 8 del estado)
 ACTN            equ $971E       ; byte: cuantos numeros (0..ACTN-1) son actores y no objetos; NACTORS salvo que el perfil diga otra cosa
 WINPG           equ $971F       ; byte: la pagina fisica que tiene la ventana de datos (map_phys)
+PF_SPEED        equ PROF+45     ; perfil: valor inicial de VAR_MACHINE_SPEED (u16)
 PF_ACT          equ PROF+44     ; perfil: numero de ids de actor (0 = NACTORS)
+PF_NOSTART      equ PROF+47     ; perfil: 4 pares (script, sala) que startScript no arranca (script 0 = par sin usar); Zak: script 15 en la sala 45 (proteccion de copia)
 OBJOWN          equ $E520       ; dueno de cada objeto (780)
 SLOTS           equ $E900       ; NSLOT x 16
 ; ranura: +0 estado, +1 donde, +2/+3 numero, +4 pagina, +5/+6 puntero, +7..+10 retardo (32 bits con signo),
@@ -100,6 +102,11 @@ vm_init:
                 xor a
                 ld (NBOXES),a
                 ld (NOBJS),a
+                ld hl,ACTPAL                    ; paletas de los actores: identidad
+                ld (hl),0
+                ld de,ACTPAL+1
+                ld bc,NACTORS*8-1
+                ldir
                 call act_init
                 ld ix,ACTORS
                 ld b,NACTORS
@@ -169,9 +176,9 @@ vro_found:
                 ld (APIW),a
                 jp start_new_slot
 
-vm_frame:                               ; un fotograma de scummLoop: retardos, mensaje, variables y scripts
-                ld a,(DELTA)
-                cp 16
+vm_frame:                               ; un fotograma de scummLoop, en el orden de ScummVM (scumm.cpp, v0-v6): retardos, mensaje, entrada, variables, scripts, frase, actores
+                ld a,(DELTA)            ; DELTA en jiffies (1/60 s). ScummVM tambien recorta a 15 (scummLoop) lo que descuenta de retardos y _talkDelay
+                cp 16                   ; (VAR_TIMER/TMR_n reciben el delta sin recortar, pero v2 no los tiene)
                 jr c,vf_ok
                 ld a,15
                 ld (DELTA),a
@@ -187,23 +194,23 @@ vf_ok:
                 ld hl,0
 vf_t:
                 ld (TALKDLY),hl
-                call display_dialog
+                call display_dialog     ; v0-v3: displayDialog antes de processInput
                 ld a,(ERR)
                 or a
                 ret nz
-                ld a,(HAVEMSG)
-                ld l,a
-                ld h,0
-                ld (VAR_HAVE_MSG),hl          ; VAR_HAVE_MSG
                 call process_input      ; el clic o la tecla pendiente: script 4
                 ld a,(ERR)
                 or a
                 ret nz
-                call check_sentence     ; la frase que espera: script 2
+                ld a,(HAVEMSG)          ; scummLoop_updateScummVars: VAR_HAVE_MSG = _haveMsg, despues de processInput
+                ld l,a
+                ld h,0
+                ld (VAR_HAVE_MSG),hl
+                call run_all
                 ld a,(ERR)
                 or a
                 ret nz
-                call run_all
+                call check_sentence     ; checkAndRunSentenceScript (script 2), tras runAllScripts
                 ld a,(ERR)
                 or a
                 ret nz
@@ -1375,6 +1382,8 @@ h_o2_startScript:
                 ld a,d
                 or a
                 jr nz,hss_go
+                call OVL_NOSTART        ; "no arrancar el script N si la sala es M" del perfil (o2_startScript de ScummVM: Zak, script 15 en la sala 45)
+                ret z
                 ld a,e
                 cp 87
                 jr nz,hss_155

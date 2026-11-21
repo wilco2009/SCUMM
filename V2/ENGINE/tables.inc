@@ -64,7 +64,7 @@ disp_table:
         defw sp_v_W1_J, h_o5_isNotEqual   ; 08 o5_isNotEqual
         defw sp_B1_W2, h_o5_faceActor   ; 09 o5_faceActor
         defw sp_R_W1, h_o2_assignVarWordIndirect   ; 0A o2_assignVarWordIndirect
-        defw sp_W1_b, h_host   ; 0B o2_setObjPreposition
+        defw sp_W1_b, h_o2_setObjPreposition   ; 0B o2_setObjPreposition
         defw sp_B1_b, h_host   ; 0C o2_resourceRoutines
         defw sp_B1_B2_b, h_o5_walkActorToActor   ; 0D o5_walkActorToActor
         defw sp_B1_W2, h_o2_putActorAtObject   ; 0E o2_putActorAtObject
@@ -128,7 +128,7 @@ disp_table:
         defw sp_v_W1_J, h_o5_isEqual   ; 48 o5_isEqual
         defw sp_B1_W2, h_o5_faceActor   ; 49 o5_faceActor
         defw sp_B1, h_o2_chainScript   ; 4A o2_chainScript
-        defw sp_W1_b, h_host   ; 4B o2_setObjPreposition
+        defw sp_W1_b, h_o2_setObjPreposition   ; 4B o2_setObjPreposition
         defw sp_none, h_o2_waitForSentence   ; 4C o2_waitForSentence
         defw sp_B1_B2_b, h_o5_walkActorToActor   ; 4D o5_walkActorToActor
         defw sp_B1_W2, h_o2_putActorAtObject   ; 4E o2_putActorAtObject
@@ -192,7 +192,7 @@ disp_table:
         defw sp_v_W1_J, h_o5_isNotEqual   ; 88 o5_isNotEqual
         defw sp_B1_W2, h_o5_faceActor   ; 89 o5_faceActor
         defw sp_R_W1, h_o2_assignVarWordIndirect   ; 8A o2_assignVarWordIndirect
-        defw sp_W1_b, h_host   ; 8B o2_setObjPreposition
+        defw sp_W1_b, h_o2_setObjPreposition   ; 8B o2_setObjPreposition
         defw sp_B1_b, h_host   ; 8C o2_resourceRoutines
         defw sp_B1_B2_b, h_o5_walkActorToActor   ; 8D o5_walkActorToActor
         defw sp_B1_W2, h_o2_putActorAtObject   ; 8E o2_putActorAtObject
@@ -256,7 +256,7 @@ disp_table:
         defw sp_v_W1_J, h_o5_isEqual   ; C8 o5_isEqual
         defw sp_B1_W2, h_o5_faceActor   ; C9 o5_faceActor
         defw sp_B1, h_o2_chainScript   ; CA o2_chainScript
-        defw sp_W1_b, h_host   ; CB o2_setObjPreposition
+        defw sp_W1_b, h_o2_setObjPreposition   ; CB o2_setObjPreposition
         defw sp_dec_pseudoroom, h_host   ; CC o5_pseudoRoom
         defw sp_B1_B2_b, h_o5_walkActorToActor   ; CD o5_walkActorToActor
         defw sp_B1_W2, h_o2_putActorAtObject   ; CE o2_putActorAtObject

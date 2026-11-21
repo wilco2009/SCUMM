@@ -11,7 +11,8 @@ Diseno y estado: `claude/planning/scumm_interprete.md` y `claude/planning/scumm_
 | `mcu.asm`, `loader.asm` | Handshake con el MCU y ficheros de la SD; carga de `DATA.BIN` (ver `claude/planning/scumm_etapa2.md`) |
 | `scumm.asm` | El programa para el ZX81: núcleo + carga + arranque + texto de los mensajes + bucle principal. `compila_scumm.bat` lo copia a la SD del emulador |
 | `hr.asm` | Vídeo HiRes 8x1 de 16 colores: la sala en páginas de la RAM extendida, composición de columnas con objetos, scroll fino y motor de scroll por hardware, redibujado de objetos |
-| `hrui.asm`, `dark.asm`, `actors.asm`, `ui.asm`, `cam.asm`, `snd.asm`, `save.asm` | El **overlay** (`overlay.asm`, una página en el bloque 0): interfaz de 40 columnas de 6 píxeles (`hr_ui`), oscuridad con los atributos, sprites de los actores (con caché), verbos, cámara, sonido, guardar/cargar |
+| `hrui.asm`, `dark.asm`, `actors.asm`, `ui.asm`, `cam.asm` | El **overlay 1** (`overlay.asm`, una página en el bloque 0): interfaz de 40 columnas de 6 píxeles (`hr_ui`), oscuridad con los atributos, sprites de los actores (con caché), verbos, cámara |
+| `snd.asm`, `save.asm` | El **overlay 2** (`overlay2.asm`, otra página, `OVL2_PAGE` = 51): sonido y guardar/cargar. Solo se mapea en el bloque 0 mientras se ejecuta, por las puertas `ovg_*` del overlay 1 (un `OUT`; no cuesta nada en el residente). Dentro no se puede llamar al overlay 1 ni a rutinas del residente que lo llamen (`OVL_xxx`). Ver `PROGRESO_OVERLAY.md` |
 | `tables.inc` | Tabla de despacho. **Generada** por `../TOOLS/gen_vmtables.py`; no editar |
 | `test/` | Arnes de PC: el Z80 de EightyOne con el paginado real, contra un modelo en Python |
 
@@ -47,6 +48,11 @@ Variables de entorno de `test_scumm.exe`: `TS_POKE=fotograma:dir:valor,...` (esc
 (perfil por rutina y las vueltas más pesadas), `TS_BP`/`TS_TRACE`, `ZX81_ROM` (la ROM del ZX81; ya no hace falta para la fuente). `render_screen.py` dibuja el volcado.
 Las dos versiones de `scumm.bin` de una comparación no dan volcados idénticos fotograma a fotograma si cambian los tiempos (el motor del arnés acaba por instrucciones):
 compara solo cuando el estado (`hv_cam`, `hv_fine`, sala) coincide.
+
+### Depuración: arrancar Zak directamente en una sala
+
+`compila_scumm.bat zak 23` deja Zak en la sala 23 (sin intro, con Zak y la interfaz activos); `compila_scumm.bat zak 23 40 30` fija además la posición X Y de Zak (unidades de `putActor`: x en 8 px, y en 2 px; por omisión, el centro de la primera caja pisable, o (20,56) si la sala no tiene cajas, p.ej. la 45).
+Solo cambia el script 1 de `DATA.BIN` (`pack_data.py --debug-room N[,X,Y]`: la preparación del script 1 + la inicialización del script 108 + «Zak en la sala N»); no toca el Z80. Sin el segundo argumento los datos son idénticos byte a byte a los normales. En el arnés: `pack_data.py ... --debug-room 23` y `test_scumm.exe scumm.bin scumm.sym <sd> 300 v.bin ""`.
 
 ### Medir el programa completo de Zak (perfil y T por instrucción de script)
 
@@ -93,3 +99,9 @@ La cabecera de `SAVEnn.SAV` (8 bytes) lleva: la **marca del programa** (`savesta
 - **Probar en el arnés:** salto a la sala 4 con `TS_POKE=319:EF30:4,319:EB11:4,319:EB12:0,319:EF31:15,319:EF33:3A TS_CALL=320:5399 test_scumm.exe scumm.bin scumm.sym test/build/sdzak 520 v.bin "9:20,-:24,9:60,-:64"`; `render_screen.py` imprime los sprites normales y extra y el máximo por línea.
 - **Mascara de profundidad de los objetos:** en v2 cada objeto lleva su mascara tras los pixeles de su OBIM y, al dibujarse (estado con el bit 8), **sustituye** (ceros incluidos) a la de la sala en sus tiras y filas (`GdiV2::prepareDrawBitmap`). `TOOLS/lfl2gfx.py mask_blob_objs` la empaqueta en `DATA.BIN` tras la mascara de la sala (una palabra delante con el desplazamiento de la tabla de objetos) y `mask_px.inc` (`mk_objs`) la aplica sobre la ventana de BACKBUF al decodificar la mascara de un personaje, en el orden de `HR_DLIST` (los objetos que se dibujan, del ultimo al primero). Una sala cuya mascara con la de sus objetos pase de 6000 bytes pierde las mascaras de objeto mas grandes (`pack_data.MASK_MAX`; en Zak, la sala 38). Prueba: `sh test/mask_obj.sh` (Zak, sala 11: BACKBUF contra ScummVM con distintas ventanas y listas de objetos).
 - **Pinchar sobre un actor (`actorFromPos`):** el rectángulo es el que ha dibujado el actor (`ACB` = `$F3B0`, 4 bytes con signo por actor 1-18: izquierda, derecha, arriba y abajo respecto de x*8 e y*2; lo escribe `ac_draw`), como `_top`/`_bottom` de ScummVM. Sin dato (actor sin dibujar, número > 18, o pruebas sin overlay) vale el de 16 x 32 alrededor de los pies de antes.
+
+### Colores de la botonera (A9)
+
+- Los verbos llevan su color en `UIAT` (`ui.asm`, $9A40: un byte por caracter de las filas 1-3 de la zona de abajo; valor XOR $0F del atributo de Chroma). `hrui.asm` (`hg_u`) saca el atributo de cada celda de 8 pixeles como OR de los dos caracteres de 6 pixeles que toca, asi que en la frontera entre dos verbos pegados manda el de valor mas alto (atenuado > resaltado > normal).
+- Normal = blanco brillante `$0F` (sin cambios); el verbo bajo el cursor (`ui_hover`, `UI_HOV`, solo si esta en modo 1 como en `checkV2MouseOver`) sale en amarillo `$0E` (hicolor 14 de ScummVM); un verbo en modo 2 (`verbOps` 0xFF) sale gris `$08` (dimcolor 8). Los colores del interprete de ScummVM (color 2 verde, frase 13) no se copian: se mantiene el blanco de siempre.
+- No se guarda en las partidas (UIAT y UI_HOV estan fuera de las zonas volcadas) ni cambia DATA.BIN. No hay resaltado del renglon de la frase ni del inventario.

@@ -186,17 +186,15 @@ h_o2_findObject:                        ; ARGS: resultado, x, y (x * 8 e y * 2 s
                 ld a,(ARGS)
                 jp write_var
 
-; getActorFromPos aproximado: el primer actor visible de la sala cuyo rectangulo contiene el punto. El rectangulo es el que dibuja el actor
-; (ACB: lo que escribe ac_draw en el overlay; en ScummVM, _top / _bottom y las columnas usadas) o, si no lo ha dibujado (ACB a cero, tambien en las
-; pruebas sin overlay) o es un actor de numero alto, uno de 16 x 32 alrededor de sus pies.
+; getActorFromPos (actor.cpp, v2): salta al protagonista (VAR_EGO); y2 = y del actor, y1 = y - 80 (si (uint16)y1 > 128, y1 = 1) con y1 <= y <= y2,
+; y la columna: testGfxUsageBit(x / 8, i), es decir que la franja de 8 pixeles (absoluta) del clic este entre las que ha dibujado el actor.
+; Equivalencia por el hardware: los sprites son celdas de 8 x 8 y no hay mapa de bits de uso por franja; las franjas dibujadas son las que cubre el
+; rectangulo que escribe ac_draw en ACB (izquierda..derecha respecto de x * 8, de ahi la franja (x*8+izq)>>3 .. (x*8+der-1)>>3). Un actor que ac_draw no
+; ha dibujado (ACB a cero, tambien en las pruebas sin overlay) o de numero > ACB_N usa 16 pixeles de ancho alrededor de x (ScummVM: sin bits = no acierta).
 ACB             equ ACTORS+NACTORS*ASIZE        ; 4 bytes por actor 1..ACB_N: desplazamientos con signo (izquierda, derecha, arriba, abajo) respecto de x * 8 e y * 2; 0 = sin dato
 ACB_N           equ 18
-AFP_W           equ ACB+4*ACB_N                 ; 4 palabras: los mismos desplazamientos ya con signo de 16 bits
 h_o2_actorFromPos:
-                ld hl,(ARGS+2)
-                add hl,hl
-                add hl,hl
-                add hl,hl
+                ld hl,(ARGS+2)         ; franja x = x / 8 (ScummVM: x * 8 / 8)
                 ld (FO_X),hl
                 ld hl,(ARGS+4)
                 add hl,hl
@@ -208,26 +206,36 @@ afp_l:          push bc
                 ld a,(CURROOM)
                 cp (ix+0)
                 jr nz,afp_next
+                ld a,(VARS)             ; VAR_EGO: el protagonista no cuenta (v2)
+                cp c
+                jr z,afp_next
                 ld a,(ix+9)
                 or a
                 jr z,afp_next
-                call afp_off
-                ld l,(ix+1)             ; x * 8 + izquierda <= x < x * 8 + derecha
-                ld h,(ix+2)
-                add hl,hl
-                add hl,hl
-                add hl,hl
                 ld de,(FO_X)
-                ld bc,AFP_W
-                call afp_in
+                call OVL_AFPX           ; la franja del clic es una de las que dibuja el actor (overlay.asm)
                 jr nc,afp_next
-                ld l,(ix+3)             ; y * 2 + arriba <= y < y * 2 + abajo
+                ld l,(ix+3)             ; y2 = y * 2 del actor: y <= y2
                 ld h,(ix+4)
                 add hl,hl
                 ld de,(FO_Y)
-                ld bc,AFP_W+4
-                call afp_in
-                jr nc,afp_next
+                call sless
+                jr c,afp_next
+                ld de,80                ; y1 = y2 - 80; si (uint16)y1 > 128, y1 = 1
+                or a
+                sbc hl,de
+                jr c,afp_y1
+                ld a,h
+                or a
+                jr nz,afp_y1
+                ld a,l
+                cp 129
+                jr c,afp_y1k
+afp_y1:         ld hl,1
+afp_y1k:        ld de,(FO_Y)
+                ex de,hl                ; HL = y, DE = y1: y >= y1
+                call sless
+                jr c,afp_next
                 pop bc
                 ld b,0
                 jr afp_w
@@ -239,65 +247,6 @@ afp_next:       ld de,ASIZE
                 ld bc,0
 afp_w:          ld a,(ARGS)
                 jp write_var
-
-; HL = base, DE = punto, BC -> dos palabras (desde, hasta) -> carry si base + desde <= punto < base + hasta (con signo)
-afp_in:         ex de,hl
-                or a
-                sbc hl,de               ; HL = punto - base
-                push hl
-                call afp_ld
-                pop hl
-                push hl
-                call sless
-                jr c,afi_out            ; antes del principio
-                call afp_ld
-                pop hl
-                jp sless                ; carry si antes del final
-afi_out:        pop hl
-                or a
-                ret
-afp_ld:         ld a,(bc)
-                ld e,a
-                inc bc
-                ld a,(bc)
-                ld d,a
-                inc bc
-                ret
-
-; C = actor -> AFP_W: los cuatro desplazamientos (los de ACB, con signo, o 16 x 32 si no hay dato)
-afp_off:        ld a,c
-                cp ACB_N+1
-                jr nc,afo_d
-                dec a
-                add a,a
-                add a,a
-                ld e,a
-                ld d,0
-                ld hl,ACB
-                add hl,de
-                inc hl
-                ld a,(hl)               ; derecha: 0 = el actor no ha dibujado nada
-                dec hl
-                or a
-                jr z,afo_d
-                ld de,AFP_W
-                ld b,4
-afo_l:          ld a,(hl)
-                ld (de),a
-                inc hl
-                inc de
-                rla
-                sbc a,a
-                ld (de),a
-                inc de
-                djnz afo_l
-                ret
-afo_d:          ld hl,afo_dflt
-                ld de,AFP_W
-                ld bc,8
-                ldir
-                ret
-afo_dflt:       defw -8, 8, -32, 0
 
 ; ---------------------------------------------------------------------------------------------- objetos: codigo y verbos
 ; DE = objeto, ROS_VERB = verbo -> A = offset del verbo en su bloque (0 = no hay); APIA = direccion del bloque con su
@@ -842,9 +791,21 @@ po_1:           call state_get
                 add hl,de
                 ld a,(hl)
                 cp 15
-                jr z,po_do
+                jr z,po_c
                 or a
                 ret nz                  ; ya esta en un inventario
+po_c:           push af                 ; getObjectIndex == -1: un objeto que no esta en la sala se ignora (where_is_object solo mira la lista de la sala si el dueno es 15)
+                ld (hl),15
+                push hl
+                ld hl,(ARGS)
+                call where_is_object
+                pop hl
+                ld c,a
+                pop af
+                dec c
+                jr z,po_do
+                ld (hl),a               ; no esta en la sala: el dueno no cambia
+                ret
 po_do:          ld a,(VARS)             ; el protagonista
                 ld (hl),a
                 call inv_add
@@ -1213,8 +1174,9 @@ h_o2_lights:
                 ld (VAR_CURRENT_LIGHTS),hl
 li_h:           jp h_host
 
-; objbyte: HL = objeto, C = desplazamiento dentro de su bloque OBCD -> A = ese byte y NC; CF si el objeto no esta en la sala ni en un inventario
-objbyte:
+; objptr: HL = objeto, C = desplazamiento dentro de su bloque OBCD -> HL = esa direccion en la ventana de datos (con su pagina mapeada; restore_win la deja como estaba) y NC;
+; CF si el objeto no esta en la sala ni en un inventario
+objptr:
                 push hl
                 push bc
                 call where_is_object
@@ -1242,6 +1204,15 @@ objbyte:
                 pop bc
                 ld b,0
                 add hl,bc
+                or a
+                ret
+ob_no:          scf
+                ret
+
+; objbyte: HL = objeto, C = desplazamiento dentro de su bloque OBCD -> A = ese byte y NC; CF si el objeto no esta en la sala ni en un inventario
+objbyte:
+                call objptr
+                ret c
                 ld c,(hl)
                 push bc
                 call restore_win
@@ -1249,8 +1220,25 @@ objbyte:
                 ld a,c
                 or a
                 ret
-ob_no:          scf
-                ret
+
+; setObjPreposition (W1, b): bits 5-7 del byte 12 del bloque OBCD del objeto (en la sala o en un inventario) = b, el resto del byte intacto
+; (o2_setObjPreposition de ScummVM). Como alli, el cambio vive en el bloque cargado: no se guarda en las partidas y se pierde si la cache de datos desaloja la pagina
+h_o2_setObjPreposition:
+                ld hl,(ARGS)
+                ld c,12
+                call objptr
+                ret c
+                ld a,(ARGS+2)
+                rrca
+                rrca
+                rrca
+                and $E0
+                ld e,a
+                ld a,(hl)
+                and $1F
+                or e
+                ld (hl),a
+                jp restore_win
 
 ; getObjPreposition (R, W1): la preposicion del objeto (bits 5-7 del byte 12 de su bloque); 0 si no esta en la sala ni en un inventario
 h_o2_getObjPreposition:
