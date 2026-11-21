@@ -109,3 +109,4 @@ AC_LC           equ $94D0           ; NACTORS bytes: su traje la ultima vez
 ; ac_wb: $DC80, en el bloque de atributos (sitio libre tras HR_LATT = $DC00 + 128; hr_clear lo pone a cero en cada sala, no importa). AC_OVF, AC_LF y AC_LC:
 ; entre INVSL y BACKBUF ($9484-$94FF, libre): van dentro de lo que guarda save.asm (SV_LEN_I) y no los borra hr_clear. ac_xd: el byte +30 de la entrada 0 de los
 ; sprites extra (la FPGA no lo mira; no lo toca hr_clear)
+cm_lx           equ ACSIG+191           ; (fuera de lo que guarda save.asm: no cambia la marca de las partidas) camara: ultima x (celdas, byte bajo) del actor que se sigue; si no cambia, el cursor en el borde mueve la camara (cam.asm)

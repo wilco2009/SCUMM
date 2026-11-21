@@ -384,7 +384,19 @@ cf1:            call cp_act
 ; disparadores 10 y 30 de ScummVM sobre 40 tiras, centro en la 20) del centro, pasa al modo 3 (_movingToActor): va tras el a 8 pixeles por fotograma hasta que
 ; la celda de la camara es la suya y vuelve al modo 2. Adaptacion: nuestra ventana mide 256 (32 celdas), los +-80 caben dentro (hay 48 pixeles de margen) y
 ; cm_clamp (cm_fin) hace de limite del destino (128..ancho-128, no 160..ancho-160: la ventana estrecha llega asi a los dos bordes de la sala)
-cf2:            ld a,(cam_mode)
+; el actor no se ha movido y la camara no va tras el (modo 2): sigue donde esta, y el cursor en el borde de la pantalla puede desplazarla (cm_edge). Nuestra ventana
+; (256) es mas estrecha que la pantalla del original (320): sin esto el actor parado en un extremo la dejaria pegada a el, sin poder ver el otro lado (p. ej. la sala 30).
+; En cuanto el actor se mueve vale la regla de ScummVM (disparadores de 80 pixeles)
+cf2:            ld hl,cm_lx
+                ld a,c
+                cp (hl)
+                ld (hl),a
+                jr nz,cf_go
+                ld a,(cam_mode)
+                cp 3
+                jp nz,cm_norm
+cf_go:
+                ld a,(cam_mode)
                 cp 3
                 jr z,cf_mv
                 ld hl,(cam_cx)
@@ -411,6 +423,7 @@ cf_mv:          ld h,b
                 add hl,hl
                 ex de,hl                ; DE = x del actor en pixeles
                 ld hl,(cam_cx)
+                push hl                 ; centro de antes
                 or a
                 sbc hl,de
                 jr z,cf_a
@@ -422,7 +435,15 @@ cf_mv:          ld h,b
                 jr cf_s
 cf_p:           add hl,de
 cf_s:           ld (cam_cx),hl
-cf_a:           ld hl,(cam_cx)
+                call cm_clamp
+cf_a:           pop de
+                ld c,(ix+1)             ; (cm_clamp destruye BC)
+                ld b,(ix+2)
+                ld hl,(cam_cx)
+                or a
+                sbc hl,de
+                jr z,cf_arr             ; la camara no se ha movido (en el limite del recorrido o ya esta): llegada
+                ld hl,(cam_cx)
                 srl h
                 rr l
                 srl h
@@ -432,7 +453,7 @@ cf_a:           ld hl,(cam_cx)
                 or a
                 sbc hl,bc
                 jr nz,cm_fin
-                ld a,2                  ; ha llegado: de nuevo a esperar
+cf_arr:         ld a,2                  ; ha llegado: de nuevo a esperar
                 ld (cam_mode),a
 cm_fin:         call cm_clamp
                 ld b,4
@@ -441,6 +462,9 @@ cm_fin:         call cm_clamp
 ; el cursor en el borde derecho (cur_x >= 240) o izquierdo (cur_x <= 8) mueve el centro de la camara
 cm_edge:
                 IF DEMO = 0
+                ld a,(UI_CURSOR)        ; cursor apagado (cutscene, camara fijada por el script): el borde no la mueve
+                or a
+                ret z
                 ld a,(cur_y)            ; en la parte de abajo el borde cambia la ventana de la interfaz (ui_scroll), no la camara
                 cp 128
                 ret nc
