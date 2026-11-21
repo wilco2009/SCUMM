@@ -80,11 +80,43 @@ ho_ego:         ld a,2                  ; loadRoomWithEgo: la camara salta al pr
                 ld a,1
                 ld (cam_new),a
                 ret
-ho_fol:         ld a,(ARGS)             ; actorFollowCamera
-                ld (cam_fol),a
-                ld a,2
+ho_fol:         ld a,2                  ; actorFollowCamera (setCameraFollows + setCameraAt, camera.cpp:34-48,62-86): sigue al actor; no se esta moviendo hacia el (modo 2)
                 ld (cam_mode),a
-                ret
+                ld a,(ARGS)
+                ld (cam_fol),a
+                call cp_act
+                ret nc
+                call actor_addr
+                ld a,(CURROOM)
+                cp (ix+0)
+                ret nz
+                ld l,(ix+1)             ; HL = x del actor en pixeles
+                ld h,(ix+2)
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld de,(cam_cx)
+                or a
+                sbc hl,de
+                jr nc,fo1
+                ld a,h                  ; |actor - centro|
+                cpl
+                ld h,a
+                ld a,l
+                cpl
+                ld l,a
+                inc hl
+fo1:            ld de,-161              ; a mas de 160 (_screenWidth / 2): la camara salta (si no, el barrido lo hace cm_fol al pasar de los disparadores)
+                add hl,de
+                ret nc
+                ld l,(ix+1)
+                ld h,(ix+2)
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld (cam_cx),hl
+                call cm_clamp
+                jp cm_snap
 ho_pan:         ld a,1                  ; panCameraTo(x): el destino es x * 8
                 ld (cam_mode),a
                 call cm_arg8
@@ -300,6 +332,8 @@ cam_update:     ld a,(gf_have)
                 jr z,cm_pan
                 cp 2
                 jr z,cm_fol
+                cp 3
+                jr z,cm_fol
 cm_norm:        call cm_edge            ; sin actor al que seguir, el cursor en el borde de la pantalla la desplaza
                 jp cm_fin
 cm_pan:         ld hl,(cam_cx)
@@ -329,8 +363,10 @@ cf1:            call cp_act
                 ld a,(CURROOM)
                 cp (ix+0)
                 jr nz,cm_norm
-                ld l,(ix+1)             ; destino = x * 8
-                ld h,(ix+2)
+                ld c,(ix+1)             ; BC = x / 8 (celdas); destino = x * 8
+                ld b,(ix+2)
+                ld h,b
+                ld l,c
                 add hl,hl
                 add hl,hl
                 add hl,hl
@@ -344,27 +380,60 @@ cf1:            call cp_act
                 ld (cam_cx),hl
                 call cm_clamp
                 jp cm_snap
-cf2:            ld de,(cam_cx)
+; seguimiento de moveCamera (camera.cpp:119-159): BC = celda del actor (x / 8). Modo 2: la camara espera; cuando el actor pasa a mas de 10 celdas (80 pixeles; los
+; disparadores 10 y 30 de ScummVM sobre 40 tiras, centro en la 20) del centro, pasa al modo 3 (_movingToActor): va tras el a 8 pixeles por fotograma hasta que
+; la celda de la camara es la suya y vuelve al modo 2. Adaptacion: nuestra ventana mide 256 (32 celdas), los +-80 caben dentro (hay 48 pixeles de margen) y
+; cm_clamp (cm_fin) hace de limite del destino (128..ancho-128, no 160..ancho-160: la ventana estrecha llega asi a los dos bordes de la sala)
+cf2:            ld a,(cam_mode)
+                cp 3
+                jr z,cf_mv
+                ld hl,(cam_cx)
+                srl h
+                rr l
+                srl h
+                rr l
+                srl h
+                rr l
                 or a
-                sbc hl,de               ; destino - centro
-                jp z,cm_fin
-                jr c,cf_l
-                ld de,-16               ; a menos de 16 pixeles no se mueve
+                sbc hl,bc               ; centro - actor, en celdas
+                ld de,10
                 add hl,de
-                jp nc,cm_fin
+                ld de,21
+                or a
+                sbc hl,de               ; -10..10: dentro de la zona muerta
+                jr c,cm_fin
+                ld a,3
+                ld (cam_mode),a
+cf_mv:          ld h,b
+                ld l,c
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ex de,hl                ; DE = x del actor en pixeles
                 ld hl,(cam_cx)
-                ld de,8
-                add hl,de
-                ld (cam_cx),hl
-                jp cm_fin
-cf_l:           ld de,16
-                add hl,de
-                jp c,cm_fin
-                ld hl,(cam_cx)
-                ld de,8
                 or a
                 sbc hl,de
-                ld (cam_cx),hl
+                jr z,cf_a
+                ld hl,(cam_cx)
+                ld de,8
+                jr c,cf_p
+                or a
+                sbc hl,de
+                jr cf_s
+cf_p:           add hl,de
+cf_s:           ld (cam_cx),hl
+cf_a:           ld hl,(cam_cx)
+                srl h
+                rr l
+                srl h
+                rr l
+                srl h
+                rr l
+                or a
+                sbc hl,bc
+                jr nz,cm_fin
+                ld a,2                  ; ha llegado: de nuevo a esperar
+                ld (cam_mode),a
 cm_fin:         call cm_clamp
                 ld b,4
                 jp cm_show_b

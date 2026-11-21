@@ -305,7 +305,20 @@ acc_miss:       ld a,(ac_n)
 ; DE = firma del actor IX: lo que ac_draw lee de el, de la camara y de quien habla
 ; la paleta del actor ac_id (ACTPAL + 8 * actor; nibble i = i XOR _palette[i]) -> ac_pm: codigo Chroma del color EGA i del traje -> codigo Chroma de _palette[i].
 ; ac_pf = 0 si es la identidad. El indice 12 no se cambia (ScummVM: _palette[12] = 12 en v2). Conserva IX.
-ac_mkpal:       ld a,(ac_id)
+ac_mkpal:       ld a,(VAR_CURRENT_LIGHTS)
+                and 8
+                jr nz,amk_n
+                ld hl,ac_pm             ; sin el bit 8 (actor_use_colors): todo a gris 8 y el 12 a negro (costume.cpp:813)
+                ld de,ac_pm+1
+                ld bc,15
+                ld (hl),8
+                ldir
+                ld hl,ac_pm+10          ; Chroma del EGA 12
+                ld (hl),0
+                inc a
+                ld (ac_pf),a
+                ret
+amk_n:          ld a,(ac_id)
                 ld l,a
                 ld h,0
                 add hl,hl
@@ -445,7 +458,8 @@ ac_hash:        ld hl,(ac_cam)
                 ld bc,ACTPAL
                 add hl,bc
                 ld b,8
-                xor a
+                ld a,(VAR_CURRENT_LIGHTS)       ; el bit 8 de las luces (paleta gris) tambien cambia el dibujo
+                and 8
 ach_p:          add a,(hl)
                 rlca
                 inc hl

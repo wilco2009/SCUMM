@@ -26,7 +26,7 @@ def main():
     sym = parse_sym(sys.argv[1])
     save = open(sys.argv[2]).read()
     lens = {}
-    for k in 'EOI':
+    for k in 'EOIX':
         m = re.search(r'^SV_LEN_%s\s+equ\s+([^;\n]*)' % k, save, re.M | re.I)
         lens[k] = m.group(1).strip()
     lo = sym['UI_DIRTY']
@@ -34,7 +34,10 @@ def main():
     zones.append((lo, lo + int(lens['O'].replace('$', '0x'), 16 if lens['O'].startswith('$') else 10)))
     m = re.match(r'\$([0-9A-F]+)-INVSL$', lens['I'], re.I)
     zones.append((sym['INVSL'], int(m.group(1), 16)))
-    items = ['%s=%d' % (k, sym[k]) for k in ('NACTORS', 'NSLOT', 'ASIZE')]
+    zones.append((sym['hv_top'], sym['hv_top'] + int(lens['X'])))   # texto arriba, hv_pon y hv_ptab (_roomPalette)
+    zones.append((sym['TXSPD'], sym['TXSPD'] + 1))                  # velocidad del texto
+    items = ['FMT=3']          # version del formato (sube al cambiar lo que se guarda sin que cambie ningun simbolo)
+    items += ['%s=%d' % (k, sym[k]) for k in ('NACTORS', 'NSLOT', 'ASIZE')]
     items += ['%s:%s' % (k, v) for k, v in sorted(lens.items())]
     items += ['Z%04X-%04X' % z for z in zones]
     for name, addr in sorted(sym.items(), key=lambda kv: (kv[1], kv[0])):

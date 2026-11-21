@@ -3,7 +3,7 @@
 ;  opcode solo hace lo que ScummVM: a = ranura + 32 * orden: 0 numero de ranuras (100), 1 unidad (3), 2 cargar (3 bien, 5 mal),
 ;  4 guardar (0 bien, 2 mal), 6 comprobar si existe (6 si, 7 no). Los ficheros SAVEnn.SAV van en la carpeta actual (la del juego).
 ;  Un fichero guarda el estado del nucleo ($E000-$FFFF: variables, ranuras de scripts, actores, objetos...), las variables del overlay
-;  ($CD00-$CF8F: interfaz, verbos, nombres, camara) el inventario (y, tras el, los fotogramas de overlay de los actores: AC_OVF..AC_LC), con una cabecera de marcas (programa, scripts, version) para no cargar una partida cuyo formato ya no coincide.
+;  ($8800-$8A9F: interfaz, verbos, nombres, camara) el inventario (y, tras el, los fotogramas de overlay de los actores: AC_OVF..AC_LC), y, al final, la tabla de color de sala (hv_top..hv_ptab, 24 bytes: _roomPalette de ScummVM) y TXSPD (1 byte), con una cabecera de marcas (programa, scripts, version) para no cargar una partida cuyo formato ya no coincide.
 ;  Al cargar el script en marcha sigue por su ranura restaurada (como ScummVM: updateScriptPtr / resetScriptPointer) y la sala se pinta.
 ; =====================================================================
                 include "savestamp.inc"       ; SAVE_STAMP_LO/HI: lo genera TOOLS/savestamp.py en la compilacion
@@ -20,8 +20,9 @@ wr_h            equ $9792
 wr_src          equ $9793
 wr_cnt          equ $9795
 SV_LEN_E        equ $2000
-SV_LEN_O        equ $0290
+SV_LEN_O        equ $02A0
 SV_LEN_I        equ $9500-INVSL
+SV_LEN_X        equ 24                  ; hv_top..hv_ptab+15 ($8788-$879F): texto arriba, hv_pon y la tabla de color de sala (_roomPalette de ScummVM, hv_ptab); y despues TXSPD (1 byte)
 
 sv_saveload:    ld a,(ARGS+2)
                 and $E0
@@ -110,6 +111,14 @@ sl_save:        call update_ptr         ; el puntero del script en marcha va a s
                 ld bc,SV_LEN_I
                 call f_write_n
                 ld a,(sv_h)
+                ld hl,hv_top
+                ld bc,SV_LEN_X
+                call f_write_n
+                ld a,(sv_h)
+                ld hl,TXSPD
+                ld bc,1
+                call f_write_n
+                ld a,(sv_h)
                 call f_close
                 ld hl,0
                 ld a,(wr_err)
@@ -163,6 +172,16 @@ sll_c:          ld a,(de)
                 ld bc,SV_LEN_I
                 call f_read_n
                 ld a,(sv_h)
+                ld hl,hv_top
+                ld bc,SV_LEN_X
+                call f_read_n
+                ld a,(sv_h)
+                ld hl,TXSPD
+                ld bc,1
+                call f_read_n
+                ld a,(hv_pon)
+                ld (SV_PON),a
+                ld a,(sv_h)
                 call f_close
                 call sv_unstashmk
                 ld hl,SV_LIVE
@@ -182,6 +201,7 @@ sll_c:          ld a,(de)
                 xor a
                 ld (sdx_cur),a
                 ld (sdx_next),a
+                ld (sdx_qn),a           ; stopAllSounds tambien vacia la cola
                 ld a,(SS_REAL)
                 ld (EVARGS),a
                 ld a,1                  ; la sala y el script se restauran fuera (ho_saveload, overlay.asm): aqui el bloque 0 es el overlay 2 y gf_load_room llama al overlay 1

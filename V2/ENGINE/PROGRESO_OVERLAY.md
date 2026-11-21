@@ -32,3 +32,8 @@ Estado: **hecho y probado en el arnes** (carpeta temporal; no se han tocado los 
 ## Pendiente / riesgos
 * Probar en placa/emulador real que el `OUT` del bloque 0 con la instruccion siguiente leida de la otra pagina funciona (el arnes lo simula; el hardware mapea de forma combinacional).
 * `TS_OSYM=overlay.sym` ya no tiene los simbolos del sonido y de guardar (estan en `overlay2.sym`).
+
+## Sonido: cola diferida y LIFO (S-1/S-2 de AUDITORIA_ATAJOS_D.md)
+* `startSound` solo encola (`sdx_q`/`sdx_qn` en $97F1/$97F0, 10 entradas, fuera de lo que guarda save.asm); `snd_tick` (al final del fotograma, tras los scripts) la procesa de la ultima a la primera como `Sound::processSoundQueues`. `stopSound` anula las entradas, `stopAllSounds` y cargar la vacian, `isSoundRunning` ve la cola. Overlay 2: 1475 bytes (1597 libres hasta OV2_COPY); overlay 1 +3 B (`sdx_ini`).
+* VAR_MUSIC_TIMER: se pone a 0 cada fotograma sin sonido actual (como `updateMusicTimer`). Ningun script de Zak/Maniac volcado en dump_out lee la var 17: no hace falta tocar `timer_params`. S-3 (recorte 1 h) y sonidos 47/48/53: sin cambios (irrelevante / ya convertidos).
+* Formato de partidas guardadas, perfil y DATA.BIN: sin cambios.

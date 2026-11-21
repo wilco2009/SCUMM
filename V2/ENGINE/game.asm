@@ -737,12 +737,17 @@ dd_noact:
                 ld (MSGCNT),hl
                 jr dd_type
 dd_keep:
-                ld hl,(MSGCNT)          ; _talkDelay += _msgCount * velocidad (6)
+                ld hl,(MSGCNT)          ; _talkDelay += _msgCount * velocidad (TXSPD: 6 por omision)
                 ld d,h
                 ld e,l
-                add hl,hl
-                add hl,de
-                add hl,hl
+                ld hl,0
+                ld a,(TXSPD)
+                xor 6
+                jr z,dd_s0
+                ld b,a
+dd_sm:          add hl,de
+                djnz dd_sm
+dd_s0:
                 ld de,(TALKDLY)
                 add hl,de
                 ld (TALKDLY),hl
@@ -831,7 +836,10 @@ dt_char:                                ; A = caracter
                 ld (MSGCNT),hl
                 push af
                 ld hl,(TALKDLY)
-                ld de,6
+                ld a,(TXSPD)
+                xor 6
+                ld e,a
+                ld d,0
                 add hl,de
                 ld (TALKDLY),hl
                 ld hl,(VAR_CHARCOUNT)         ; VAR_CHARCOUNT++

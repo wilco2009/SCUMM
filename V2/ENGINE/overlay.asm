@@ -53,6 +53,14 @@ ho_saveload:    call ovg_sv
                 xor a
                 ld (SV_FIN),a
                 call gf_load_room       ; la imagen de la sala restaurada
+                ld a,(SV_PON)           ; la tabla de color de sala (hv_ptab, ya restaurada): gf_load_room puso hv_pon a 0
+                ld (hv_pon),a
+                or a
+                jr z,hsl_np
+                ld a,1
+                ld (gd_pending),a
+                ld (gd_full),a
+hsl_np:
                 ld a,(CUR)
                 call load_slot          ; el script sigue por donde dice su ranura restaurada
                 ld hl,3
@@ -68,7 +76,9 @@ sdx_ini:        xor a
                 ld (sdx_tstep+1),a
                 ld (sdx_cur),a
                 ld (sdx_next),a
+                ld (sdx_qn),a
                 ld (SV_FIN),a
+                ld (TXSPD),a            ; velocidad del texto: la de omision (6)
                 ret
 
 ; el overlay 2 se copia a su pagina la primera vez (ov_done = 1 lo deja ov_install de scumm.asm; con 2 ya esta copiado: tras un restart la imagen ya no esta)

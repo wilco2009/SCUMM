@@ -17,9 +17,11 @@ hu_rb           equ ACSIG+171           ; fila de pantalla de la fila 0 de la pa
 hu_n            equ ACSIG+172           ; filas de la pasada
 hu_pv           equ ACSIG+173           ; palabra: lo pintado de la pasada
 hu_bk           equ ACSIG+176           ; la tecla B en el fotograma anterior (bit 4 del puerto $7F)
+hu_xk           equ ACSIG+177           ; teclas U I J K L del fotograma anterior (1 = pulsada): bits 7 6 3 2 1
 hu_tk           equ ACSIG+175           ; la tecla T en el fotograma anterior (bit 4 del puerto $FB: 0 = pulsada)
 
 hr_ui:          push ix
+                call hu_xkey
                 call hu_tkey
                 xor a
                 ld (hu_pass),a
@@ -121,6 +123,100 @@ hu_next:        ld a,(hu_g)
                 ld (hu_pv),hl
                 jp hu_row
 hu_end:         pop ix
+                ret
+
+; teclas extra de A9 (flanco), como el input.cpp/verbs.cpp de ScummVM v2: U/J desplazan el inventario de 2 en 2 (arriba/abajo), I K L (y O, que aqui es el cursor)
+; cogen la ranura 0, 2, 3; SHIFT+J ('-') y SHIFT+K ('+') cambian la velocidad del texto (0-9, de 1 en 1; TXSPD)
+hu_xkey:        ld a,$FE
+                in a,(254)
+                and 1
+                ld d,a                  ; D = 0 si SHIFT
+                ld a,$DF
+                in a,(254)
+                and $0C
+                add a,a
+                add a,a
+                add a,a
+                add a,a                 ; U = bit 7, I = bit 6
+                ld b,a
+                ld a,$BF
+                in a,(254)
+                and $0E                 ; J = 3, K = 2, L = 1
+                or b
+                cpl
+                and $CE
+                ld hl,hu_xk
+                ld b,(hl)
+                ld (hl),a
+                ld c,a
+                ld a,b
+                cpl
+                and c
+                ret z
+                ld c,a                  ; C = recien pulsadas
+                ld a,d
+                or a
+                jr z,hx_sh
+                ld a,(UI_IFACE)
+                bit 6,a
+                ret z
+                bit 7,c
+                jr z,hx_j
+                ld a,(UI_INVO)
+                cp 2
+                ret c
+                sub 2
+                jr hx_set
+hx_j:           bit 3,c
+                jr z,hx_o
+                ld a,(UI_INVO)
+                add a,4
+                ld b,a
+                call ui_inv_count
+                cp b
+                ret z
+                ret c
+                ld a,(UI_INVO)
+                add a,2
+hx_set:         ld (UI_INVO),a
+                ld hl,UI_DIRTY
+                set 2,(hl)
+                ret
+hx_o:           ld a,1
+                bit 6,c
+                jr nz,hx_pk
+                ld a,3
+                bit 2,c
+                jr nz,hx_pk
+                ld a,4
+                bit 1,c
+                ret z
+hx_pk:          ld hl,UI_INVO
+                add a,(hl)
+                call ui_inv_find
+                ld a,h
+                or l
+                ret z
+                ld a,3                  ; zona del inventario: el objeto
+                jp uk_set
+hx_sh:          ld a,(TXSPD)
+                xor 6
+                ld b,a
+                bit 3,c                 ; J: '-'
+                jr z,hx_k
+                or a
+                ret z
+                dec b
+                jr hx_w
+hx_k:           bit 2,c                 ; K: '+'
+                ret z
+                ld a,b
+                cp 9
+                ret nc
+                inc b
+hx_w:           ld a,b
+                xor 6
+                ld (TXSPD),a
                 ret
 
 ; la tecla T (flanco) alterna la posicion del texto: abajo (filas 20-23, imagen entera) o arriba (filas 0-3 fijas; la sala pierde esas filas)

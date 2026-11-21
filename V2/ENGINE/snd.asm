@@ -28,7 +28,7 @@ sdx_se_nq:          ld hl,(EVARGS)
                 ld c,a                  ; C = sonido
                 ld a,b
                 cp EV_SOUND_START
-                jr z,sdx_start
+                jr z,sdx_enq
                 cp EV_SOUND_STOP
                 jr z,sdx_stop
                 cp EV_SOUND_QUERY
@@ -37,6 +37,8 @@ sdx_se_nq:          ld hl,(EVARGS)
                 ld a,c
                 or a
                 jr z,sdx_ign
+                call sdx_inq            ; isSoundInQueue: en cola, ya cuenta como sonando
+                jr z,sdx_sq_y
                 ld hl,sdx_cur
                 cp (hl)
                 jr z,sdx_sq_y
@@ -49,12 +51,24 @@ sdx_ign:         jp sdx_remap
 
 sdx_stopall:     call sdx_stopvgm
                 xor a
+                ld (sdx_qn),a
                 ld (sdx_cur),a
                 ld (sdx_next),a
                 jp sdx_remap
 
 ; stopSound: si es el siguiente se quita; si es el actual se para y entra el siguiente
-sdx_stop:        ld a,(sdx_next)
+sdx_stop:        ld a,(sdx_qn)           ; stopSound anula las entradas de la cola con ese sonido
+                ld b,a
+                or a
+                jr z,sdx_ss_q
+                ld hl,sdx_q
+sdx_ss_l:           ld a,(hl)
+                cp c
+                jr nz,sdx_ss_n
+                ld (hl),0
+sdx_ss_n:           inc hl
+                djnz sdx_ss_l
+sdx_ss_q:           ld a,(sdx_next)
                 cp c
                 jr nz,sdx_ss_c
                 xor a
@@ -68,13 +82,54 @@ sdx_ss_c:           ld a,(sdx_cur)
                 call sdx_chain_next
                 jp sdx_remap
 
+; startSound: Sound::addSoundToQueue (se procesa al final del fotograma, sdx_pq)
+sdx_enq:         ld a,(sdx_qn)
+                cp 10
+                jp nc,sdx_ign
+                ld e,a
+                ld d,0
+                ld hl,sdx_q
+                add hl,de
+                ld (hl),c
+                inc a
+                ld (sdx_qn),a
+                jr sdx_ign
+
+; Z si C esta en la cola (A = C)
+sdx_inq:         ld a,(sdx_qn)
+                ld b,a
+                or a
+                ld a,c
+                jr z,sdx_iq_n
+                ld hl,sdx_q
+sdx_iq_l:           cp (hl)
+                ret z
+                inc hl
+                djnz sdx_iq_l
+sdx_iq_n:           or 1                    ; NZ
+                ret
+
+; Sound::processSoundQueues: al final del fotograma, de la ultima entrada a la primera
+sdx_pq:          ld a,(sdx_qn)
+                or a
+                ret z
+                dec a
+                ld (sdx_qn),a
+                ld e,a
+                ld d,0
+                ld hl,sdx_q
+                add hl,de
+                ld c,(hl)
+                call sdx_start          ; (el 0 lo ignora)
+                jr sdx_pq
+
 ; startSound(C)
 sdx_start:       ld a,c
                 or a
-                jr z,sdx_ign
+                jp z,sdx_ign
                 ld (sdx_nn),a
                 call sdx_idx             ; B = prioridad, C = banderas, DE = duracion
-                jr c,sdx_ign             ; sin fichero: no suena
+                jp c,sdx_ign             ; sin fichero: no suena
                 ld a,b
                 ld (sdx_np),a
                 ld a,c
@@ -91,12 +146,12 @@ sdx_start:       ld a,c
 ; el actual manda: el nuevo solo queda en cola si es reiniciable
                 ld a,(sdx_nf)
                 and SND_REST
-                jr z,sdx_ign
+                jp z,sdx_ign
                 ld a,(sdx_nn)
                 ld c,a
                 ld a,(sdx_np)
                 ld b,a
-                jr sdx_st_cand
+                jp sdx_st_cand
 ; el nuevo pasa a ser el actual; el que sonaba pasa a la cola si es reiniciable
 sdx_st_chain:       ld a,(sdx_cur)
                 ld c,a                  ; C = el que se desplaza (0: ninguno)
@@ -111,7 +166,7 @@ sdx_st_chain:       ld a,(sdx_cur)
                 pop bc
                 ld a,c
                 or a
-                jr z,sdx_ign
+                jp z,sdx_ign
                 ld a,d
                 or a
                 jp z,sdx_ign
@@ -133,10 +188,16 @@ sdx_st_q:           ld a,c
                 jp sdx_ign
 
 ; cada fotograma: al sonido actual le quedan menos
-snd_tick:       ld a,(sdx_cur)
+snd_tick:       call sdx_tk
+                jp sdx_pq
+
+sdx_tk:         ld a,(sdx_cur)
                 or a
-                ret z
-                call sdx_mtimer
+                jr nz,sdx_tk_on
+                ld (VAR_MUSIC_TIMER),a  ; updateMusicTimer: sin sonido en el canal 0 vale 0
+                ld (VAR_MUSIC_TIMER+1),a
+                ret
+sdx_tk_on:          call sdx_mtimer
                 ld hl,(sdx_left)
                 ld a,h
                 and l

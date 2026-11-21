@@ -63,6 +63,8 @@ sdx_nf           equ AV+9
 sdx_nd           equ AV+10
 sdx_tstep        equ AV+14               ; VAR_MUSIC_TIMER: 1/8 de fotograma entre dos incrementos (0: el sonido no lo usa) y lo que falta
 sdx_tctr         equ AV+16
+sdx_qn           equ $97F0               ; cola de startSound (Sound::_soundQueue): cuantos hay y los numeros (10 como mucho; 0: anulado por stopSound); fuera de lo que guarda save.asm
+sdx_q            equ $97F1
 ac_cnt           equ AV+18               ; personajes a dibujar este fotograma y su lista (clave = y, numero), ordenada por y: el de mas abajo se dibuja el ultimo
 fl_xs            equ AV+19               ; linterna: celdas de ancho y de alto (lights a, b, 1); 0: sin linterna
 fl_ys            equ AV+20
