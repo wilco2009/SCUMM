@@ -636,7 +636,7 @@ acd_ovs:        and $7F
                 ld b,a
                 ld hl,(ac_blob)
                 cp (hl)
-                jp nc,acd_noov
+                jp nc,acd_wsv
                 inc hl
                 inc hl
                 inc hl
@@ -647,7 +647,7 @@ acd_ovs:        and $7F
                 ld a,(hl)
                 inc hl
                 or (hl)
-                jp z,acd_noov
+                jp z,acd_wsv
                 ld a,(ac_id)            ; overlay pendiente de quitar (caminar / inicio)? sigue solo si su lista lleva el bit 7 (no lo tocan esos miembros)
                 ld e,a
                 ld d,0
@@ -680,6 +680,15 @@ acd_ovk:        ld c,b
                 xor a
                 ld (ix+45),a
                 jp acd_anim
+acd_wsv:        ld a,(ac_id)            ; parado con un overlay que el traje no lleva en su lista (no cabia): la primera pose de caminar con el overlay puesto (paginas de caminar), si la hay
+                ld e,a
+                ld d,0
+                ld hl,AC_OVF
+                add hl,de
+                ld a,(hl)
+                and $7F
+                ld b,a
+                jp acd_wov
 acd_wov:        ld hl,(ac_blob)         ; B = fotograma de overlay (0: ninguno), C = direccion. Tras las listas de animaciones del traje: pagina y direccion de su directorio de poses de caminar
                 push hl                 ; con overlay (TOOLS/costume2.py, walk_overlay_blob; pagina 0: no hay): u8 n y n x (4 * fotograma + direccion, pagina, direccion); cada una es un traje con
                 ld hl,(ac_cpage-1)      ; esa direccion (animacion = direccion) con las poses de caminar con ese fotograma puesto. Si algo falla se vuelve al traje de siempre
@@ -694,7 +703,7 @@ acd_wov:        ld hl,(ac_blob)         ; B = fotograma de overlay (0: ninguno),
                 add hl,de
                 ld a,(hl)
                 or a
-                jr z,acd_wn
+                jp z,acd_wn
                 inc hl
                 ld e,(hl)
                 inc hl
@@ -749,7 +758,19 @@ acd_wy:         inc hl
                 jr z,acd_wf
                 pop hl                  ; vale: sus poses de caminar. Como en ScummVM (_animSpeed 0 en v2) cada fotograma avanza una pose: acd_anim divide el contador
                 pop hl                  ; entre 8, asi que aqui suma 7 y acd_walk 1 mas
-                ld a,(ix+45)
+                ld a,(ix+10)
+                or a
+                jr z,acd_ww
+                xor a                   ; parado: la primera pose (la de reposo) con el overlay; el overlay deja de estar pendiente de quitar
+                ld (ix+45),a
+                ld a,(ac_id)
+                ld e,a
+                ld d,0
+                ld hl,AC_OVF
+                add hl,de
+                res 7,(hl)
+                jp acd_anim
+acd_ww:         ld a,(ix+45)
                 add a,7
                 ld (ix+45),a
                 jp acd_walk
@@ -761,7 +782,10 @@ acd_wf:         pop hl
                 push bc
                 call map_page
                 pop bc
-acd_wn2:        ld a,b                  ; no hay esas poses: si llevaba un overlay que no se conserva al caminar, la caminata sola; si no, la pose de siempre
+acd_wn2:        ld a,(ix+10)            ; parado y sin esas poses: la pose de siempre
+                or a
+                jp nz,acd_noov
+                ld a,b                  ; no hay esas poses: si llevaba un overlay que no se conserva al caminar, la caminata sola; si no, la pose de siempre
                 or a
                 jp z,acd_noov
                 ld b,0

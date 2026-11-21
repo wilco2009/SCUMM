@@ -61,7 +61,7 @@ def best_costume(costume2, cost, emap, must=(), walks=(4, 3, 2, 1)):
                 continue
             if len(blob) <= COST_MAX:
                 got = list(must)
-                for f in costume2.overlay_frames(cost):          # los demas fotogramas de overlay, mientras quepan
+                for f in sorted(costume2.overlay_frames(cost), key=lambda f: -costume2.overlay_weight(cost, f)):          # los demas fotogramas de overlay, mientras quepan: primero los que mas cambian a la vista (el casco antes que una boca)
                     if f in got:
                         continue
                     try:
@@ -85,6 +85,11 @@ def scaled_costume(costume2, cost, emap, scales, walks=(4, 3, 2, 1)):
         if blob is not None:
             return blob
     costume2.SCALE = scales[0]
+    ranked = sorted(must, key=lambda f: -costume2.overlay_weight(cost, f))
+    for k in range(len(ranked) - 1, 0, -1):          # en ninguna escala caben todos: a la escala pedida, se quitan primero los que menos se ven (una boca) y no el casco ni las poses
+        blob = best_costume(costume2, cost, emap, ranked[:k], walks)
+        if blob is not None:
+            return blob
     return best_costume(costume2, cost, emap, (), walks)
 
 

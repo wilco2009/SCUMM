@@ -381,6 +381,25 @@ def costume_blob(cost, emap, talk=True, two=True, walk=2, ovl=0, ext=(0, 0)):
     return bytes(head) + bytes(body) + bytes(lst) + tab + bytes(pool)
 
 
+def overlay_weight(cost, f):
+    """Lo que cambia a la vista el fotograma de overlay f: la superficie de las imagenes de los miembros que nombra (el casco pesa mucho mas que una boca).
+    Sirve para decidir cuales meter primero cuando no caben todos."""
+    best = 0
+    for dr in range(4):
+        if 4 * f + dr > cost.num_anim:
+            continue
+        w = 0
+        for limb, v in cost.anim_limbs(4 * f + dr).items():
+            if v is None:
+                continue
+            code = cost.b[cost.cmds + v[0]] & 0x7F
+            if code != 0x7B:
+                pw, ph = cost.picture(limb, code)[:2]
+                w += pw * ph
+        best = max(best, w)
+    return best
+
+
 def sticky_overlays(cost):
     """Fotogramas de overlay (animacion 4 * fotograma + direccion) que ni caminar ni inicio quitan: miembros que ellos no tocan (el casco, el sombrero)."""
     out = []
