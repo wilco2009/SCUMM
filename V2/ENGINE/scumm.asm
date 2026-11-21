@@ -853,8 +853,8 @@ wait_vs:        ld a,(vs_extra)         ; un redibujado ya ha esperado el VSYNC 
                 ld (vs_extra),a
                 pop af
                 ret
-wv_n:           in a,(ClkPort)
-                ld bc,2000
+wv_n:           ld bc,2000              ; $AF: D6..D1 = VSYNC desde la ultima lectura (la lectura lo pone a 0). NO se descarta una lectura previa: los fotogramas que
+                                        ; ha costado el trabajo de la vuelta cuentan para DELTA (como ScummVM, que mide el tiempo real; vuelta = max(trabajo, TIMER_NEXT), no su suma)
 wv1:            in a,(ClkPort)
                 and $7E
                 jr nz,wv_ok
