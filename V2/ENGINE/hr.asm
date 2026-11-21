@@ -24,6 +24,7 @@ HR_DLIST        equ HR_BM+$1E00         ; indices de los objetos que se dibujan,
 HR_COLBUF       equ HR_BM+$1F00         ; la columna que se compone: 128 bytes de bitmap y 128 de atributos
 HR_FLAGS        equ HR_ATT+$1A07        ; un byte por objeto (hasta 84): 1 si se dibujaba la ultima vez (sitio libre del bloque de atributos)
 HR_NFLAGS       equ HR_ATT+$1B00        ; lo mismo, con el estado de ahora
+HR_DIRTY        equ HR_ATT+$1B80        ; 34 bytes (siempre a cero salvo dentro de hr_objupd): 1 si hay que recomponer esa columna (0 = bufer izquierdo, 1-32 = pantalla, 33 = bufer derecho)
 ROOMPG0         equ 8                   ; paginas fisicas de la sala (8-13)
 ROOMMAX         equ 6*8192
 DBGPORT         equ $3FEF
@@ -795,9 +796,6 @@ hr_objupd:      call hr_settle
                 xor a
                 ld (hv_i),a
                 ld (hv_ch),a
-                ld (hv_c1),a
-                dec a
-                ld (hv_c0),a
 hou_l:          ld a,(hv_i)
                 ld hl,hv_nobj
                 cp (hl)
@@ -831,23 +829,29 @@ hou_l:          ld a,(hv_i)
                 jr z,hou_n              ; sin imagen: no hay nada que redibujar
                 ld a,1
                 ld (hv_ch),a
-                ld a,(hl)               ; primera columna
-                ld c,a
+                ld e,(hl)               ; primera columna
                 inc hl
                 inc hl
                 ld b,(hl)               ; columnas
-                ld hl,hv_c0
-                cp (hl)
-                jr nc,hou_a
-                ld (hl),a
-hou_a:          ld a,c
-                add a,b
-                dec a                   ; ultima columna
-                ld hl,hv_c1
-                cp (hl)
-                jr c,hou_n
-                jr z,hou_n
-                ld (hl),a
+                ld d,0
+                ld hl,(hv_cam)
+                ex de,hl
+                or a
+                sbc hl,de
+                inc hl                  ; HL = columna de pantalla + 1 (0 = bufer izquierdo)
+hou_k:          ld a,h
+                or a
+                jr nz,hou_kn
+                ld a,l
+                cp 34
+                jr nc,hou_kn
+                ld de,HR_DIRTY
+                add a,e
+                ld e,a
+                ld a,1
+                ld (de),a
+hou_kn:         inc hl
+                djnz hou_k
 hou_n:          ld hl,hv_i
                 inc (hl)
                 jr hou_l
@@ -866,13 +870,14 @@ hou_s:          ld a,(hv_c)
                 or a
                 jr nz,hou_sn
                 ld c,l
-                ld hl,hv_c0
-                ld a,c
-                cp (hl)
-                jr c,hou_sn
-                ld a,(hv_c1)
-                cp c
-                jr c,hou_sn
+                ld hl,HR_DIRTY
+                ld a,(hv_c)
+                add a,l
+                ld l,a
+                ld a,(hl)
+                ld (hl),0               ; hou_s las recorre todas: la tabla queda a cero para la proxima vez
+                or a
+                jr z,hou_sn
                 ld e,c
                 ld d,0
                 call hr_makecol

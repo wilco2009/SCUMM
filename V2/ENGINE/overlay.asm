@@ -220,14 +220,16 @@ ov_drawobj:
                 ld (FO_N),a
                 xor a
                 ld (FO_I),a
-dro_find:       ld a,(FO_I)
-                call fo_rec
-                ld e,(ix+0)
-                ld d,(ix+1)
-                ld hl,(ARGS)
-                or a
-                sbc hl,de
+                ld ix,(OBJSP)           ; IX recorre los registros de objeto (11 bytes) sin pasar por fo_rec
+dro_find:       ld hl,(ARGS)
+                ld a,(ix+0)
+                cp l
+                jr nz,dro_fn
+                ld a,(ix+1)
+                cp h
                 jr z,dro_found
+dro_fn:         ld de,OBJREC
+                add ix,de
                 ld hl,FO_I
                 inc (hl)
                 ld a,(FO_N)
@@ -264,6 +266,33 @@ dro_mv:         ld (iy+5),c
                 add hl,hl               ; * 6
                 ld de,HR_OBJREC+2
                 add hl,de
+                push bc
+                push hl
+                ld e,(hl)               ; las columnas que ocupaba (sin el objeto) se recomponen: hr_objupd (hr.asm) solo recompone las de los objetos que cambian de estado,
+                inc hl                  ; asi que se marcan aqui en HR_DIRTY (las de ahora las marca hr_objupd por el cambio de HR_FLAGS de mas abajo)
+                inc hl
+                ld b,(hl)
+                ld d,0
+                ld hl,(hv_cam)
+                ex de,hl
+                or a
+                sbc hl,de
+                inc hl                  ; columna de pantalla + 1 (0 = bufer izquierdo)
+dro_ok:         ld a,h
+                or a
+                jr nz,dro_okn
+                ld a,l
+                cp 34
+                jr nc,dro_okn
+                ld de,HR_DIRTY
+                add a,e
+                ld e,a
+                ld a,1
+                ld (de),a
+dro_okn:        inc hl
+                djnz dro_ok
+                pop hl
+                pop bc
                 ld (hl),c               ; columna
                 inc hl
                 ld a,b
@@ -271,14 +300,24 @@ dro_mv:         ld (iy+5),c
                 add a,a
                 add a,a
                 ld (hl),a               ; linea (pixeles)
+                ld a,(FO_I)             ; cambia "se dibujaba la ultima vez" (HR_FLAGS) para que hr_objupd recomponga tambien las columnas nuevas; la sala no se compone entera
+                ld e,a
+                ld d,0
+                ld hl,HR_FLAGS
+                add hl,de
+                ld a,(hl)
+                xor 1
+                ld (hl),a
+                ld a,1
+                ld (gd_pending),a
+                jr dro_nomove
 dro_mvd:        ld a,1
                 ld (gd_full),a          ; la sala se compone entera (los dos sitios del objeto)
                 ld (gd_pending),a
 dro_nomove:     xor a
                 ld (FO_I),a
-dro_loop:       ld a,(FO_I)
-                call fo_rec
-                push ix
+                ld ix,(OBJSP)
+dro_loop:       push ix
                 pop de
                 push iy
                 pop hl
@@ -301,7 +340,9 @@ dro_loop:       ld a,(FO_I)
                 ld h,(ix+1)
                 call fo_state
                 res 3,(hl)
-dro_next:       ld hl,FO_I
+dro_next:       ld de,OBJREC
+                add ix,de
+                ld hl,FO_I
                 inc (hl)
                 ld a,(FO_N)
                 cp (hl)
