@@ -43,7 +43,9 @@ dk_frame:       ld a,(gf_have)
                 jr dkf_redraw           ; estaba a oscuras: hay que pintar la sala con luz
 dkf_dark:       ld a,1
                 ld (hv_dark),a
+                push bc                 ; dk_win destruye BC (ld bc,4): C es lo que habia (si no, con linterna se creia que la sala ya estaba a oscuras y no se repintaba)
                 call dk_win             ; la ventana ya lista aunque la sala aun no este pintada (la primera vez la pinta gd_update despues de esto)
+                pop bc
                 ld a,(hv_drawn)
                 or a
                 ret z
