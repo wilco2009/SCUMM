@@ -167,30 +167,50 @@ uc_bl:          ld a,GLYPH0
                 ret
 
 ; borra la pantalla de texto (UIVB) desde la fila A hasta el final
-ui_clear_from:  call hu_mul42
+ui_clear_from:  ld c,a                  ; 10g-3: fila a fila; se salta las que tienen texto del marcador (ov_uirow, txtlayer.asm): en ScummVM redibujar
+ucf_l:          ld a,c                  ; un verbo solo restaura su rectangulo, asi que lo que el script escribio con print en la zona de los verbos sigue ahi
+                cp 8
+                ret nc
+                ld b,c
+                ld a,(ov_uirow)
+                inc b
+ucf_s:          dec b
+                jr z,ucf_t
+                rrca
+                jr ucf_s
+ucf_t:          and 1
+                jr nz,ucf_n
+                ld a,c
+                push bc
+                call hu_mul42
                 ld de,UIVB
                 add hl,de
-                push hl
-                ex de,hl
-                ld hl,UIVB+8*UI_COLS
-                or a
-                sbc hl,de               ; bytes que quedan
-                ld b,h
-                ld c,l
-                pop hl
-                dec bc
-                ld d,h
-                ld e,l
-                inc de
-                ld (hl),0
-                ldir
-                ret
+                ld b,UI_COLS
+ucf_z:          ld (hl),0
+                inc hl
+                djnz ucf_z
+                pop bc
+ucf_n:          inc c
+                jr ucf_l
 
 ; ---------------------------------------------------------------------
 ;  Verbos: se componen de nuevo cuando algun verbo cambia (EV_VERB). Cada verbo de texto visible (id, curmode <> 0, saveid = 0) se escribe en su celda:
 ;  columna x / 8, fila (y - 144) / 8 + 1 de UIVB.
 ; ---------------------------------------------------------------------
-ui_redraw:      xor a
+ui_redraw:      ld a,(ov_uirow)         ; 10g-3: mientras haya filas del marcador (ov_uirow) sus barras se quedan; despues, si ha habido cajas en la
+                or a                    ; interfaz (txtlayer.asm, ov_ui_box), se repinta toda (HRUI_PREV a $FF) para quitar lo que quede de ellas
+                jr nz,ur_nb
+                ld a,(ov_uib)
+                or a
+                jr z,ur_nb
+                xor a
+                ld (ov_uib),a
+                ld hl,HRUI_PREV
+                ld de,HRUI_PREV+1
+                ld bc,8*UI_COLS-1
+                ld (hl),$FF
+                ldir
+ur_nb:          xor a
                 ld (ui_dirty),a
                 inc a
                 ld (ui_chg),a
@@ -884,13 +904,13 @@ in_poll:        ld a,(IT_KIND)          ; suceso de prueba del arnes: sustituye 
                 ld (INEV+5),hl
                 ld a,c
                 jp ip_set
-ip_hw:          call ms_poll            ; A = botones del raton (bit 4 izquierdo, bit 5 derecho); mueve cur_x y cur_y
-                ld e,a
-                ld a,(cur_x)
-                ld h,a
+ip_hw:          ld a,(cur_x)            ; 10g-3: la posicion de antes se toma ANTES del raton (antes, despues de ms_poll: mover el raton no era un
+                ld h,a                  ; suceso 5, VAR_VIRT_MOUSE no cambiaba hasta el clic y "What is" no sacaba el nombre al pasar por encima)
                 ld a,(cur_y)
                 ld l,a
-                push hl                 ; posicion antes del teclado
+                push hl                 ; posicion antes del raton y del teclado
+                call ms_poll            ; A = botones del raton (bit 4 izquierdo, bit 5 derecho); mueve cur_x y cur_y
+                ld e,a
                 push de
                 call kbd_scan           ; B = tecla, C = SHIFT
                 pop de

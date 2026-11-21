@@ -780,7 +780,10 @@ hpa_bad2:       scf
                 ret
 
 gf_load_room:   ld a,(EVARGS)
-                ld (gf_room),a
+                or a                    ; 10g-3: una pseudosala (>= 128, pseudoRoom: la biblioteca de Venecia 167/168 -> 17) usa
+                jp p,glr_r              ; el .GFX de su recurso (_roomResource), como ScummVM
+                ld a,(VAR_ROOM_RESOURCE)
+glr_r:          ld (gf_room),a
                 call hr_settle
                 xor a
                 ld (gf_have),a

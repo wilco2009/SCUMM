@@ -52,7 +52,8 @@ Blob de la sala: u8 numero de cajas, por caja 18 bytes tal cual estan en el recu
   u8 banderas (bit 0: el objeto tiene imagen propia en el .GFX).
 Mascara de profundidad: lfl2gfx.mask_blob: u8 tiras, u16 por tira con el desplazamiento de sus tramos y, por tira, tramos (longitud, valor)
   hacia abajo hasta sumar el ALTO DE LA SALA (ROOMDIR +8; en v2 eran siempre 128) o hasta longitud 0. Bit 7 del valor = pixel de la izquierda
-  de la tira; 1 = tapa al personaje. Es la mascara de la sala (zplane 1 del fondo); las de los objetos no se empaquetan.
+  de la tira; 1 = tapa al personaje. Es la mascara de la sala (zplane 1 del fondo). 10g-3: detras, las de los objetos y su tabla (lfl2gfx.mask_blob_objs); la palabra ANTERIOR a
+  la direccion de +15 es el desplazamiento de esa tabla (room_mask_blob).
 Tabla de sonidos (la apunta +10; desde la fase 5b siempre esta): 256 x 4 (prioridad, banderas (bit 7 existe, 0 reiniciable, 1 bucle, 2 fija el tempo del
   temporizador de musica, 3 es una cancion: el recurso pasa de 1000 bytes), u16 duracion en fotogramas a 50 Hz, 65535 = sin fin) y otros 256 x 4 (u8 0, u8 0, u16 tick de 236 Hz en que el sonido fija el tempo).
   VAR_MUSIC_TIMER: ver sound3vgm.py.
@@ -96,6 +97,44 @@ for _n, _s in SIZES:
     OFFSETS[_n] = _o
     _o += _s
 TABLES = (_o + 255) // 256 * 256
+
+
+def room_mask_blob(room):
+    """10g-3: mascara de profundidad de la sala y de sus objetos (lfl2gfx.mask_blob_objs, como V2/TOOLS/pack_data.py room_mask): u16 con el desplazamiento de la
+    tabla de objetos y detras la de la sala (ROOMDIR +15 apunta a esta, 2 bytes despues). En ScummVM (Gdi::decodeMask) la mascara de un objeto dibujado sustituye a la
+    de la sala bajo el, ceros incluidos: un objeto la lleva si tiene imagen y, o su mascara no es toda ceros, o cubre algo de la mascara de la sala o de la de otro
+    objeto. Si no cabe en una pagina se quitan las de objeto mas grandes. None si ni la sala ni los objetos tienen mascara."""
+    raw = room.image()[2]
+    h = len(raw)
+    info = []
+    for o in room.objects:
+        im = room.object_image(o)
+        if im is None or o.x % 8 or o.y + o.height > h or o.x + o.width > room.width or not im[2]:
+            info.append(None)
+            continue
+        info.append((o.x // 8, o.y, im[2]))
+
+    def covers(o, q):
+        sx0, y0, om = o
+        return any(om[y][x] for y in range(len(om)) for x in range(len(om[0]))) if q is None else (
+            q[0] < sx0 + len(om[0]) and sx0 < q[0] + len(q[2][0]) and q[1] < y0 + len(om) and y0 < q[1] + len(q[2]))
+    objs = []
+    for i, o in enumerate(info):
+        keep = False
+        if o is not None:
+            sx0, y0, om = o
+            keep = covers(o, None) or any(raw[y][x] for y in range(y0, y0 + len(om)) for x in range(sx0, sx0 + len(om[0])))
+            if not keep:
+                keep = any(q is not None and j != i and covers(q, None) and covers(o, q) for j, q in enumerate(info))
+        objs.append(o if keep else None)
+    blob = lfl2gfx.mask_blob_objs(raw, objs)
+    while blob and len(blob) > PAGE_USABLE:
+        sizes = [(len(o[2][0]) * len(o[2]), k) for k, o in enumerate(objs) if o is not None]
+        if not sizes:
+            break
+        objs[max(sizes)[1]] = None
+        blob = lfl2gfx.mask_blob_objs(raw, objs)
+    return blob
 
 
 def room_blob(room):
@@ -276,9 +315,10 @@ def build(ix, costumes_dir=None, sounds=None, game=None, first_page=16):
         gt = gate_table(room)
         if gt:
             struct.pack_into('<BHH', e, 22, *add('puertas de cajas', gt), len(gt))
-        mask = lfl2gfx.mask_blob(room.image()[2])
+        mask = room_mask_blob(room)                     # 10g-3: con las de los objetos
         if mask:
-            struct.pack_into('<BH', e, 15, *add('mascaras de profundidad', mask))
+            mpg, mad = add('mascaras de profundidad', mask)
+            struct.pack_into('<BH', e, 15, mpg, mad + 2)
         if room.local_scripts:
             loc = bytearray()
             for sid, _ in room.local_scripts:
@@ -421,10 +461,10 @@ def check(ix, path, costumes_dir=None):
         gt = gate_table(room)
         if gl != len(gt) or (gt and d.read(gp, ga, gl) != gt):
             bad.append('sala %d: tabla de puertas distinta' % rn)
-        mask = lfl2gfx.mask_blob(room.image()[2])
+        mask = room_mask_blob(room)
         mp, ma = struct.unpack_from('<BH', e, 15)
         if mask:
-            eq('sala %d mascara' % rn, d.read(mp, ma, len(mask)), mask)
+            eq('sala %d mascara' % rn, d.read(mp, ma - 2, len(mask)), mask)
             n['mascaras'] += 1
         elif mp:
             bad.append('sala %d: mascara que no existe' % rn)

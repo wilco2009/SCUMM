@@ -50,6 +50,8 @@ OVD_WALK        equ 0                   ; overlay D
 OVD_ADJUST      equ 3
 OVD_STARTWALK   equ 6
 OVD_CALCMF      equ 9
+OVD_UITEXT      equ 15              ; 10g-3: ovd_ui.asm
+OVD_UIBOX       equ 18
 OVD_ACTORS      equ 12                  ; fase 8: los actores (ovd_act.asm)
 PROGRAM         equ 1                   ; 1 en el programa de la placa; ovld.asm incluye ovd_act.asm
 OVLA_PG         equ SV+176              ; pagina del bloque 0 fuera de los overlays B, C y D: la ROM (0). vm_core.asm la lee como variable (ld a,(OVLA_PG))

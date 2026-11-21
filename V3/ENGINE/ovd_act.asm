@@ -32,7 +32,7 @@ actors_run:     ld a,(gf_have)
                 ld (aq_cnt),a
                 ld (aq_xn),a
                 ld (aq_xm),a
-                ld a,(CURROOM)          ; ROOMDIR +27 de la sala: 1 = trajes a 3/4 (SMALL_ROOMS, pack_data3.py)
+                ld a,(VAR_ROOM_RESOURCE) ; ROOMDIR +27 del RECURSO de la sala (10g-3: las pseudosalas >= 128): 1 = trajes a 3/4 (SMALL_ROOMS)
                 ld l,a
                 ld h,0
                 add hl,hl
@@ -1088,8 +1088,166 @@ mk_next:        ld hl,(aq_dd)
                 jp nz,mk_strip
                 ld a,1
                 ld (aq_mk),a
+                call mk_objs            ; 10g-3: las mascaras de los objetos que se dibujan sustituyen a la de la sala bajo ellos
                 ld a,(aq_cpage)         ; el traje vuelve a la ventana de datos
                 jp map_page
+
+; 10g-3 (el fallo 3 de la placa: Indy pasaba por delante de las cartas del despacho, sala 2). Mascaras de los objetos, copiado de V2 (ENGINE/mask_px.inc):
+; Gdi::decodeMask de ScummVM: al dibujar un objeto, su mascara SUSTITUYE (decompressMaskImg; en EGA transpStrip es siempre falso) a la de la sala en sus
+; tiras y filas, ceros incluidos; se aplican en el orden de HR_DLIST (el ultimo dibujado gana). Tras la mascara de la sala (aq_mbl) va la tabla de objetos
+; (TOOLS/lfl2gfx.py mask_blob_objs): su desplazamiento esta en la palabra anterior a aq_mbl; por objeto de la sala: tira, tiras, fila, filas y u16 de sus tramos
+; (0: nada que aplicar). Variables en aq_mt: +0 objetos que faltan, +1 destino de la tira en MKBUF (0: fuera de la ventana), +3 siguiente tramo, +5 filas hechas
+; de la tira, +6 tiras que faltan, +7 tira de la ventana de la primera del objeto (con signo). La pagina de la mascara sigue en la ventana (aq_mkdec)
+mk_objs:        ld a,(hv_ndl)
+                or a
+                ret z
+                push ix
+                ld (aq_mt),a
+mo_obj:         ld a,(hv_ndl)
+                ld hl,aq_mt
+                sub (hl)
+                ld e,a
+                ld d,0
+                ld hl,HR_DLIST
+                add hl,de
+                ld a,(hl)               ; objeto (indice en la lista de la sala)
+                ld hl,(aq_mbl)
+                dec hl
+                ld d,(hl)
+                dec hl
+                ld e,(hl)
+                ld hl,(aq_mbl)
+                add hl,de               ; HL = tabla de objetos
+                ld c,(hl)
+                inc hl
+                cp c
+                jp nc,mo_nx             ; la sala no tiene tantos
+                ld e,a
+                ld d,0
+                push hl
+                ld h,d
+                ld l,e
+                add hl,hl
+                add hl,de
+                add hl,hl               ; 6 * objeto
+                pop de
+                add hl,de
+                push hl
+                pop ix                  ; IX = entrada del objeto
+                ld a,(ix+4)
+                or (ix+5)
+                jp z,mo_nx              ; sin mascara que aplicar
+                ld a,(ix+0)
+                ld hl,aq_s0
+                sub (hl)
+                ld (aq_mt+7),a          ; tira de la ventana de su primera tira
+                bit 7,a
+                jr nz,mo_neg
+                ld hl,aq_ns
+                cp (hl)
+                jp nc,mo_nx             ; empieza despues de la ventana
+                jr mo_in
+mo_neg:         add a,(ix+1)            ; tira + tiras: con acarreo y distinta de 0 llega a la ventana
+                jp z,mo_nx
+                jp nc,mo_nx
+mo_in:          ld l,(ix+4)
+                ld h,(ix+5)
+                ld de,(aq_mbl)
+                add hl,de
+                ld (aq_mt+3),hl
+                ld a,(ix+1)
+                ld (aq_mt+6),a
+mo_strip:       xor a
+                ld (aq_mt+5),a
+                ld a,(aq_mt+7)          ; destino de la tira: MKBUF + 64 * tira, o 0 si esta fuera de la ventana
+                bit 7,a
+                jr nz,mo_out
+                ld hl,aq_ns
+                cp (hl)
+                jr nc,mo_out
+                rrca
+                rrca
+                ld d,a
+                and $3F
+                ld h,a
+                ld a,d
+                and $C0
+                ld l,a
+                ld de,MKBUF
+                add hl,de
+                jr mo_st
+mo_out:         ld hl,0
+mo_st:          ld (aq_mt+1),hl
+mo_run:         ld hl,(aq_mt+3)
+                ld b,(hl)               ; longitud
+                inc hl
+                ld c,(hl)               ; valor
+                inc hl
+                ld (aq_mt+3),hl
+                ld a,(aq_mt+5)
+                ld d,a                  ; filas ya hechas
+                add a,b
+                ld (aq_mt+5),a
+                ld hl,(aq_mt+1)
+                ld a,h
+                or l
+                jr z,mo_rn
+                ld a,(ix+2)             ; fila de la sala del tramo - fila de la sala de la ventana 0
+                add a,d
+                ld l,a
+                ld a,0
+                adc a,a
+                ld h,a
+                ld de,(aq_ry)
+                or a
+                sbc hl,de
+                ld de,(aq_mt+1)
+                call mo_fill
+mo_rn:          ld a,(aq_mt+5)
+                cp (ix+3)
+                jr c,mo_run
+                ld hl,aq_mt+7
+                inc (hl)
+                ld hl,aq_mt+6
+                dec (hl)
+                jr nz,mo_strip
+mo_nx:          ld hl,aq_mt
+                dec (hl)
+                jp nz,mo_obj
+                pop ix
+                ret
+
+; HL = fila de la ventana del primer byte (con signo), DE = tira en MKBUF, B = longitud, C = valor: lo escribe recortado a la ventana (aq_rh filas)
+mo_fill:        bit 7,h
+                jr z,mf_p
+                ld a,b                  ; empieza antes de la ventana: se quitan las filas de arriba
+                add a,l
+                ret nc
+                ret z
+                ld b,a
+                ld hl,0
+mf_p:           ld a,h
+                or a
+                ret nz
+                ld a,(aq_rh)
+                sub l
+                ret z
+                ret c                   ; empieza despues de la ventana
+                cp b
+                jr nc,mf_l
+                ld b,a                  ; acaba despues: se recorta
+mf_l:           add hl,de
+                ld a,c
+                ld (hl),a
+                dec b
+                ret z
+                ld c,b
+                ld b,0
+                ld d,h
+                ld e,l
+                inc de
+                ldir
+                ret
 
 ; AND NOT de la mascara de la sala sobre las 8 filas de aq_mt para la celda aq_pos: columna cx y fila cy del fotograma (la ventana empieza en el fotograma)
 aq_mask_px:     push hl

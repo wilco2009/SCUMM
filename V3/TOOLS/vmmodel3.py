@@ -71,6 +71,7 @@ from vmcommon3 import *        # noqa: E402,F401
 from vmgame3 import GameMixin, MBS_LEFT_CLICK, ObjData  # noqa: E402
 
 P1, P2, P3 = 0x80, 0x40, 0x20
+OPTRACE = int(os.environ.get('OPTRACE', '0'))
 
 
 # ------------------------------------------------------------------------------------------------ mundo
@@ -400,6 +401,9 @@ class VM(GameMixin):
             self.insn += 1
             if self.insn > MAX_INSN:
                 raise VMError(E_BUDGET)
+            if OPTRACE and self.frame >= OPTRACE:       # 10g-3 (depuracion): OPTRACE=fotograma -> cada opcode a stderr
+                sl = self.slots[self.cur]
+                sys.stderr.write('OP f=%d s=%d n=%d @%04X %s' % (self.frame, self.cur, sl.number, self.ptr, DIS.NAMES[self.code[self.ptr]]) + chr(10))
             self.opcode = self.fetch_byte()
             self.slots[self.cur].didexec = True
             self.execute(self.opcode)
@@ -2953,6 +2957,9 @@ def main():
         if len(args) > 4:
             evl = ['AT ' + ln.strip() for ln in open(args[4]) if ln.strip() and not ln.startswith('#')]
         trace, vm = run_scenario_core(world, ['INIT', 'OPT proteccion 0', 'OPT sonido real', 'OPT guardar 1', 'SCRIPT 1'] + evl + ['BOOT %d' % n])
+        if os.environ.get('BOOT_TRACE'):                # 10g-3 (depuracion): la traza entera (H, E, D) a un fichero
+            with open(os.environ['BOOT_TRACE'], 'w') as ft:
+                ft.write(chr(10).join(trace) + chr(10))
         with open(os.path.join(out, 'boot_expected.txt'), 'w') as fe:
             for t in trace:
                 if t.startswith(('D ', 'ERR')):

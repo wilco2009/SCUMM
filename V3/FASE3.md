@@ -1031,3 +1031,44 @@ Peticion: quitar el recorte a 22 letras, que el nombre pueda ser algo mas largo,
 ## Fase 10g, fallos 2-7 (sesion Sonnet, 2026-11-20, sin commit)
 - **(5) Conversaciones — arreglado; el usuario lo ha comprobado en la placa (2026-11-20):** no se pudo llegar a una conversacion en el arnes para ver las coordenadas reales de las frases (`V_TOP`/`V_LEFT`). Hipotesis: `hr_ui` pinta el verbo en la celda `(top-144)/8+1` / `left/8` (floor) pero `find_verb` exige `top <= y < top+8` y `left <= x`; `in_conv` daba la esquina de la celda (y = inicio de la fila, x = col*8), asi que un verbo con `top` o `left` no multiplo de 8 solo se acertaba en parte o nunca. Ahora el clic cae al final de la celda (`y = (py|7)+8`, `x = col*8+7`) en `in_conv` (`ui3.asm`, `ic_if`) y en `vmmodel3.screen_to_scumm`. Residente +8 B (hasta `$7E1F`; ~480 B libres). Barnett **1.752/1.752**. Si en la placa sigue fallando, volcar `VERBS` (V_TOP/V_LEFT/V_LEN) con la conversacion abierta.
 - **(4), (2), (3), (6), (7): no tocados** (esta sesion se quedo sin presupuesto): "What is" es logica del script de verbos 4 (el desensamblador de `scumm3dis.py` no muestra operandos; hay que trazar en el modelo con un clic sobre el verbo y otro sobre un objeto).
+
+## Fase 10g-3 (Opus, 2026-11-20, sin commit): fallos 2, 3, 4, 6 y 7 de la placa
+- **Herramientas de depuracion en `vmmodel3.py`:** `BOOT_TRACE=fichero` (boot-core escribe la traza entera: H, E, D) y `OPTRACE=fotograma` (cada opcode desde ese
+  fotograma a stderr: `OP f= s= n= @pc nombre`). El modelo tarda ~2 s; el arnes del Z80, 3-5 min. Ojo: **pasmo acepta `(iy+128)` sin avisar y lo codifica como `(iy-128)`**.
+- **(7) Biblioteca de Venecia en negro.** Las estanterias de la sala 16 hacen `loadRoomWithEgo` a las **pseudosalas 167/168** (`pseudoRoom` -> recurso 17).
+  `gf_load_room` (`hr.asm`) construia el nombre del `.GFX` con la sala del suceso (168): no existe -> negro. Ahora, con sala >= 128, usa `VAR_ROOM_RESOURCE`
+  (`_roomResource` de ScummVM). Tambien `ovd_act.asm` (ROOMDIR +27, trajes a 3/4) lee el recurso. Prueba `ev_dbgroom168.txt` (sala 16, clic en 44,80): **1.451/1.451**,
+  `gf_room=17`, `check_hr` 0 distintos.
+- **(6) Linea del viaje en el mapa.** Sala 68 (Venecia; 67 en otros viajes; scripts 91/84/110 -> 89 -> 88): ~200 `drawBox` de 3x3 color 12, uno por fotograma. En
+  ScummVM se pintan en el bufer de la pantalla y se quedan. Tres causas en el Z80 (`txtlayer.asm`): (a) `ov_box_col` y `ov_fill` escribian el atributo en `(iy+128)`,
+  que el Z80 lee como **`(iy-128)`**: ninguna caja ponia nunca su color (escribia 128 bytes antes de `HR_COLBUF`). Ahora IY apunta al atributo y el bitmap va a
+  `(iy-128)`. (b) En una caja parcial cuyo color no era ni papel ni tinta de la celda los pixeles pasaban a papel (invisible): ahora la tinta de la celda pasa a ser el
+  color de la caja (choque de color) y, si la celda era de un solo color, su bitmap se borra antes. (c) La capa solo guarda 8 cajas: la que sale se pinta en el
+  `.GFX` de la sala (`ov_bake`), donde se queda hasta que se recarga la sala. Prueba `ev_mapa68.txt` (`script 91` en 1300): **1.701/1.701**, la linea entera de Nueva
+  York a Lisboa (3 px de grueso, como los 3x3 de ScummVM). Dialogo de guardar (`ev_f5.txt`): 1.401/1.401; `check_hr` 12 distintos, todos de la capa de texto que no
+  modela (eran 8: el contador "0" ahora va sobre la caja negra que antes no tenia color).
+- **(2) Marcador del boxeo.** Script 41 (lo lanza el 35 de la pelea: `Var[224]` = su Local[3], que todos los que llaman al 35 ponen a 1): `drawBox` de borrado
+  (0,150)-(320,199), etiquetas "Indiana Jones' Health" / "Punch power" / "<nombre>'s Health" en y = 151 y 176, y barras `drawBox` en y = 160-165 y 185-190 (verde, amarillo,
+  rojo). Todo en la zona de los verbos (y >= 144), que la capa no compone. Ahora (`ovd_ui.asm`, overlay D, entradas `OVD_UITEXT` +15 y `OVD_UIBOX` +18; los stubs
+  `ov_ui_text` / `ov_ui_box` en `txtlayer.asm`): el texto va a `UIVB` (columna x / 8, fila (y - 140) / 8 + 1, en blanco: la interfaz no tiene colores por texto) y
+  las cajas son pixeles de las lineas 144-191 (x * 3 / 4, y - 8, con su color). Antes se vacia lo pendiente de la interfaz (`ui_redraw`, `hr_ui`); `ui_redraw`
+  repinta toda la interfaz si ha habido cajas (`ov_uib`). Prueba `ev_boxeo.txt` (`script 33` en 1310: pelea de la sala 42): **1.451/1.451**, marcador completo.
+  **Placa (2026-11-21): las etiquetas se borraban al poco** (las barras no, porque se repintan con cada cambio): cualquier verbo o mensaje (`evh_verb`, `ut_end`,
+  `ut_clr`) pone `ui_dirty` y `ui_redraw` vaciaba todas las filas de la interfaz; en ScummVM redibujar un verbo solo restaura su rectangulo. Ahora `ov_uirow`
+  (bit por fila de `UIVB` con texto del marcador): `ui_clear_from` se salta esas filas; una caja que cubre una fila entera vacia las celdas que tapa y, si va de lado
+  a lado, le quita la marca; `ov_clear` (sala nueva) las quita todas. El repintado completo de `ui_redraw` (quitar barras viejas) solo cuando ya no hay filas marcadas.
+  Prueba: `ev_boxeo.txt` con `ui_dirty` = 1 forzado en 1400 y 1420 (`TS_POKE`): las etiquetas siguen; hasta el final de la pelea (sala 8, 2.141/2.141) el marcador se
+  borra y salen los textos "EPISODE / SERIES" de la zona de los verbos (antes tampoco se veian). Residente hasta `$7F44`; overlay D 7.941 B.
+- **(4) "What is".** Con el verbo elegido el script 4 se queda en un bucle: cada fotograma `findObject` en `VAR_VIRT_MOUSE` (script 20) y, si cambia, la frase
+  (verbo 100). En el arnes ya funcionaba ("WHAT IS JUNK MAIL", `ev_whatis.txt`, 1.381/1.381). El fallo es del raton de la placa: `in_poll` (`ui3.asm`) tomaba la
+  posicion "de antes" **despues** de `ms_poll`, que ya habia movido el cursor, asi que mover el raton no era un suceso 5 y `VAR_VIRT_MOUSE` no cambiaba hasta el
+  clic (con SHIFT + 5-8 si iba). Ahora se toma antes de `ms_poll`. **El arnes no pasa por ahi (usa `IT_KIND`): solo se puede ver en la placa.**
+- **(3) Indy por delante de las cartas.** Faltaban las **mascaras de objeto** (ScummVM `Gdi::decodeMask`: al dibujar un objeto su zplane SUSTITUYE, ceros
+  incluidos, a la mascara de la sala en su rectangulo; en EGA `transpStrip` es siempre falso). Copiado de V2: `pack_data3.py room_mask_blob` (con
+  `lfl2gfx.mask_blob_objs`; la palabra anterior a ROOMDIR +15 es el desplazamiento de la tabla de objetos), `mk_objs` / `mo_fill` en `ovd_act.asm` (tras decodificar
+  la sala, los objetos de `HR_DLIST` en orden) y `sprites3.mask_grid` (+ `HR_DLIST` en `check_spr`). Prueba `ev_correo.txt` (sala 2; Indy queda en 116,100):
+  **1.401/1.401**, `check_spr` 0 distintos, Indy tapado por el correo. Arranque a la sala 73: 1.251/1.251, `check_spr` y `check_hr` 0 distintos.
+- **Memoria:** residente hasta `$7F2E` (**210 B libres**); overlay D **7.796 B** (396 libres); B y C sin cambios. Las partidas guardadas de antes no valen (cambia
+  `ev_handler`, como en cada version).
+- **Placa (usuario, 2026-11-21): los cinco bien** (estanterias, linea del mapa con `POKE 34754,91`, marcador del boxeo con sus etiquetas, Indy detras de las cartas, "What is").
+- **Sin probar:** EightyOne, `actscen`/`actall`, mutaciones y la bateria completa. Tiempo por vuelta de `mk_objs` sin medir (`TS_PROF`).

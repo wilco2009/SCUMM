@@ -83,6 +83,7 @@ ov_clear:       ld hl,OV_TXT
                 ld (ov_dc1),a
                 ld (pan_on),a
                 ld (OV_ZN),a
+                ld (ov_uirow),a         ; 10g-3: sala nueva: ninguna fila de la interfaz es del marcador
                 ld hl,0
                 ld (pan_px),hl
                 ret
@@ -254,6 +255,8 @@ ota_nc:         ld de,4                 ; 10g: x + 4 exacta (antes + 4 y redonde
                 cp 192
                 ret nc
                 ld (ov_ty),a
+                cp 144                  ; 10g-3: en la zona de los verbos (el marcador del boxeo, script 41): a la pantalla de texto de la interfaz
+                jp nc,ov_ui_text
                 ld a,(ov_rem)
                 or a
                 ret z                   ; vacio: no pinta nada (como en SCUMM: lo que habia debajo se queda)
@@ -375,6 +378,8 @@ ov_box_add:     ld hl,(ARGS+2)
                 cp 192
                 ret nc
                 ld (ov_ty),a            ; y0
+                cp 144                  ; 10g-3: en la zona de los verbos (las barras del boxeo, script 41): pixeles de la interfaz
+                jp nc,ov_ui_box
                 ld hl,(ARGS+6)
                 ld a,h
                 or a
@@ -527,6 +532,7 @@ obb_bn:         ld de,8
                 ld d,0
                 ld iy,OV_BOX
                 add iy,de
+                call ov_bake            ; 10g-3: la caja que se pierde se queda pintada en la sala (ScummVM la deja en el bufer de la pantalla)
                 ld l,(iy+OVB_X0)        ; fase 10b: la caja que se pierde deja sus columnas sucias
                 ld h,(iy+OVB_X0+1)
                 call ov_col
@@ -560,6 +566,119 @@ obb_set:        ld (iy+OVB_USED),1
                 ld b,a
                 ld a,c
                 jp ov_mark
+
+; 10g-3: IY = caja que sale de la capa: se pinta en el .GFX de la sala (las lineas que se ven), columna a columna, con ov_box_col sobre HR_COLBUF.
+; Asi la linea del mapa de viaje (cientos de drawBox de 3 x 3, scripts 88/89) se queda entera, como en el bufer de pantalla de ScummVM, hasta que se recarga la sala
+ov_bake:        ld a,(gf_have)
+                or a
+                ret z
+                ld a,(ov_ink)
+                push af
+                push iy
+                pop ix
+                ld l,(ix+OVB_X0)
+                ld h,(ix+OVB_X0+1)
+                call ov_col
+                ld (ov_xx),a
+obk_l:          ld a,(ov_xx)
+                ld l,a
+                ld h,0
+                ld de,(gf_cols)
+                or a
+                sbc hl,de
+                jr nc,obk_x             ; fuera de la sala
+                ld l,a
+                ld h,0
+                ld (hv_w),hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ld (ov_cx),hl
+                ex de,hl
+                ld l,(ix+OVB_X1)
+                ld h,(ix+OVB_X1+1)
+                or a
+                sbc hl,de
+                jr z,obk_x
+                jr c,obk_x              ; X1 <= x de la columna: acabada
+                call hr_coloff          ; HL = bitmap de la columna desde hv_ytop (la columna no cruza paginas)
+                ld a,h
+                rlca
+                rlca
+                rlca
+                and 7
+                call hr_map
+                ld a,h
+                and $1F
+                or $20
+                ld h,a
+                ld a,(hv_hh)
+                ld c,a
+                ld b,0
+                push hl
+                push bc
+                ld de,HR_COLBUF
+                ldir
+                pop bc
+                pop hl
+                push hl
+                push bc
+                call obk_at
+                ld de,HR_COLBUF+128
+                ldir
+                call ov_box_col
+                pop bc
+                pop hl
+                push hl
+                push bc
+                ex de,hl
+                ld hl,HR_COLBUF
+                ldir
+                pop bc
+                pop hl
+                call obk_at
+                ex de,hl
+                ld hl,HR_COLBUF+128
+                ldir
+                ld hl,ov_xx
+                inc (hl)
+                jr obk_l
+obk_x:          call hr_unmap
+                push ix
+                pop iy
+                pop af
+                ld (ov_ink),a
+                ret
+; HL = bitmap de la columna -> HL = sus atributos (+ hv_lines); conserva BC
+obk_at:         ld a,(hv_lines)
+                ld e,a
+                ld d,0
+                add hl,de
+                ret
+
+;  10g-3: drawBox y print en la zona de los verbos (y >= 144 de SCUMM). En ScummVM van al bufer de los verbos; aqui: el texto a UIVB (columna x / 8, fila
+;  (y - 140) / 8 + 1, como los verbos, en blanco) y las cajas como pixeles de las lineas 144-191 (x * 3 / 4, como las columnas de 6 pixeles; y - 8), que se quedan hasta que
+;  hr_ui repinta ese grupo. Antes se vacia lo pendiente de la interfaz (ui_redraw, hr_ui) para que no lo borre despues; ui_redraw lo repinta todo si ha habido cajas.
+ov_uib          equ UIV+50              ; 1: hay cajas pintadas en la interfaz
+ov_uirow        equ UIV+51              ; bit r: la fila r de UIVB tiene texto del marcador (ui_clear_from no la borra)
+ov_ui_text:     call ov_uiflush         ; el resto en el overlay D (ovd_ui.asm)
+                ld hl,OVD_UITEXT
+                jp call_ovd
+ov_ui_box:      call ov_uiflush
+                ld a,1
+                ld (ov_uib),a
+                ld hl,OVD_UIBOX
+                jp call_ovd
+
+ov_uiflush:     ld a,(ui_dirty)
+                or a
+                call nz,ui_redraw
+                ld a,(ui_chg)
+                or a
+                ret z
+                xor a
+                ld (ui_chg),a
+                jp hr_ui
 
 ; HL = x en pixeles (con signo) -> A = su columna (x / 8; 0 si es negativo, 255 como mucho)
 ov_col:         bit 7,h
@@ -705,17 +824,17 @@ obp_c:          sub b
                 sub 16
                 ld e,a
                 ld d,0
-                ld hl,HR_COLBUF
-                add hl,de
+                ld hl,HR_COLBUF+128     ; 10g-3: IY = el ATRIBUTO de la primera linea y el bitmap a -128 (antes IY = bitmap y el atributo a "+128",
+                add hl,de               ; que el Z80 lee como -128: las cajas no ponian nunca su color)
                 push hl
-                pop iy                  ; IY = el bitmap de la primera linea (el atributo, a +128)
+                pop iy
                 ld a,(ix+OVB_C)
                 and 15
                 ld d,a                  ; D = color
                 ld a,(ov_msk)
                 ld e,a                  ; E = mascara
                 ld b,c
-obp_l:          ld a,(iy+128)           ; atributo de la celda
+obp_l:          ld a,(iy+0)             ; atributo de la celda
                 ld c,a
                 rrca
                 rrca
@@ -728,14 +847,31 @@ obp_l:          ld a,(iy+128)           ; atributo de la celda
                 and 15                  ; tinta
                 cp d
                 jr z,obp_ink
+                ld a,c                  ; 10g-3: ni papel ni tinta: la tinta de la celda pasa a ser el color de la caja (choque de color) y sus pixeles se pintan;
+                and 15                  ; antes pasaban a papel y una caja estrecha (la linea del mapa de viaje: drawBox de 3 x 3) no se veia.
+                ld l,a                  ; Si la celda era de un solo color (papel = tinta), su bitmap no significa nada: se borra antes
+                ld a,c
+                rrca
+                rrca
+                rrca
+                rrca
+                and 15
+                cp l
+                jr nz,obp_k
+                ld (iy-128),0
+obp_k:          ld a,c
+                and $F0
+                or d
+                ld (iy+0),a
+                jr obp_ink
 obp_pp:         ld a,e                  ; el color es el papel (o ninguno de los dos): los pixeles pasan a papel
                 cpl
-                and (iy+0)
-                ld (iy+0),a
+                and (iy-128)
+                ld (iy-128),a
                 jr obp_n
 obp_ink:        ld a,e                  ; el color es la tinta: los pixeles pasan a tinta
-                or (iy+0)
-                ld (iy+0),a
+                or (iy-128)
+                ld (iy-128),a
 obp_n:          inc iy
                 djnz obp_l
                 ret
@@ -757,14 +893,14 @@ of_c:           sub b
                 sub 16                  ; indice en la columna
                 ld e,a
                 ld d,0
-                ld hl,HR_COLBUF
+                ld hl,HR_COLBUF+128     ; 10g-3: IY = atributo, bitmap a -128 (ver obp_c)
                 add hl,de
                 ld a,(ov_ink)
                 ld b,c
                 push hl
                 pop iy
-of_l:           ld (iy+0),0
-                ld (iy+128),a
+of_l:           ld (iy-128),0
+                ld (iy+0),a
                 inc iy
                 djnz of_l
                 ret

@@ -97,10 +97,50 @@ class Blobs:
         return pix, mask, col
 
 
+def mask_grid(mask_blob, rows, toff, dlist):
+    """10g-3: la mascara de la sala ([fila][tira]) con las de los objetos que se dibujan (dlist, en el orden de HR_DLIST) encima: cada una sustituye, ceros
+    incluidos, a lo que habia en sus tiras y filas (Gdi::decodeMask de ScummVM; ENGINE/ovd_act.asm mk_objs). toff: desplazamiento de la tabla de objetos."""
+    strips = mask_blob[0]
+    g = [[0] * strips for _ in range(rows)]
+    for sx in range(strips):
+        off = struct.unpack_from('<H', mask_blob, 1 + 2 * sx)[0]
+        row, p = 0, off
+        while off and row < rows:
+            ln = mask_blob[p]
+            if not ln:
+                break
+            for y in range(row, min(rows, row + ln)):
+                g[y][sx] = mask_blob[p + 1]
+            row += ln
+            p += 2
+    if toff is not None and dlist:
+        n = mask_blob[toff]
+        for o in dlist:
+            if o >= n:
+                continue
+            sx0, ow, y0, oh, off = struct.unpack_from('<BBBBH', mask_blob, toff + 1 + 6 * o)
+            if not off:
+                continue
+            p = off
+            for k in range(ow):
+                done = 0
+                while done < oh:
+                    ln, val = mask_blob[p], mask_blob[p + 1]
+                    p += 2
+                    for y in range(y0 + done, y0 + done + ln):
+                        if 0 <= y < rows and sx0 + k < strips:
+                            g[y][sx0 + k] = val
+                    done += ln
+    return g
+
+
 def mask_bit(mask_blob, rows, X, Y):
-    """Pixel (X, Y) de la sala bajo la mascara de profundidad (1 = tapa al actor): lfl2gfx.mask_blob."""
+    """Pixel (X, Y) de la sala bajo la mascara de profundidad (1 = tapa al actor): lfl2gfx.mask_blob (o la rejilla de mask_grid)."""
     if not mask_blob or X < 0 or Y < 0 or Y >= rows:
         return 0
+    if isinstance(mask_blob, list):
+        s = X >> 3
+        return (mask_blob[Y][s] >> (7 - (X & 7))) & 1 if s < len(mask_blob[0]) else 0
     strips = mask_blob[0]
     s = X >> 3
     if s >= strips:
@@ -134,10 +174,13 @@ class Ref:
         # la mascara se lee hasta el final de su pagina
         return self.d.read(mp, ma, self.d.page_bytes - (ma - P3.WINDOW))
 
-    def expected(self, actors, counters, room, cam, ytop, nboxes, boxes, room_entry, rows):
+    def expected(self, actors, counters, room, cam, ytop, nboxes, boxes, room_entry, rows, dlist=None):
         """actors: lista de 13 registros (bytes de 64); counters: lista de 13 (ultimo fotograma, contador); boxes: lista de (mascara) por caja.
-        Devuelve la lista de sprites [(x, y, pix, mask, color)] (los indices son sus posiciones)."""
+        dlist: los objetos que se dibujan (HR_DLIST; 10g-3: sus mascaras). Devuelve la lista de sprites [(x, y, pix, mask, color)] (los indices son sus posiciones)."""
         mblob = self.room_mask(room_entry)
+        if mblob:
+            mp, ma = struct.unpack_from('<BH', room_entry, 15)
+            mblob = mask_grid(mblob, rows, struct.unpack('<H', self.d.read(mp, ma - 2, 2))[0], dlist or [])
         lst = []
         self.small = room_entry[27]
         for a in range(1, NACT):
@@ -284,7 +327,8 @@ def check_dump(dump, sym, data, verbose=True):
     entry = bytes(lg[sym['CURRD']:sym['CURRD'] + 32])
     rows = entry[8]
     ref = Ref(data)
-    exp = ref.expected(actors, counters, room, cam, ytop, nboxes, boxes, entry, rows)
+    dlist = list(lg[sym['HR_DLIST']:sym['HR_DLIST'] + lg[sym['hv_ndl']]])
+    exp = ref.expected(actors, counters, room, cam, ytop, nboxes, boxes, entry, rows, dlist)
     sprites = dump[131072:131072 + 64 * 32]
     xbase, xm = (dump[131072 + 64 * 32 + 8], dump[131072 + 64 * 32 + 9]) if len(dump) > 131072 + 64 * 32 + 10 else (0, 0)
     x0 = dump[131072 + 64 * 32 + 10:131072 + 64 * 32 + 10 + 0x400]
