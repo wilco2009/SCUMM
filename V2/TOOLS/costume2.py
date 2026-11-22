@@ -357,9 +357,7 @@ def costume_blob(cost, emap, talk=True, two=True, walk=2, ovl=0, ext=(0, 0)):
                         pool += rec
                     body += bytes([p, pool_idx[rec]])
             lists[anim] = [frames[key]]
-            own = {k for k, v in cost.anim_limbs(anim).items() if v is not None}
-            clr = set(cost.anim_limbs(dr)) | set(cost.anim_limbs(8 + dr))        # miembros que cambian caminar e inicio
-            if own and not (own & clr):
+            if overlay_kept(cost, anim, dr):
                 sticky.add(anim)
     assert len(pool_off) <= 256, 'mas de 256 celdas distintas en un traje'
     body_base = head_len
@@ -400,6 +398,17 @@ def overlay_weight(cost, f):
     return best
 
 
+def overlay_kept(cost, anim, dr):
+    """True si el fotograma de overlay `anim` (4 * fotograma + direccion dr) sigue puesto tras caminar y tras el inicio, como en ScummVM, donde cada
+    animacion solo cambia los miembros que nombra: caminar (animacion dr) no nombra ninguno de los miembros que dibuja y el inicio
+    (8 + dr) no les pone otra cosa (la cabeza de inicio del curandero es la misma que la de su mascara)."""
+    own = {k: v for k, v in cost.anim_limbs(anim).items() if v is not None}      # los que dibuja (los que apaga, como la cabeza bajo la mascara, no cuentan:
+    if not own or set(own) & set(cost.anim_limbs(dr)):                           # si caminar o el inicio los vuelven a encender, lo puesto sigue encima)
+        return False
+    init = cost.anim_limbs(8 + dr)
+    return all(init[k] == v for k, v in own.items() if k in init)
+
+
 def sticky_overlays(cost):
     """Fotogramas de overlay (animacion 4 * fotograma + direccion) que ni caminar ni inicio quitan: miembros que ellos no tocan (el casco, el sombrero)."""
     out = []
@@ -408,9 +417,7 @@ def sticky_overlays(cost):
             anim = 4 * f + dr
             if anim > cost.num_anim:
                 continue
-            own = {k for k, v in cost.anim_limbs(anim).items() if v is not None}
-            clr = set(cost.anim_limbs(dr)) | set(cost.anim_limbs(8 + dr))
-            if own and not (own & clr):
+            if overlay_kept(cost, anim, dr):
                 out.append((f, dr))
     return out
 
@@ -473,6 +480,190 @@ def walk_overlay_blob(cost, emap, f, dr0, walk=4):
     struct.pack_into('<H', head, 1, tab_base)
     tab = b''.join(struct.pack('<H', pool_base + o) for o in pool_off)
     return bytes(head) + bytes(body) + bytes(lst) + tab + bytes(pool)
+
+
+def cells4(parts, emap):
+    """Referencia del compositor del Z80 (PLAN_TRAJES4.md): compone las partes (Costume.render) sin escala y las trocea en celdas de 8x8 del formato B.
+    Devuelve (dx, dy, cw, ch, [(cx | cy << 4, celda de 32 bytes, forma de 8 bytes)]): celda = 8 filas de 4 bytes, nibble alto = pixel de la izquierda,
+    nibble = codigo Chroma (emap; 0 tambien es un color, el negro); forma = 1 donde hay pixel. Las celdas sin ningun pixel no salen."""
+    x0, y0, x1, y1 = bounds(parts)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    cw, ch = (x1 - x0 + 7) // 8, (y1 - y0 + 7) // 8
+    full = [[None] * (cw * 8) for _ in range(ch * 8)]
+    for px, py, pix in parts:
+        for y, row in enumerate(pix):
+            for x, c in enumerate(row):
+                if c:
+                    full[py + y - y0][px + x - x0] = emap[c]
+    cells = []
+    for cy in range(ch):
+        for cx in range(cw):
+            cell, shape = bytearray(32), bytearray(8)
+            for y in range(8):
+                row = full[cy * 8 + y][cx * 8:cx * 8 + 8]
+                for k, c in enumerate(row):
+                    if c is not None:
+                        shape[y] |= 0x80 >> k
+                        cell[4 * y + k // 2] |= c << (4 if k % 2 == 0 else 0)
+            if any(shape):
+                cells.append((cx | (cy << 4), bytes(cell), bytes(shape)))
+    return x0, y0, cw, ch, cells
+
+
+WALK_OVL = 128         # clave de las poses de caminar con el overlay f puesto: WALK_OVL + 4 * f + direccion (PLAN_TRAJES4.md)
+WALK_OVL_STEPS = 99   # pasos de caminar con overlay que se guardan (los de caminar sin overlay van todos)
+ACD_RMAX = 39         # referencias por fotograma como mucho (el bufer AC_RB del Z80)
+CELL4 = 4             # bandera de celda de 4 bpp en el fondo de celdas: 32 bytes de pixeles y 8 de forma
+
+
+def poses4(cost):
+    """Las poses de un traje para los sprites de 4 bpp, por clave: {clave: [(miembros, posicion, espejo), ...]}. 0-3 caminar (todos los pasos;
+    parado = el primero), 4-7 hablar (boca abierta y cerrada), 4 * f + dir el overlay f parado (sobre reposo + TALK_STOP, como costume_blob),
+    WALK_OVL + 4 * f + dir caminar con el overlay f (solo si se conserva al caminar: overlay_kept)."""
+    out = {}
+    wanted = overlay_wanted(cost)
+    for dr in range(4):
+        mir = MIRROR_OLD_DIR[dr] if dr < 2 else False
+        m = {k: v for k, v in cost.merged(dr).items() if v}
+        if not m:
+            continue
+        out[dr] = [(m, p, mir) for p in cost.steps(m)]
+        if 16 + dr <= cost.num_anim:
+            base = dict(cost.anim_limbs(8 + dr))
+            base.update(cost.anim_limbs(4 + dr))
+            tl = []
+            for extra in (16 + dr, 12 + dr):
+                l = dict(base)
+                l.update(cost.anim_limbs(extra))
+                l = {k: v for k, v in l.items() if v}
+                if l:
+                    tl.append((l, cost.steps(l)[0], mir))
+            if tl:
+                out[4 + dr] = tl
+        for f in overlay_frames(cost):
+            anim = 4 * f + dr
+            if anim > cost.num_anim or not cost.anim_limbs(anim):
+                continue
+            l = dict(cost.merged(dr))
+            if 16 + dr <= cost.num_anim:
+                l.update(cost.anim_limbs(16 + dr))
+            l.update(cost.anim_limbs(anim))
+            l = {k: v for k, v in l.items() if v}
+            if l:
+                out[anim] = [(l, cost.steps(l)[0], mir)]
+            if overlay_kept(cost, anim, dr) and f in wanted:    # caminar con el overlay: solo los detalles (sombrero, casco, mascara), no las poses enteras
+                l = dict(cost.merged(dr))
+                l.update(cost.anim_limbs(anim))
+                l = {k: v for k, v in l.items() if v}
+                if l:
+                    seq = cost.steps(l)
+                    if len(seq) > WALK_OVL_STEPS:                   # caminar con overlay: como mucho WALK_OVL_STEPS pasos, repartidos (si no, no cabe en 255 paginas)
+                        seq = [seq[i * len(seq) // WALK_OVL_STEPS] for i in range(WALK_OVL_STEPS)]
+                    out[WALK_OVL + anim] = [(l, p, mir) for p in seq]
+    assert cost.num_anim < WALK_OVL and max(out, default=0) < 256, 'claves de animacion fuera de rango'
+    return out
+
+
+def cell_rec4(pix, shape):
+    """Registro de una celda de 4 bpp: banderas (CELL4; bit 0 forma completa; nibble alto = color transparente, uno que la celda no use: el 0 es
+    el negro), 32 bytes de pixeles y 8 de forma."""
+    used = {(pix[4 * y + k // 2] >> (4 if k % 2 == 0 else 0)) & 15 for y in range(8) for k in range(8) if shape[y] & (0x80 >> k)}
+    tr = next((v for v in range(16) if v not in used), 0)
+    return bytes([CELL4 | (1 if bytes(shape) == bytes([255] * 8) else 0) | (tr << 4)]) + bytes(pix) + bytes(shape)
+
+
+def keys_blob4(keyframes, keys, cell_at):
+    """Sub-bloque de animaciones (misma cabecera que costume_blob, sin fondo de celdas): na, u16 0, u16 lista por animacion, 3 bytes sin uso.
+    Fotograma: s8 dx, s8 dy, u8 cw, u8 ch, u8 n y n x (u8 cx | cy << 4, u8 fondo, u8 indice en el fondo). Lista: u8 pasos | bit 7 (overlay que
+    se conserva) y u16 por paso."""
+    na = max(keys) + 1
+    head_len = 3 + 2 * na + 3
+    body, frames, lists = bytearray(), {}, {}
+    for key in keys:
+        offs = []
+        for fr in keyframes[key][1]:
+            if fr is None:
+                offs.append(0xFFFF)
+                continue
+            gx, gy, cw, ch, refs = fr
+            fk = (gx, gy, cw, ch, tuple(refs))
+            if fk not in frames:
+                frames[fk] = len(body)
+                body += struct.pack('<bbBBB', gx, gy, cw, ch, len(refs))
+                for p, gid in refs:
+                    body += bytes([p]) + bytes(cell_at[gid])
+            offs.append(frames[fk])
+        lists[key] = offs
+    lst = bytearray()
+    head = bytearray(head_len)
+    head[0] = na
+    lists_base = head_len + len(body)
+    for key, offs in lists.items():
+        struct.pack_into('<H', head, 3 + 2 * key, lists_base + len(lst))
+        lst.append(len(offs) | (0x80 if keyframes[key][0] else 0))
+        for o in offs:
+            lst += struct.pack('<H', o if o == 0xFFFF else head_len + o)
+    return bytes(head) + bytes(body) + bytes(lst)
+
+
+def costume4(cost, emap, limit=6100):
+    """Un traje entero para los sprites de 4 bpp (PLAN_TRAJES4.md): sub-bloques de animaciones y fondos de celdas compartidos por todo el traje,
+    cada bloque de `limit` bytes como mucho, por orden de uso (caminar y parado, hablar, overlays parados, caminar con overlay). Devuelve
+    ([(claves, bytes)], [bytes de cada fondo]). Fondo: u16 offset de cada celda (desde el principio del fondo) y los registros (cell_rec4)."""
+    em = emap_of(cost, emap)
+    poses = poses4(cost)
+    order = [k for k in range(4) if k in poses] + [k for k in range(4, 8) if k in poses] + \
+        sorted(k for k in poses if 8 <= k < WALK_OVL) + sorted(k for k in poses if k >= WALK_OVL)
+    recs, rec_id, keyframes = [], {}, {}
+    for key in order:
+        frs = []
+        for limbs, pos, mir in poses[key]:
+            fr = cells4(cost.render(limbs, pos, mirror=mir), em)
+            if fr is None:
+                frs.append(None)
+                continue
+            gx, gy, cw, ch, cells = fr
+            assert -128 <= gx <= 127 and -128 <= gy <= 127, 'fotograma fuera de s8'
+            assert len(cells) <= ACD_RMAX, 'demasiadas celdas en un fotograma'
+            refs = []
+            for p, pix, shape in cells:
+                rec = cell_rec4(pix, shape)
+                if rec not in rec_id:
+                    rec_id[rec] = len(recs)
+                    recs.append(rec)
+                refs.append((p, rec_id[rec]))
+            frs.append((gx, gy, cw, ch, refs))
+        sticky = 8 <= key < WALK_OVL and overlay_kept(cost, key, key % 4)
+        keyframes[key] = (sticky, frs)
+    pools, cell_at, cur, size = [], {}, [], 0                     # fondos de celdas, en orden de primer uso
+    for gid, rec in enumerate(recs):
+        if cur and (size + 2 + len(rec) > limit or len(cur) >= 256):
+            pools.append(cur)
+            cur, size = [], 0
+        cell_at[gid] = (len(pools), len(cur))
+        cur.append(rec)
+        size += 2 + len(rec)
+    if cur:
+        pools.append(cur)
+    assert len(pools) <= 255, 'demasiados fondos de celdas'
+    pool_blobs = []
+    for pr in pools:
+        tab, off = bytearray(), 2 * len(pr)
+        for rec in pr:
+            tab += struct.pack('<H', off)
+            off += len(rec)
+        pool_blobs.append(bytes(tab) + b''.join(pr))
+    groups, cur = [], []
+    for k in order:
+        if cur and len(keys_blob4(keyframes, cur + [k], cell_at)) > limit:
+            groups.append(cur)
+            cur = []
+        cur.append(k)
+        assert len(keys_blob4(keyframes, cur, cell_at)) <= limit, 'la animacion %d no cabe en una pagina' % k
+    if cur:
+        groups.append(cur)
+    return [(g, keys_blob4(keyframes, g, cell_at)) for g in groups], pool_blobs
 
 
 def bounds(parts):

@@ -147,6 +147,8 @@ ov_pl:          ld a,(hl)
                 xor a
                 ld (2131),a             ; sin sprites extra; la entrada 1 de los extra (SPRX + 32) no se usa: su Y a 0 por si acaso
                 ld (SPRX+35),a
+                ld (2129),a             ; la hoja de los sprites de 4 bpp (y las entradas de los extra) en el bloque 0 (PLAN_TRAJES4.md)
+                ld (ac_xd),a
                 ret
 
 ; (ov_pal16, la paleta de 16 de la FPGA, esta en progdata.inc: son datos y por encima de $8000 no gastan overlay)

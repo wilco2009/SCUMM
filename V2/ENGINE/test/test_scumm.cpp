@@ -6,8 +6,8 @@
 //   Corre hasta que main_loop se ha ejecutado `fotogramas` veces y vuelca el estado en salida.bin:
 //     0       65536 bytes: la sombra de video (sirve $3800-$3FFF, $C000-$CFFF)
 //     65536   65536 bytes: la memoria logica tal como la ve el Z80 (bloques mapeados) al acabar
-//     131072  64 sprites x 32 bytes: activo, x (2), y, color (8), forma (8), mascara (8) y 3 de relleno
-//     +2048   scroll fino (2090), mapa de filas fijas (3), I, chroma
+//     131072  64 sprites x 32 bytes: activo, x (2), y, color (8), forma (8), mascara (8), pagina (POKE 2130), transparente y 2 de relleno
+//     +2048   scroll fino (2090), mapa de filas fijas (3), I, chroma, 2045, 2044, POKE 2131, POKE 2129
 //   guion (opcional): pares "tecla:fotograma" separados por comas; teclas P (derecha) O (izquierda) ESPACIO
 #include <cstdio>
 #include <cstdlib>
@@ -30,9 +30,9 @@ static uint8_t shadow[65536];
 static inline uint8_t rd(int a) { a &= 0xFFFF; return ram[blk[a >> 13]][a & 0x1FFF]; }
 static inline uint16_t rd16(int a) { return rd(a) | (rd(a + 1) << 8); }
 
-struct Spr { int on = 0, x = 0, y = 0; uint8_t col[8], pix[8], mask[8]; };
+struct Spr { int on = 0, x = 0, y = 0, page = 0, trans = 0; uint8_t col[8], pix[8], mask[8]; };   // page != 0: formato B (celda de 4 bpp en la hoja), trans = color transparente
 static Spr spr[64];
-static int xm = 0;
+static int xm = 0, sheet = 0;                     // POKE 2131 (extra) y POKE 2129 (bloque de 8 KB de la hoja)
 static int sel = 0, fine = 0, rows[3] = {255, 255, 255}, chroma = 0, sfast = 0, hfile = 0;
 
 // ---- motor de scroll por hardware (puerto $3FEF; ver claude/planning/scroll_hardware.md): modelo en software, sobre la sombra.
@@ -83,11 +83,13 @@ static inline void wr(int a, uint8_t v) {
     if (a == 2100) sel = v & 63;
     else if (a == 2101) spr[sel].on = v & 1;
     else if (a == 2102) spr[sel].x = (spr[sel].x & 0x100) | v;
-    else if (a == 2103) spr[sel].x = (spr[sel].x & 0xFF) | ((v & 1) << 8);
+    else if (a == 2103) { spr[sel].x = (spr[sel].x & 0xFF) | ((v & 1) << 8); spr[sel].trans = v >> 4; }
     else if (a == 2104) spr[sel].y = v;
     else if (a >= 2105 && a <= 2112) spr[sel].col[a - 2105] = v;
     else if (a >= 2113 && a <= 2120) spr[sel].pix[a - 2113] = v;
     else if (a >= 2121 && a <= 2128) spr[sel].mask[a - 2121] = v;
+    else if (a == 2130) spr[sel].page = v;
+    else if (a == 2129) sheet = v & 7;
     else if (a == 2131) xm = v & 127;                 // sprites extra (los que se miran despues de los 64; sus entradas: 32 bytes en bloque * 8192 + 32 * j, bloque 2)
     else if (a == 2090) fine = v & 7;
     else if (a == 2091) rows[0] = v;
@@ -95,6 +97,7 @@ static inline void wr(int a, uint8_t v) {
     else if (a == 2093) rows[2] = v;
     else if (a == 2045) sfast = v;
     else if (a == 2044) hfile = v << 8;
+    else shadow[a] = v;                              // el resto del bloque 0 solo llega a la sombra (las hojas de sprites del formato B pueden estar ahi)
     return;
   }
   ram[blk[a >> 13]][a & 0x1FFF] = v;
@@ -257,13 +260,14 @@ static void dump(const char* path) {
   fwrite(logical, 1, 65536, f);
   for (int i = 0; i < 64; i++) {
     uint8_t b[32] = {0};
-    b[0] = spr[i].on; b[1] = spr[i].x & 255; b[2] = spr[i].x >> 8; b[3] = spr[i].y;
+    b[0] = spr[i].on; b[1] = spr[i].x & 255; b[2] = spr[i].x >> 8; b[3] = spr[i].y; b[28] = spr[i].page; b[29] = spr[i].trans;
     memcpy(b + 4, spr[i].col, 8); memcpy(b + 12, spr[i].pix, 8); memcpy(b + 20, spr[i].mask, 8);
     fwrite(b, 1, 32, f);
   }
   uint8_t t[8] = {(uint8_t)fine, (uint8_t)rows[0], (uint8_t)rows[1], (uint8_t)rows[2], z80.i, (uint8_t)chroma, (uint8_t)sfast, (uint8_t)(hfile >> 8)};
   fwrite(t, 1, 8, f);
-  { uint8_t x = (uint8_t)xm; fwrite(&x, 1, 1, f); }     // el byte de POKE 2131: sprites extra
+  { uint8_t x = (uint8_t)xm; fwrite(&x, 1, 1, f); }
+  { uint8_t x = (uint8_t)sheet; fwrite(&x, 1, 1, f); }   // POKE 2129     // el byte de POKE 2131: sprites extra
   fclose(f);
 }
 

@@ -117,10 +117,6 @@ ace_1:          cp 2
                 jr c,ace_2
                 inc a
 ace_2:          ld (2131),a
-                or a
-                ret z
-                ld a,XD_MARK
-                ld (ac_xd),a
                 ret
 
 ; Las ranuras de sprite, de mayor a menor prioridad: 0-62 son los sprites 62-0 de la placa (el 63 es el cursor); 63-77 son los extra (POKE 2131), cuya
@@ -149,6 +145,18 @@ acs_0:          ld l,a
                 ld a,h
                 add a,SPRX / 256
                 ld h,a
+                ret
+
+; A = ranura (0-77) -> A = su pagina en la hoja del bloque 0 (libres: 16-62, 67-95, 224-239; PLAN_TRAJES4.md)
+ac_shp:         cp 47
+                jr nc,ash_1
+                add a,16
+                ret
+ash_1:          cp 76
+                jr nc,ash_2
+                add a,20
+                ret
+ash_2:          add a,148
                 ret
 
 ; DE = (ac_wb) + A: la direccion de un campo de la ventana del sprite que se escribe
@@ -346,7 +354,7 @@ ac_mkpal:       ld a,(VAR_CURRENT_LIGHTS)
                 ld (hl),0
                 inc a
                 ld (ac_pf),a
-                ret
+                jr amk_t
 amk_n:          ld a,(ac_id)
                 ld l,a
                 ld h,0
@@ -403,6 +411,23 @@ ampk_v:         push hl
                 ld a,c
                 cp 16
                 jr nz,ampk_l
+amk_t:          ld c,0                  ; ac_ptr = el primer codigo que la paleta no da (color transparente de las celdas de 4 bpp)
+amt_l:          ld hl,ac_pm
+                ld b,16
+amt_s:          ld a,(hl)
+                cp c
+                jr z,amt_n
+                inc hl
+                djnz amt_s
+                ld a,c
+                ld (ac_ptr),a
+                ret
+amt_n:          inc c
+                ld a,c
+                cp 16
+                jr c,amt_l
+                xor a
+                ld (ac_ptr),a
                 ret
 
 ; A = byte de color de una celda (tinta en el nibble alto, papel en el bajo) -> A remapeado con ac_pm si el actor tiene paleta propia. Conserva todo lo demas
@@ -621,63 +646,50 @@ acd_nomk:       ld a,(ix+5)             ; traje
                 ld a,(hl)
                 or a
                 ret z                   ; sin datos: no se dibuja
+                ld (ac_dpg),a           ; COSTDIR -> el directorio del traje (TOOLS/pack_data.py): u8 na y na x (pagina, direccion) del sub-bloque de cada animacion
                 inc hl
                 ld e,(hl)
                 inc hl
                 ld d,(hl)
-                ld (ac_blob),de
-                ld (ac_cpage),a
-                call map_page
+                ld (ac_dir),de
                 ld l,(ix+6)
                 ld h,(ix+7)
                 call ac_olddir
                 ld c,a                  ; C = direccion
-                ld a,(ac_id)            ; un fotograma de overlay puesto y el actor parado: su pose, si el traje la tiene (animacion 4 * fotograma + direccion)
+                ld a,(ac_id)            ; B = fotograma de overlay puesto (AC_OVF, sin el bit de pendiente de quitar)
                 ld e,a
                 ld d,0
                 ld hl,AC_OVF
                 add hl,de
                 ld a,(hl)
-                or a
-                jr nz,acd_ovs
-                ld b,a                  ; sin overlay y caminando: sus poses de caminar (clave = direccion) de las paginas del traje, salvo que este hablando (acd_wov)
-                ld a,(ix+10)
-                or a
-                jp nz,acd_noov
-                ld a,(HAVEMSG)
-                or a
-                jp z,acd_wov
-                ld a,(ac_id)
-                ld e,a
-                ld a,(VAR_TALK_ACTOR)
-                cp e
-                jp z,acd_noov
-                jp acd_wov
-acd_ovs:        and $7F
+                and $7F
+                jr z,acd_noov
                 ld b,a
-                ld a,(ix+10)
-                or a
-                jp z,acd_wov            ; caminando con overlay: sus poses de caminar con el overlay puesto (acd_wov)
-                ld a,b
                 add a,a
                 add a,a
                 add a,c
-                ld b,a
-                ld hl,(ac_blob)
-                cp (hl)
-                jp nc,acd_wsv
-                inc hl
-                inc hl
-                inc hl
-                ld e,b
-                ld d,0
-                add hl,de
-                add hl,de
-                ld a,(hl)
-                inc hl
-                or (hl)
-                jp z,acd_wsv
-                ld a,(ac_id)            ; overlay pendiente de quitar (caminar / inicio)? sigue solo si su lista lleva el bit 7 (no lo tocan esos miembros)
+                ld e,a                  ; E = 4 * fotograma + direccion
+                ld a,(ix+10)
+                or a
+                jr nz,acd_ost
+                ld a,e                  ; caminando con el overlay: sus poses (clave WALK_OVL + 4 * f + dir), si el traje las tiene (el overlay se conserva al caminar)
+                add a,WALK_OVL
+                push bc
+                ld c,a
+                call ac_key
+                ld a,c
+                pop bc
+                jr c,acd_noov           ; no las tiene: la caminata sola (el overlay queda pendiente; al pararse se ve si se conserva)
+                ld c,a
+                jp acd_walk
+acd_ost:        push bc                 ; parado con el overlay: su pose (clave 4 * f + dir)
+                ld c,e
+                call ac_key
+                ld a,c
+                pop bc
+                jr c,acd_noov
+                ld c,a
+                ld a,(ac_id)            ; pendiente de quitar (caminar / inicio)? sigue solo si su lista lleva el bit 7 (no lo tocan esos miembros)
                 ld e,a
                 ld d,0
                 ld hl,AC_OVF
@@ -685,180 +697,99 @@ acd_ovs:        and $7F
                 bit 7,(hl)
                 jr z,acd_ovk
                 push hl
-                ld hl,(ac_blob)
-                inc hl
-                inc hl
-                inc hl
-                ld e,b
-                ld d,0
-                add hl,de
-                add hl,de
-                ld e,(hl)
-                inc hl
-                ld d,(hl)
-                ld hl,(ac_blob)
-                add hl,de
+                call ac_list
                 ld a,(hl)               ; pasos | bit 7
                 pop hl
                 rla
                 jr c,acd_keep
                 ld (hl),0               ; el overlay se pierde
-                jp acd_noov
+                ld a,c
+                and 3
+                ld c,a
+                jr acd_noov
 acd_keep:       res 7,(hl)
-acd_ovk:        ld c,b
-                xor a
+acd_ovk:        xor a
                 ld (ix+45),a
                 jp acd_anim
-acd_wsv:        ld a,(ac_id)            ; parado con un overlay que el traje no lleva en su lista (no cabia): la primera pose de caminar con el overlay puesto (paginas de caminar), si la hay
-                ld e,a
-                ld d,0
-                ld hl,AC_OVF
-                add hl,de
-                ld a,(hl)
-                and $7F
-                ld b,a
-                jp acd_wov
-acd_wov:        ld hl,(ac_blob)         ; B = fotograma de overlay (0: ninguno), C = direccion. Tras las listas de animaciones del traje: pagina y direccion de su directorio de poses de caminar
-                push hl                 ; con overlay (TOOLS/costume2.py, walk_overlay_blob; pagina 0: no hay): u8 n y n x (4 * fotograma + direccion, pagina, direccion); cada una es un traje con
-                ld hl,(ac_cpage-1)      ; esa direccion (animacion = direccion) con las poses de caminar con ese fotograma puesto. Si algo falla se vuelve al traje de siempre
-                push hl
-                ld hl,(ac_blob)
-                ld e,(hl)
-                ld d,0
-                inc hl
-                inc hl
-                inc hl
-                add hl,de
-                add hl,de
-                ld a,(hl)
-                or a
-                jp z,acd_wn
-                inc hl
-                ld e,(hl)
-                inc hl
-                ld d,(hl)
-                push bc
-                push de
-                call map_page
-                pop hl
-                pop bc
-                ld a,(hl)
-                inc hl
-                or a
-                jr z,acd_wf
-                ld e,a
-                ld a,b                  ; clave: 4 * fotograma + direccion
-                add a,a
-                add a,a
-                add a,c
-                ld d,a
-acd_ws:         ld a,(hl)
-                cp d
-                jr z,acd_wy
-                inc hl
-                inc hl
-                inc hl
-                inc hl
-                dec e
-                jr nz,acd_ws
-                jr acd_wf
-acd_wy:         inc hl
-                ld a,(hl)
-                inc hl
-                ld e,(hl)
-                inc hl
-                ld d,(hl)
-                ld (ac_blob),de
-                ld (ac_cpage),a
-                push bc
-                call map_page
-                pop bc
-                ld hl,(ac_blob)
-                inc hl
-                inc hl
-                inc hl
-                ld e,c
-                ld d,0
-                add hl,de
-                add hl,de
-                ld a,(hl)
-                inc hl
-                or (hl)
-                jr z,acd_wf
-                pop hl                  ; vale: sus poses de caminar. Como en ScummVM (_animSpeed 0 en v2) cada fotograma avanza una pose: acd_anim divide el contador
-                pop hl                  ; entre 8, asi que aqui suma 7 y acd_walk 1 mas
-                ld a,(ix+10)
-                or a
-                jr z,acd_ww
-                xor a                   ; parado: la primera pose (la de reposo) con el overlay; el overlay deja de estar pendiente de quitar
-                ld (ix+45),a
-                ld a,(ac_id)
-                ld e,a
-                ld d,0
-                ld hl,AC_OVF
-                add hl,de
-                res 7,(hl)
-                jp acd_anim
-acd_ww:         ld a,(ix+45)
-                add a,7
-                ld (ix+45),a
-                jp acd_walk
-acd_wf:         pop hl
-                ld a,h
-                ld (ac_cpage),a
-                pop hl
-                ld (ac_blob),hl
-                push bc
-                call map_page
-                pop bc
-acd_wn2:        ld a,(ix+10)            ; parado y sin esas poses: la pose de siempre
-                or a
-                jp nz,acd_noov
-                ld a,b                  ; no hay esas poses: si llevaba un overlay que no se conserva al caminar, la caminata sola; si no, la pose de siempre
-                or a
-                jp z,acd_noov
-                ld b,0
-                jp acd_wov
-acd_wn:         pop hl
-                pop hl
-                jr acd_wn2
 acd_noov:       ld a,(HAVEMSG)          ; hablando: la animacion 4 + direccion (la boca), si el traje la tiene
                 or a
                 jr z,acd_nt
                 ld a,(ac_id)
                 ld b,a
-                ld a,(VAR_TALK_ACTOR)          ; VAR_TALK_ACTOR
+                ld a,(VAR_TALK_ACTOR)
                 cp b
                 jr nz,acd_nt
                 ld a,c
+                push bc
                 add a,4
                 ld c,a
-                ld hl,(ac_blob)
-                cp (hl)
-                jr nc,acd_tno
-                inc hl
-                inc hl
-                inc hl                  ; tras el numero de animaciones y el offset del fondo de celdas
-                ld e,c
-                ld d,0
-                add hl,de
-                add hl,de
-                ld a,(hl)
-                inc hl
-                or (hl)
-                jr z,acd_tno
-                inc (ix+45)             ; la animacion de hablar tiene dos poses (boca abierta y cerrada): cambian cada 8 fotogramas
-                jr acd_anim
-acd_tno:        ld a,c
-                sub 4
+                call ac_key
+                ld a,c
+                pop bc
+                jr c,acd_nt
                 ld c,a
-acd_nt:         ld a,(ix+10)            ; fotograma: 0 caminar; el resto, quieto
+                inc (ix+45)             ; dos poses (boca abierta y cerrada): cambian cada 8 fotogramas
+                jp acd_anim
+acd_nt:         call ac_key             ; caminar / parado: clave = direccion
+                ret c
+                ld a,(ix+10)            ; fotograma: 0 caminar; el resto, quieto
                 or a
                 jr z,acd_walk
                 xor a                   ; quieto: la primera pose de caminar
                 ld (ix+45),a
-                jr acd_anim
-acd_walk:       inc (ix+45)             ; contador de fotogramas de caminata
+                jp acd_anim
+
+; C = clave (animacion) -> el sub-bloque del traje que la tiene, mapeado (ac_blob, ac_cpage); carry si el traje no la tiene. Conserva BC
+ac_key:         push bc
+                ld a,(ac_dpg)
+                call map_page
+                pop bc
+                ld hl,(ac_dir)
+                ld a,c
+                cp (hl)
+                ccf
+                ret c                   ; clave >= na
+                inc hl
+                ld e,c
+                ld d,0
+                add hl,de
+                add hl,de
+                add hl,de
+                ld a,(hl)
+                or a
+                scf
+                ret z
+                ld (ac_cpage),a
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld (ac_blob),de
+                push bc
+                call map_page
+                pop bc
+                or a
+                ret
+
+; C = clave del sub-bloque mapeado -> HL = su lista (u8 pasos | bit 7, offsets)
+ac_list:        ld hl,(ac_blob)
+                inc hl
+                inc hl
+                inc hl
+                ld e,c
+                ld d,0
+                add hl,de
+                add hl,de
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld hl,(ac_blob)
+                add hl,de
+                ret
+
+acd_walk:       ld a,(ix+45)            ; caminando: una pose por fotograma (ScummVM, _animSpeed 0 en v2): el contador avanza 8 (acd_anim lo divide entre 8)
+                add a,8
+                ld (ix+45),a
 acd_anim:       ld hl,(ac_blob)
                 ld a,c
                 cp (hl)                 ; numero de animaciones
@@ -892,7 +823,17 @@ acd_mod:        cp b
                 jr c,acd_md
                 sub b
                 jr acd_mod
-acd_md:         add a,a
+acd_md:         ld e,a                  ; el contador vuelve a pose * 8 (+ lo de debajo): asi no da la vuelta a 256 en medio de un ciclo de 12 pasos
+                rlca
+                rlca
+                rlca
+                ld d,a
+                ld a,(ix+45)
+                and 7
+                or d
+                ld (ix+45),a
+                ld a,e
+                add a,a
                 ld e,a
                 ld d,0
                 add hl,de
@@ -979,41 +920,78 @@ acd_nb:
                 push bc
                 call ac_mkdec           ; la mascara de la sala bajo el personaje (puede quitar ac_mk)
                 pop bc
-acd_nd:         push iy
-                pop hl
+acd_nd:         push iy                 ; las referencias del fotograma (u8 cx | cy << 4, u8 fondo, u8 indice) a AC_RB: las celdas estan en los fondos del traje,
+                pop hl                  ; en otras paginas (TOOLS/costume2.py costume4)
                 ld de,5
                 add hl,de
+                ld a,b
+                add a,a
+                add a,b
+                ld c,a
+                push bc
+                ld b,0
+                ld de,AC_RB
+                ldir
+                pop bc
+                ld a,$FF
+                ld (ac_lpool),a         ; ningun fondo mapeado
+                ld hl,AC_RB
 acd_cell:       ld a,b
                 or a
                 ret z
-                ld a,(hl)               ; referencia: cx | cy << 4 y el indice de la celda en el fondo de celdas del traje (TOOLS/costume2.py)
+                ld a,(hl)               ; referencia: posicion, fondo e indice
                 ld (ac_pos),a
+                inc hl
+                ld c,(hl)
                 inc hl
                 ld a,(hl)
                 inc hl
                 ld (ac_nx),hl           ; la siguiente referencia
+                push bc
+                push af
+                ld a,(ac_lpool)
+                cp c
+                jr z,acd_pok
+                ld a,c                  ; otro fondo: su pagina y direccion en el directorio (tras las animaciones: u8 fondos y fondos x (pagina, direccion))
+                ld (ac_lpool),a
+                ld a,(ac_dpg)
+                call map_page
+                ld hl,(ac_dir)
+                ld e,(hl)
+                ld d,0
+                inc hl
+                add hl,de
+                add hl,de
+                add hl,de
+                inc hl                  ; HL = fondo 0
+                ld a,(ac_lpool)         ; (map_page estropea BC)
+                ld e,a
+                add hl,de
+                add hl,de
+                add hl,de
+                ld a,(hl)
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                ld (ac_pool),de
+                call map_page
+acd_pok:        pop af
+                pop bc
                 ld l,a
                 ld h,0
                 add hl,hl
-                ex de,hl                ; DE = 2 * indice
-                ld hl,(ac_blob)
-                inc hl
-                ld a,(hl)
-                inc hl
-                ld h,(hl)
-                ld l,a                  ; HL = offset de la tabla de celdas
-                add hl,de
-                ld de,(ac_blob)
+                ld de,(ac_pool)
                 add hl,de
                 ld a,(hl)
                 inc hl
                 ld h,(hl)
-                ld l,a                  ; HL = offset de la celda (banderas, forma, mascara, color)
+                ld l,a                  ; offset de la celda desde el principio del fondo
                 add hl,de
                 dec hl                  ; el codigo de abajo cuenta con un byte antes de las banderas
                 ld (ac_cp),hl
                 inc hl
-                ld a,(hl)               ; banderas: bit 0 mascara completa, bit 1 color uniforme
+                ld a,(hl)               ; banderas: bit 2 celda de 4 bpp
                 ld (ac_fl),a
                 push bc
                 ld a,(ac_pos)
@@ -1073,6 +1051,9 @@ acd_cell:       ld a,b
                 inc hl
                 ld a,(ac_cy)
                 ld (hl),a
+                ld a,(ac_fl)
+                bit 2,a
+                jp nz,acd_b4            ; celda de 4 bpp (formato B)
                 ld a,29
                 call ac_wbo
                 xor a
@@ -1121,7 +1102,7 @@ acd_c1:         ld a,4
                 jr nz,acd_c1m
                 ld bc,8
                 ldir
-                jr acd_skip
+                jp acd_skip
 acd_c1m:        ld b,8
 acd_c1l:        ld a,(hl)
                 call acd_pmap
@@ -1129,6 +1110,96 @@ acd_c1l:        ld a,(hl)
                 inc hl
                 inc de
                 djnz acd_c1l
+                jp acd_skip
+acd_b4:         ld a,(ac_fl)            ; formato B (PLAN_TRAJES4.md): color transparente (nibble alto de las banderas; con paleta del actor, uno que esta no use)
+                rrca
+                rrca
+                rrca
+                rrca
+                and 15
+                ld b,a
+                ld a,(ac_pf)
+                or a
+                jr z,ab4_t
+                ld a,(ac_ptr)
+                ld b,a
+ab4_t:          ld a,b
+                rlca
+                rlca
+                rlca
+                rlca
+                ld b,a
+                ld a,2
+                call ac_wbo
+                ld a,(ac_cx+1)
+                or b
+                ld (de),a               ; X bit 8 y transparente
+                ld a,(ac_n)             ; la pagina de la hoja de esta ranura (bloque 0, POKE 2129 = 0)
+                dec a
+                call ac_shp
+                push af
+                ld a,29
+                call ac_wbo
+                pop af
+                ld (de),a
+                ld l,a
+                ld h,0
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                add hl,hl
+                ex de,hl                ; DE = la celda en la hoja (solo llega a la sombra: el bloque 0 es de solo lectura)
+                ld hl,(ac_cp)
+                inc hl
+                inc hl                  ; los 32 bytes de pixeles
+                ld a,(ac_pf)
+                or a
+                jr nz,ab4_p
+                ld bc,32
+                ldir
+                jr ab4_m
+ab4_p:          ld b,32                 ; con la paleta del actor: nibble a nibble
+ab4_pl:         push bc
+                ld a,(hl)
+                push hl
+                rrca
+                rrca
+                rrca
+                rrca
+                and 15
+                ld c,a
+                ld b,0
+                ld hl,ac_pm
+                add hl,bc
+                ld a,(hl)
+                rlca
+                rlca
+                rlca
+                rlca
+                ld c,a
+                pop hl
+                ld a,(hl)
+                push hl
+                push bc
+                and 15
+                ld c,a
+                ld b,0
+                ld hl,ac_pm
+                add hl,bc
+                pop bc
+                ld a,(hl)
+                or c
+                ld (de),a
+                pop hl
+                inc hl
+                inc de
+                pop bc
+                djnz ab4_pl
+ab4_m:          ld de,ac_mt             ; la forma -> mascara (con la de profundidad)
+                ld bc,8
+                ldir
+                call acd_mput
 acd_skip:       ld hl,(ac_nx)
                 pop bc
                 dec b

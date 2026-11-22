@@ -18,7 +18,7 @@ def main():
     spr = []
     for i in range(64):
         b = d[131072 + 32 * i:131072 + 32 * i + 32]
-        spr.append((b[0], b[1] | (b[2] << 8), b[3], b[4:12], b[12:20], b[20:28]))
+        spr.append((b[0], b[1] | (b[2] << 8), b[3], b[4:12], b[12:20], b[20:28], b[28], b[29]))
     t = d[131072 + 2048:]
     fine, rows = t[0], t[1:4]
     W, H = 256, 192
@@ -59,23 +59,30 @@ def main():
     # sprites extra (POKE 2131 = M, el byte 9 tras la tabla de la FPGA): entrada j = 32 bytes en $4000 + 32 * j; sin bit de activo (Y = 0: no se ve);
     # menos prioridad que los 64 normales y, entre ellos, gana el numero mas bajo: se dibujan primero y del ultimo al primero
     nx = t[8] if len(t) > 8 else 0
+    sheet = (t[9] if len(t) > 9 else 2) << 13       # POKE 2129: la hoja (y las entradas de los extra) en la sombra
     ext = []
     for j in range(nx):
-        b = d[65536 + 0x4000 + 32 * j:65536 + 0x4000 + 32 * j + 32]
+        b = sh[sheet + 32 * j:sheet + 32 * j + 32]
         if b[3]:
-            ext.append((1, b[1] | ((b[2] & 1) << 8), b[3], b[4:12], b[12:20], b[20:28]))
+            ext.append((1, b[1] | ((b[2] & 1) << 8), b[3], b[4:12], b[12:20], b[20:28], b[29], b[2] >> 4))
     per_line = [0] * 256
     for e in ext + [x for x in spr if x[0]]:
         for y in range(8):
             if 0 <= e[2] - 32 + y < H and any(e[5]):
                 per_line[e[2] - 32 + y] += 1
     print('sprites: %d normales, %d extra, maximo por linea %d%s' % (sum(1 for x in spr if x[0]), len(ext), max(per_line), ' (SUPERA 12)' if max(per_line) > 12 else ''))
-    for on, sx, sy, col, pix, mask in list(reversed(ext)) + [x for x in spr if x[0]]:
+    for on, sx, sy, col, pix, mask, page, trans in list(reversed(ext)) + [x for x in spr if x[0]]:
         for y in range(8):
             for k in range(8):
                 if (mask[y] >> (7 - k)) & 1:
                     x, yy = sx - 32 + k, sy - 32 + y
                     if 0 <= x < W and 0 <= yy < H:
+                        if page:                 # formato B: celda de 4 bpp en la hoja, nibble alto = pixel de la izquierda; el color transparente no se ve
+                            v = sh[sheet + (page << 5) + (y << 2) + (k >> 1)]
+                            n = (v >> 4) if k % 2 == 0 else (v & 15)
+                            if n != trans:
+                                img[yy][x] = L.CHROMA[n]
+                            continue
                         c = col[y]
                         img[yy][x] = L.CHROMA[(c >> 4) if (pix[y] >> (7 - k)) & 1 else (c & 15)]
     out = [[img[y // scale][x // scale] for x in range(W * scale)] for y in range(H * scale)]

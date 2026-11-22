@@ -97,9 +97,16 @@ MS_BUF          equ $8831               ; raton (mouse.asm): lectura del puerto 
 MS_LX           equ $8839               ; ultima posicion leida (el teclado puede mover el cursor mientras el raton esta quieto)
 MS_LY           equ $883A
 ac_wb           equ $DC80           ; palabra: ventana de campos del sprite que se escribe (2101 si es normal; la entrada si es extra)
-ac_xd           equ SPRX+30           ; XD_MARK: se han usado sprites extra, que pisan las variables del sistema del ZX81 ($4000-$41FF); al salir, reset
+ac_xd           equ $94FF               ; XD_MARK: los sprites extra pisaban las variables del ZX81 (ya no: sus entradas estan en el bloque 0); sigue por si acaso
+ac_dir          equ $94FB               ; palabra: el directorio del traje que se dibuja (COSTDIR)
+ac_dpg          equ $94FD               ; su pagina
+ac_ptr          equ $94FE               ; color transparente de las celdas de 4 bpp con la paleta del actor
+ac_lpool        equ $DC82               ; fondo de celdas del traje mapeado ($FF: ninguno)
+ac_pool         equ $DC83               ; palabra: su direccion
+AC_RB           equ $DC85               ; las referencias del fotograma que se dibuja (hasta 39 x 3 bytes; ACD_RMAX en TOOLS/costume2.py)
+WALK_OVL        equ 128                 ; clave de las poses de caminar con overlay: WALK_OVL + 4 * f + dir (TOOLS/costume2.py)
 XD_MARK         equ $5A
-SPRX            equ $4000               ; entradas de los sprites extra (POKE 2129 = 2 -> bloque $4000; entrada j = SPRX + 32 * j)
+SPRX            equ $0000               ; entradas de los sprites extra en la hoja del bloque 0 (POKE 2129 = 0; entrada j = SPRX + 32 * j; PLAN_TRAJES4.md)
 ac_pm           equ $94EA               ; 16 bytes: la paleta del actor que se dibuja, de codigo Chroma a codigo Chroma (ac_mkpal); dentro de lo libre entre AC_LC y BACKBUF
 ac_pf           equ $94FA               ; 0: el actor lleva la paleta de identidad (no hay que remapear los colores de sus celdas)
 AC_MAX          equ 78                  ; ranuras de sprite de los personajes: 63 normales (el 63 es el cursor) y 15 extra (entradas 0 y 2-15)

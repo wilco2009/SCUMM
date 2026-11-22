@@ -264,29 +264,26 @@ def build(world, game, first_page=16, include_test=False, sounds=None, debug_roo
         ixd = scumm2.Index(world.dir) if hasattr(world, 'dir') else None
         if ixd is not None:
             emap = lfl2gfx.default_map({})
-            tr = gameprofile.parse(game).get('trajes', {})            # [trajes] escala = n/d (por omision 3/4)
-            for cid in range(1, 64):                          # los trajes que existan en el juego (hasta los 64 del COSTDIR)
+            for cid in range(1, 64):                          # los trajes que existan en el juego (hasta los 64 del COSTDIR): sprites de 4 bpp a 1/1 (PLAN_TRAJES4.md)
                 try:
-                    scales = [tuple(int(x) for x in e.split('/')) for e in tr.get('escala_%d' % cid, tr.get('escala', '3/4')).split(',')]     # escala_N = n/d[,n/d...]: un traje concreto; con varias, la primera en la que quepa entero
                     cost = costume2.Costume(scumm2.resource(world.dir, ixd, 'costume', cid))
-                    blob = scaled_costume(costume2, cost, emap, scales, (1,))       # el traje de reposo solo con una pose de caminar: las de caminar van en paginas aparte (abajo)
-                    ent = walk_pages(costume2, cost, emap, pk)
-                    if len(ent) < 4 * len([1 for dr in range(4) if cost.merged(dr)]):
-                        blob = scaled_costume(costume2, cost, emap, scales)      # alguna direccion no cabe aparte: el traje de siempre, con sus poses de caminar dentro
+                    groups, pools = costume2.costume4(cost, emap)
                 except Exception:
                     continue
-                if len(blob) > 6100:                      # no cabe en una pagina: ese traje se queda con el rectangulo
+                keymap, poolat = {}, []                       # clave (animacion) -> pagina y direccion del sub-bloque que la tiene; y los fondos de celdas
+                for n, (keys, blob) in enumerate(groups):
+                    where = pk.add(blob)
+                    for k in keys:
+                        keymap[k] = where
+                    if n == 0:
+                        poolat += [pk.add(b) for b in pools[:2]]     # los primeros fondos (parado y caminar) junto al primer sub-bloque
+                poolat += [pk.add(b) for b in pools[len(poolat):]]
+                if not keymap:
                     continue
-                dr_ent = bytearray(ent)
-                for f, dr in sorted(set(costume2.sticky_overlays(cost))):          # las poses de caminar con el overlay que se conserva (casco de Melissa): una pagina por fotograma y direccion (clave 4 * fotograma + direccion)
-                    wb = walk_blob_fit(costume2, cost, emap, f, dr)
-                    if wb is not None:
-                        dr_ent += bytes([4 * f + dr]) + struct.pack('<BH', *pk.add(wb))
-                if dr_ent:                                 # directorio (u8 n y n x clave, pagina, direccion) enlazado en la cabecera del traje
-                    blob = bytearray(blob)
-                    struct.pack_into('<BH', blob, 3 + 2 * blob[0], *pk.add(bytes([len(dr_ent) // 4]) + bytes(dr_ent)))
-                    blob = bytes(blob)
-                costdir[3 * cid:3 * cid + 3] = struct.pack('<BH', *pk.add(blob))
+                na = max(keymap) + 1
+                dirb = bytes([na]) + b''.join(struct.pack('<BH', *keymap.get(k, (0, 0))) for k in range(na)) + \
+                    bytes([len(poolat)]) + b''.join(struct.pack('<BH', *w) for w in poolat)
+                costdir[3 * cid:3 * cid + 3] = struct.pack('<BH', *pk.add(dirb))      # COSTDIR -> directorio: u8 na, na x (pagina, direccion), u8 fondos, fondos x (pagina, direccion)
     snd_ref = struct.pack('<BH', *pk.add(sound_table(sounds))) if sounds else bytes(3)
     # Las mascaras de profundidad (la de la sala y las de sus objetos, room_mask) van al final: asi no desplazan los scripts, que son a lo que apuntan las
     # partidas guardadas (save.asm). En el sitio donde iban las de antes (solo la de la sala) queda un hueco del mismo tamano.
