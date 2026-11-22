@@ -243,7 +243,7 @@ dro_found:      push ix
                 pop iy
                 ld a,(ARGS+2)           ; x = $FF: no se mueve; si no, el objeto se dibuja en (x*8, y*8) como en ScummVM (o2_drawObject)
                 cp $FF
-                jr z,dro_nomove
+                jp z,dro_nomove
                 ld c,a
                 ld a,(ARGS+4)
                 ld b,a
@@ -252,7 +252,17 @@ dro_found:      push ix
                 ld a,c
                 cp (iy+5)
                 jr z,dro_nomove
-dro_mv:         ld (iy+5),c
+dro_mv:         ld a,c                  ; el punto de andar se mueve con el objeto: walk_x += xpos*8 - x_pos, walk_y += ypos*8 - y_pos
+                sub (iy+5)              ; (o2_drawObject; aqui walk_x va en columnas y walk_y en unidades de 2 lineas)
+                add a,(iy+2)
+                ld (iy+2),a
+                ld a,b
+                sub (iy+6)
+                add a,a
+                add a,a
+                add a,(iy+3)
+                ld (iy+3),a
+                ld (iy+5),c
                 ld (iy+6),b
                 ld a,(FO_I)             ; el registro del .GFX (columna, linea) sigue al objeto; sin registro, solo cambia la posicion
                 ld hl,hv_nobj
