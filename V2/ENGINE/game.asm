@@ -160,8 +160,7 @@ sa_chk:
                 ld a,(ix+5)
                 or a
                 ret z
-                ld (ix+10),c
-                ret
+                jp OVL_SETFRAME         ; guarda el fotograma y anota el overlay ya (ac_setfr, actors.asm): hablar lo pisaria antes de que lo vea ac_track
 
 sa_table:       defb INIT_FRAME,WALK_FRAME,STAND,TALK_START,TALK_STOP
 

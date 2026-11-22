@@ -5,11 +5,14 @@ ACTNAME         equ $8A30               ; (en el programa completo lo define ovl
 map_page_x      equ map_phys
 OVL_CMNAME      equ vm_ret              ; sin interfaz en el nucleo de pruebas: los codigos de texto 5 y 6 no dan nombre y el perfil no prohibe scripts
 OVL_NOSTART     equ vm_nostart
+OVL_SETFRAME    equ vm_setframe
                 include "vm_core.asm"
                 include "tables.inc"
                 include "progdata.inc"
 
 vm_ret:        ret
+vm_setframe:   ld (ix+10),c
+                ret
 vm_nostart:    or 1
                 ret
 

@@ -166,6 +166,39 @@ ac_wbo:         ld de,(ac_wb)
 ac_track:       ld b,1
 act_l:          ld a,b
                 call actor_addr
+                call act_one
+                inc b
+                ld a,b
+                cp NACTORS
+                jr c,act_l
+                ret
+
+; ac_setfr (puerta OVL_SETFRAME, la llama start_anim del residente): guarda el fotograma C del actor IX y lo anota ya: si no, un fotograma de overlay que
+; se pone y otro que se pone en el mismo fotograma del motor (hablar, que lo hace el mismo script o el que arranca: el sombrero de quien dice "Mi sombrero"
+; justo despues de ponerselo) llega a ac_track pisado y el overlay no se entera
+ac_setfr:       ld (ix+10),c
+                ld a,c
+                cp 3
+                jr z,asf_go
+                cp 6
+                ret c                   ; solo los fotogramas que ponen un overlay (3 y de 6 en adelante); los demas los ve ac_track como siempre
+asf_go:         ld a,(ix+15)
+                or a
+                ret z
+                cp NACTORS
+                ret nc
+                push bc
+                push de
+                push hl
+                ld b,a
+                call act_one
+                pop hl
+                pop de
+                pop bc
+                ret
+
+; B = actor, IX = su direccion: anota su fotograma de overlay (AC_OVF) si ha cambiado desde la ultima vez
+act_one:
                 ld e,b
                 ld d,0
                 ld hl,AC_LC
@@ -184,7 +217,7 @@ act_c:          ld hl,AC_LF
                 add hl,de
                 ld a,(ix+10)
                 cp (hl)
-                jr z,act_n
+                jr z,act_r
                 ld (hl),a
                 ld hl,AC_OVF
                 add hl,de
@@ -195,19 +228,15 @@ act_c:          ld hl,AC_LF
                 cp 3
                 jr z,act_s
                 cp 6
-                jr c,act_n              ; parado, hablar: no cambian el overlay
+                jr c,act_r              ; parado, hablar: no cambian el overlay
 act_s:          ld (hl),a
-                jr act_n
+                jr act_r
 act_0:          ld a,(hl)               ; caminar / inicio: el overlay queda pendiente de quitar (bit 7); ac_draw lo quita salvo que el traje diga que no lo toca
                 or a
-                jr z,act_n
+                jr z,act_r
                 or $80
                 ld (hl),a
-act_n:          inc b
-                ld a,b
-                cp NACTORS
-                jr c,act_l
-                ret
+act_r:          ret
 
 ; ---------------------------------------------------------------------------------------------------------------------------------
 ;  Cache de sprites: si un actor tiene la misma firma (posicion, traje, pose, direccion, camara, quien habla) y los mismos sprites que en el

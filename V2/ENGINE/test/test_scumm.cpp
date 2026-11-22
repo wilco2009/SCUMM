@@ -323,7 +323,7 @@ int main(int argc, char** argv) {
   if (argc < 6) { printf("uso: test_scumm scumm.bin scumm.sym carpeta_SD fotogramas salida.bin [guion]%c", 10); return 2; }
   FILE* f = fopen(argv[1], "rb");
   if (!f) { printf("no encuentro %s%c", argv[1], 10); return 2; }
-  std::vector<uint8_t> code(32768);
+  std::vector<uint8_t> code(40960);
   size_t sz = fread(code.data(), 1, code.size(), f); fclose(f);
   for (size_t i = 0; i < sz; i++) { int a = 0x4200 + (int)i; ram[a >> 13][a & 0x1FFF] = code[i]; }
   { FILE* s = fopen(argv[2], "r"); char line[256];
@@ -421,7 +421,7 @@ int main(int argc, char** argv) {
     if (blk[0] == 0 && (z80.pc.w == 0x02E7 || z80.pc.w == 0x0207)) {           // SET_FAST y SLOW_FAST de la ROM: el arnes no tiene ROM, vuelve sin hacer nada
       z80.pc.w = rd16(z80.sp.w); z80.sp.w += 2; continue;
     }
-    static const char* ts_bp = getenv("TS_BP"); if (ts_bp && z80.pc.w == (unsigned)strtol(ts_bp, 0, 16) && (!getenv("TS_BPA") || (z80.af.w >> 8) == (unsigned)strtol(getenv("TS_BPA"), 0, 16))) {   // TS_BP=direccion (hex): para ahi e imprime los ultimos PC, SP y la pila
+    static const char* ts_bp = getenv("TS_BP"); if (ts_bp && z80.pc.w == (unsigned)strtol(ts_bp, 0, 16) && (!getenv("TS_BPFROM") || frames_done >= atoi(getenv("TS_BPFROM"))) && (!getenv("TS_BPA") || (z80.af.w >> 8) == (unsigned)strtol(getenv("TS_BPA"), 0, 16))) {   // TS_BP=direccion (hex): para ahi e imprime los ultimos PC, SP y la pila
       printf("TS_BP pc=%04X sp=%04X af=%04X bc=%04X de=%04X hl=%04X ix=%04X iy=%04X; pila:", z80.pc.w, z80.sp.w, z80.af.w, z80.bc.w, z80.de.w, z80.hl.w, z80.ix.w, z80.iy.w);
       for (int k = 0; k < 6; k++) printf(" %04X", rd16(z80.sp.w + 2 * k));
       printf("%cultimos PC:", 10);

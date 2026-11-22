@@ -24,6 +24,7 @@
                 jp ui_cmname
                 jp ui_nostart
                 jp ov_afpx
+                jp ac_setfr
 
 ; Puertas al overlay 2 (snd.asm y save.asm, overlay2.asm): cada una carga en el bloque 0 la pagina del overlay 2 con un OUT; la instruccion siguiente
 ; (la direccion de despues del OUT) ya se lee del overlay 2, que tiene ahi un JP a su rutina. Al acabar, ov2_exit (overlay2.asm) vuelve a mapear el overlay 1 y
