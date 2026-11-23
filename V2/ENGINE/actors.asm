@@ -184,7 +184,8 @@ act_l:          ld a,b
 ; ac_setfr (puerta OVL_SETFRAME, la llama start_anim del residente): guarda el fotograma C del actor IX y lo anota ya: si no, un fotograma de overlay que
 ; se pone y otro que se pone en el mismo fotograma del motor (hablar, que lo hace el mismo script o el que arranca: el sombrero de quien dice "Mi sombrero"
 ; justo despues de ponerselo) llega a ac_track pisado y el overlay no se entera
-ac_setfr:       ld (ix+10),c
+ac_setfr:       ld (ix+45),0            ; la animacion empieza de nuevo: una misma animacion repetida (las notas del baile) vuelve a hacerse
+                ld (ix+10),c
                 ld a,c
                 cp 3
                 jr z,asf_go
@@ -238,6 +239,7 @@ act_c:          ld hl,AC_LF
                 cp 6
                 jr c,act_r              ; parado, hablar: no cambian el overlay
 act_s:          ld (hl),a
+                ld (ix+45),0            ; el overlay nuevo empieza su animacion
                 jr act_r
 act_0:          ld a,(hl)               ; caminar / inicio: el overlay queda pendiente de quitar (bit 7); ac_draw lo quita salvo que el traje diga que no lo toca
                 or a
@@ -708,8 +710,26 @@ acd_ost:        push bc                 ; parado con el overlay: su pose (clave 
                 ld c,a
                 jr acd_noov
 acd_keep:       res 7,(hl)
-acd_ovk:        xor a
-                ld (ix+45),a
+acd_ovk:        push bc                 ; el overlay parado recorre sus pasos una vez (el contador avanza 8 por fotograma, una pose por fotograma como al caminar)
+                call ac_list            ; y se queda en la ultima (los indigenas que se agachan y se levantan: animacion de una sola vez; con un solo paso no cambia nada)
+                ld a,(hl)
+                and $7F
+                ld b,a
+                dec a
+                add a,a
+                add a,a
+                add a,a
+                or 7                    ; contador maximo: ultima pose * 8 + 7
+                ld e,a
+                ld a,(ix+45)
+                add a,8
+                jr c,aov_c
+                cp e
+                jr c,aov_s
+                jr z,aov_s
+aov_c:          ld a,e
+aov_s:          ld (ix+45),a
+                pop bc
                 jp acd_anim
 acd_noov:       ld a,(HAVEMSG)          ; hablando: la animacion 4 + direccion (la boca), si el traje la tiene
                 or a
@@ -910,10 +930,15 @@ acd_dy:         add hl,de
                 ld (hl),a
 acd_nb:
                 ld b,(iy+4)
+                xor a
+                ld (ac_red),a
                 ld a,(ac_n)             ; si no caben todos sus sprites (AC_MAX ranuras) no se dibuja a medias
                 add a,b
                 cp AC_MAX+1
-                ret nc
+                jr c,acd_fits
+                ld a,1                  ; no cabe: se mira si cabria sin las celdas de pocos pixeles (ac_red: 1 pasada de cuenta, 2 dibujo reducido)
+                ld (ac_red),a
+acd_fits:
                 ld a,(ac_mk)
                 or a
                 jr z,acd_nd
@@ -933,7 +958,35 @@ acd_nd:         push iy                 ; las referencias del fotograma (u8 cx |
                 ld de,AC_RB
                 ldir
                 pop bc
-                ld a,$FF
+                ld a,(ac_red)
+                or a
+                jr z,acd_go
+                ld a,MINOR_PX           ; umbral de pixeles de una celda "menor": 4, 8, 16 y 32 hasta que quepa
+                ld (ac_thr),a
+acd_rp:         push bc                 ; pasada de cuenta: cuantas de las celdas son menores (no dibuja nada)
+                xor a
+                ld (ac_minor),a
+                dec a
+                ld (ac_lpool),a
+                ld hl,AC_RB
+                call acd_cell
+                pop bc
+                ld a,(ac_minor)
+                ld e,a
+                ld a,(ac_n)
+                add a,b
+                sub e
+                cp AC_MAX+1
+                jr c,acd_rok
+                ld a,(ac_thr)
+                add a,a
+                cp 33
+                ret nc                  ; ni sin la mitad de las celdas pequenas cabe
+                ld (ac_thr),a
+                jr acd_rp
+acd_rok:        ld a,2
+                ld (ac_red),a
+acd_go:         ld a,$FF
                 ld (ac_lpool),a         ; ningun fondo mapeado
                 ld hl,AC_RB
 acd_cell:       ld a,b
@@ -994,7 +1047,19 @@ acd_pok:        pop af
                 ld a,(hl)               ; banderas: bit 2 celda de 4 bpp
                 ld (ac_fl),a
                 push bc
-                ld a,(ac_pos)
+                ld a,(ac_red)
+                or a
+                jr z,acd_nr
+                call acd_minor          ; C: celda de pocos pixeles
+                ld a,(ac_red)
+                dec a
+                jr nz,acd_r2
+                jp nc,acd_skip          ; pasada de cuenta: no se dibuja nada; solo se cuentan las de pocos pixeles
+                ld hl,ac_minor
+                inc (hl)
+                jp acd_skip
+acd_r2:         jp c,acd_skip           ; dibujo reducido: las de pocos pixeles no
+acd_nr:         ld a,(ac_pos)
                 ld c,a
                 and $0F
                 add a,a
@@ -1034,6 +1099,17 @@ acd_pok:        pop af
                 jp nz,acd_skip
                 ld a,l
                 ld (ac_cy),a
+                ld e,8                  ; filas visibles de la celda: lo que queda por encima de la zona de abajo (la interfaz, desde la fila UI_R0); como
+                sub 32                  ; ScummVM, que recorta el dibujo al rectangulo de la sala. Entera por debajo: no se dibuja ni gasta ranura
+                jr c,acd_rw             ; (por encima de la pantalla: la FPGA la recorta)
+                sub UI_R0*8
+                jp nc,acd_skip
+                neg
+                cp 8
+                jr nc,acd_rw
+                ld e,a
+acd_rw:         ld a,e
+                ld (ac_rows),a
                 ld a,(ac_n)
                 cp AC_MAX
                 jp nc,acd_skip
@@ -1204,5 +1280,31 @@ acd_skip:       ld hl,(ac_nx)
                 pop bc
                 dec b
                 jp acd_cell
+
+; C si la celda (ac_cp, ac_fl) es de 4 bpp y su forma tiene ac_thr pixeles o menos (solo se mira con ac_red != 0, cuando el actor no cabe)
+acd_minor:      ld a,(ac_fl)
+                and 4
+                ret z
+                ld hl,(ac_cp)
+                ld de,34                ; tras las banderas, los 32 bytes de pixeles y luego los 8 de la forma
+                add hl,de
+                ld b,8
+                ld c,0
+amn_l:          ld a,(hl)
+                inc hl
+amn_b:          or a
+                jr z,amn_n
+                ld d,a
+                dec a
+                and d
+                inc c
+                jr amn_b
+amn_n:          djnz amn_l
+                ld a,(ac_thr)
+                inc a
+                ld e,a
+                ld a,c
+                cp e
+                ret
 
                 include "mask_px.inc"

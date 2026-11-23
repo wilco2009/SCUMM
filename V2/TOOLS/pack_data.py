@@ -264,12 +264,16 @@ def build(world, game, first_page=16, include_test=False, sounds=None, debug_roo
         ixd = scumm2.Index(world.dir) if hasattr(world, 'dir') else None
         if ixd is not None:
             emap = lfl2gfx.default_map({})
+            tr = gameprofile.parse(game).get('trajes', {})    # escala4_N = n/d: un traje concreto a otra escala (los indigenas de Zak, sala 150: no caben a 1/1 en los sprites por linea)
             for cid in range(1, 64):                          # los trajes que existan en el juego (hasta los 64 del COSTDIR): sprites de 4 bpp a 1/1 (PLAN_TRAJES4.md)
                 try:
                     cost = costume2.Costume(scumm2.resource(world.dir, ixd, 'costume', cid))
+                    costume2.SCALE4 = tuple(int(x) for x in tr.get('escala4_%d' % cid, '1/1').split('/'))
                     groups, pools = costume2.costume4(cost, emap)
                 except Exception:
                     continue
+                finally:
+                    costume2.SCALE4 = (1, 1)
                 keymap, poolat = {}, []                       # clave (animacion) -> pagina y direccion del sub-bloque que la tiene; y los fondos de celdas
                 for n, (keys, blob) in enumerate(groups):
                     where = pk.add(blob)

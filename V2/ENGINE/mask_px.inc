@@ -2,7 +2,23 @@
 acd_mput:       ld a,(ac_mk)
                 or a
                 call nz,ac_mask_px
+                ld a,(ac_rows)          ; recorte por abajo: las filas de mascara que caen en la zona de la interfaz se apagan
+                cp 8
+                jr nc,amp_ok
                 push hl
+                ld c,a
+                ld b,0
+                ld hl,ac_mt
+                add hl,bc
+                neg
+                add a,8
+                ld b,a
+                xor a
+amp_z:          ld (hl),a
+                inc hl
+                djnz amp_z
+                pop hl
+amp_ok:         push hl
                 ld a,20
                 call ac_wbo
                 ld hl,ac_mt

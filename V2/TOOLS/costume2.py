@@ -482,6 +482,9 @@ def walk_overlay_blob(cost, emap, f, dr0, walk=4):
     return bytes(head) + bytes(body) + bytes(lst) + tab + bytes(pool)
 
 
+SCALE4 = (1, 1)       # escala de los trajes de 4 bpp: 1/1; pack_data la cambia para un traje concreto (escala4_N en [trajes] del perfil)
+
+
 def cells4(parts, emap):
     """Referencia del compositor del Z80 (PLAN_TRAJES4.md): compone las partes (Costume.render) sin escala y las trocea en celdas de 8x8 del formato B.
     Devuelve (dx, dy, cw, ch, [(cx | cy << 4, celda de 32 bytes, forma de 8 bytes)]): celda = 8 filas de 4 bytes, nibble alto = pixel de la izquierda,
@@ -496,6 +499,26 @@ def cells4(parts, emap):
             for x, c in enumerate(row):
                 if c:
                     full[py + y - y0][px + x - x0] = emap[c]
+    num, den = SCALE4
+    if (num, den) != (1, 1):             # escala solo para un traje concreto (escala4_N del perfil): cada pixel nuevo toma el color mas frecuente de su bloque de origen si al menos la mitad es opaco
+        sx0, sx1 = (x0 * num) // den, -((-x1 * num) // den)
+        sy0, sy1 = (y0 * num) // den, -((-y1 * num) // den)
+        cw, ch = (sx1 - sx0 + 7) // 8, (sy1 - sy0 + 7) // 8
+        sc = [[None] * (cw * 8) for _ in range(ch * 8)]
+        for Y in range(sy0, sy1):
+            ya, yb = -((-Y * den) // num), -((-(Y + 1) * den) // num)
+            for X in range(sx0, sx1):
+                xa, xb = -((-X * den) // num), -((-(X + 1) * den) // num)
+                cnt, tot = {}, 0
+                for yy in range(max(ya, y0), min(max(yb, ya + 1), y1)):
+                    for xx in range(max(xa, x0), min(max(xb, xa + 1), x1)):
+                        tot += 1
+                        c = full[yy - y0][xx - x0] if (yy - y0) < len(full) and (xx - x0) < len(full[0]) else None
+                        if c is not None:
+                            cnt[c] = cnt.get(c, 0) + 1
+                if tot and sum(cnt.values()) * 2 >= tot:
+                    sc[Y - sy0][X - sx0] = max(cnt, key=lambda c: cnt[c])
+        full, x0, y0 = sc, sx0, sy0
     cells = []
     for cy in range(ch):
         for cx in range(cw):
@@ -513,6 +536,7 @@ def cells4(parts, emap):
 
 WALK_OVL = 128         # clave de las poses de caminar con el overlay f puesto: WALK_OVL + 4 * f + direccion (PLAN_TRAJES4.md)
 WALK_OVL_STEPS = 99   # pasos de caminar con overlay que se guardan (los de caminar sin overlay van todos)
+ONESHOT_MAX = 8        # pasos como mucho de una animacion de una sola vez de un overlay parado
 ACD_RMAX = 39         # referencias por fotograma como mucho (el bufer AC_RB del Z80)
 CELL4 = 4             # bandera de celda de 4 bpp en el fondo de celdas: 32 bytes de pixeles y 8 de forma
 
@@ -551,7 +575,12 @@ def poses4(cost):
             l.update(cost.anim_limbs(anim))
             l = {k: v for k, v in l.items() if v}
             if l:
-                out[anim] = [(l, cost.steps(l)[0], mir)]
+                seq = cost.steps(l)
+                own = [v for v in cost.anim_limbs(anim).values() if v]
+                if 1 < len(seq) <= ONESHOT_MAX and any(v[2] and v[0] < v[1] for v in own):
+                    out[anim] = [(l, p, mir) for p in seq]       # animacion de una sola vez (el miembro se para en su ultima imagen: los indigenas que se agachan): todos sus pasos, el motor los recorre y se queda en el ultimo
+                else:
+                    out[anim] = [(l, seq[0], mir)]
             if overlay_kept(cost, anim, dr) and f in wanted:    # caminar con el overlay: solo los detalles (sombrero, casco, mascara), no las poses enteras
                 l = dict(cost.merged(dr))
                 l.update(cost.anim_limbs(anim))

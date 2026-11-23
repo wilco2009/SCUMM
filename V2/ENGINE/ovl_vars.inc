@@ -117,3 +117,8 @@ AC_LC           equ $94D0           ; NACTORS bytes: su traje la ultima vez
 ; entre INVSL y BACKBUF ($9484-$94FF, libre): van dentro de lo que guarda save.asm (SV_LEN_I) y no los borra hr_clear. ac_xd: el byte +30 de la entrada 0 de los
 ; sprites extra (la FPGA no lo mira; no lo toca hr_clear)
 cm_lx           equ ACSIG+191           ; (fuera de lo que guarda save.asm: no cambia la marca de las partidas) camara: ultima x (celdas, byte bajo) del actor que se sigue; si no cambia, el cursor en el borde mueve la camara (cam.asm)
+ac_rows         equ $DDA0               ; filas visibles de la celda que se escribe (8: entera; menos: recortada por la zona de la interfaz)
+ac_red          equ $DDA1               ; 0: el actor cabe; 1: pasada de cuenta de las celdas de pocos pixeles; 2: se dibuja sin ellas
+ac_minor        equ $DDA2               ; celdas de pocos pixeles contadas
+MINOR_PX        equ 4                   ; primer umbral: una celda con tantos pixeles o menos se omite si el actor no cabe en las ranuras
+ac_thr          equ $DDA3               ; umbral de la pasada de cuenta
