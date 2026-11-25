@@ -550,9 +550,8 @@ def poses4(cost):
     for dr in range(4):
         mir = MIRROR_OLD_DIR[dr] if dr < 2 else False
         m = {k: v for k, v in cost.merged(dr).items() if v}
-        if not m:
-            continue
-        out[dr] = [(m, p, mir) for p in cost.steps(m)]
+        if m:                                               # sin caminar ni parado (la planta de Maniac, traje 19: solo los fotogramas 3 y 4) siguen hablar y los overlays
+            out[dr] = [(m, p, mir) for p in cost.steps(m)]
         if 16 + dr <= cost.num_anim:
             base = dict(cost.anim_limbs(8 + dr))
             base.update(cost.anim_limbs(4 + dr))
