@@ -609,7 +609,7 @@ stop_object_code:                       ; stopObjectCode de v2
                 jr z,soc_g
                 cp WIO_LOCAL
                 jr z,soc_g
-                pop hl                  ; objeto o sala: numero 0 y muerta
+soc_k:          pop hl                  ; objeto o sala: numero 0 y muerta
                 xor a
                 ld (hl),a
                 inc hl
@@ -623,6 +623,9 @@ soc_g:
                 ld e,(hl)
                 inc hl
                 ld d,(hl)
+                ld a,d                  ; numero 0 (ranura revivida por un abortCutscene tras morir): stopScript(0) no la pararia; se mata como la de objeto
+                or e
+                jr z,soc_k
                 pop hl
                 call stop_script
 soc_end:

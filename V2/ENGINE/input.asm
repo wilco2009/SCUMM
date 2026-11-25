@@ -1084,6 +1084,9 @@ vm_abort_cutscene:
                 cp NSLOT
                 ret nc
                 call slot_addr
+                ld a,(hl)               ; la ranura ya ha muerto (el script del beginOverride acabo sin endCutscene: Maniac, script 29): no se revive
+                or a                    ; (ScummVM la revive con numero 0 y stopObjectCode -> stopScript(0) no la para: se repetiria en cada fotograma)
+                ret z
                 ld de,5
                 add hl,de
                 ld de,(CUTPTR)
