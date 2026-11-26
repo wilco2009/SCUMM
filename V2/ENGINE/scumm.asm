@@ -32,6 +32,7 @@ MSGW            equ 40
 DFILE           equ $9B00               ; (solo lo usan las marcas de depuracion, DIAG = 0)
 ERRPOS          equ $99C9               ; UIVB ($9900, ui.asm) + 5 * 40 + 1: la fila 21 de la zona de la interfaz (errores fatales)
 FONT_I          equ $38
+HU_DRT          equ $DDA9               ; palabra; distinta de 0: algo ha escrito en UIVB / MSGB desde el ultimo hr_ui (hrui.asm), que si no, no compara nada
 GLYPH0          equ 210                 ; codigos 210-255: la fuente (46 glifos); el 210 es el espacio y el tile en blanco
 NGLYPH          equ 46
 BLANK           equ GLYPH0
@@ -970,6 +971,7 @@ ag_ap:          ld a,45
 ; A = ASCII -> codigo de pantalla en (DE), DE avanza
 put_chr:        call ascii_glyph
                 add a,GLYPH0
+                ld (HU_DRT),a           ; (distinto de 0) hr_ui tiene que mirar la interfaz y los mensajes
                 ld (de),a
                 inc de
                 ret

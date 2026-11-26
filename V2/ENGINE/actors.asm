@@ -5,6 +5,11 @@ actors_update:  call ac_track
                 ret z
                 call gf_campx
                 ld (ac_cam),hl
+                ld de,(ac_pcam)         ; lo que se ha movido la camara: una entrada de la cache que sigue valiendo solo corrige la X de sus sprites (acc_ok)
+                ld (ac_pcam),hl
+                or a
+                sbc hl,de
+                ld (ac_dlt),hl
                 ld hl,(ac_stamp)
                 inc hl
                 ld (ac_stamp),hl
@@ -339,15 +344,7 @@ ac_cdraw:       call ac_hash
                 ld a,(ix+10)            ; caminando: ac_draw avanza el contador de la animacion, no se puede saltar
                 or a
                 jr z,acc_miss
-                ld a,(HAVEMSG)          ; hablando: tambien avanza (la boca)
-                or a
-                jr z,acc_ok
-                ld a,(ac_id)
-                ld b,a
-                ld a,(VAR_TALK_ACTOR)
-                cp b
-                jr z,acc_miss
-acc_ok:         push hl
+acc_ok:         push hl                 ; (hablando: la firma lleva la pose de la boca que toca; si no cambia, la cache vale y solo avanza el contador)
                 ld de,4
                 add hl,de
                 ld e,(hl)
@@ -373,7 +370,17 @@ acc_ok:         push hl
                 cp (hl)                 ; el mismo primer sprite
                 jr nz,acc_miss
                 inc hl
-                ld a,(hl)               ; cuantos sprites usa
+                ld c,(hl)               ; cuantos sprites usa (bit 7: alguna celda quedo fuera por la X; con la camara movida hay que dibujarlo)
+                ld hl,(ac_dlt)
+                ld a,h
+                or l
+                jr z,acc_nd
+                bit 7,c
+                jr nz,acc_miss
+                call ac_mvx
+                jr c,acc_miss
+acc_nd:         ld a,c
+                and $7F
                 ld hl,ac_n
                 add a,(hl)
                 ld (hl),a
@@ -384,9 +391,18 @@ acc_ok:         push hl
                 ld (hl),e
                 inc hl
                 ld (hl),d
+                call ac_tk
+                ret nc
+                ld hl,(ac_dlt)          ; con la camara en movimiento la boca no se mueve
+                ld a,h
+                or l
+                ret nz
+                inc (ix+45)             ; el que habla: el contador de la boca avanza como si se hubiera dibujado (acd_noov)
                 ret
 acc_miss:       ld a,(ac_n)
                 ld (ac_n0),a
+                xor a
+                ld (ac_xs),a
                 call ac_draw
                 ld hl,(ac_ent)
                 ld de,(ac_sg)
@@ -400,6 +416,10 @@ acc_miss:       ld a,(ac_n)
                 ld c,a
                 ld a,(ac_n)
                 sub c
+                ld c,a
+                ld a,(ac_xs)
+                rrca
+                or c
                 ld (hl),a
                 inc hl
                 ld de,(ac_stamp)
@@ -480,7 +500,8 @@ ampk_v:         push hl
                 ld a,c
                 cp 16
                 jr nz,ampk_l
-amk_t:          ld c,0                  ; ac_ptr = el primer codigo que la paleta no da (color transparente de las celdas de 4 bpp)
+amk_t:          call ac_pt
+                ld c,0                  ; ac_ptr = el primer codigo que la paleta no da (color transparente de las celdas de 4 bpp)
 amt_l:          ld hl,ac_pm
                 ld b,16
 amt_s:          ld a,(hl)
@@ -508,37 +529,53 @@ acd_pmap:       push af
                 ret
 apm_go:         pop af
                 push bc
-                push de
-                push hl
-                ld e,a
-                and 15
+                ld b,PALT/256
                 ld c,a
-                ld b,0
-                ld hl,ac_pm
-                add hl,bc
-                ld d,(hl)               ; D = papel nuevo
-                ld a,e
-                rrca
-                rrca
-                rrca
-                rrca
-                and 15
-                ld c,a
-                ld hl,ac_pm
-                add hl,bc
-                ld a,(hl)
-                rlca
-                rlca
-                rlca
-                rlca
-                and $F0
-                or d
-                pop hl
-                pop de
+                ld a,(bc)
                 pop bc
                 ret
 
-ac_hash:        ld hl,(ac_cam)
+; PALT = ac_pm aplicado a los dos nibbles de cada byte; se rehace solo si ac_pm no es el de la ultima vez (PALK)
+ac_pt:          ld hl,ac_pm
+                ld de,PALK
+                ld b,16
+apt_c:          ld a,(de)
+                cp (hl)
+                jr nz,apt_go
+                inc hl
+                inc de
+                djnz apt_c
+                ret
+apt_go:         ld hl,ac_pm
+                ld de,PALK
+                ld bc,16
+                ldir
+                ld hl,PALT
+                ld de,ac_pm             ; (ac_pm no cruza pagina: basta inc e)
+apt_h:          ld a,(de)               ; nibble alto: ac_pm[L >> 4]
+                rlca
+                rlca
+                rlca
+                rlca
+                ld c,a
+                push de
+                ld de,ac_pm
+apt_l:          ld a,(de)               ; nibble bajo: ac_pm[L & 15]
+                or c
+                ld (hl),a
+                inc e
+                inc l
+                ld a,l
+                and 15
+                jr nz,apt_l
+                pop de
+                inc e
+                ld a,l
+                or a
+                jr nz,apt_h
+                ret
+
+ac_hash:        ld hl,0                 ; (sin la camara: si solo se mueve ella, acc_ok mueve los sprites)
                 ld a,(ix+1)
                 call ach
                 ld a,(ix+2)
@@ -561,14 +598,16 @@ ac_hash:        ld hl,(ac_cam)
                 call ach
                 ld a,(ix+17)
                 call ach
-                ld a,(ix+45)
+                call ac_tk              ; hablar solo cambia el dibujo del que habla: los demas conservan la cache al salir o quitarse un mensaje
+                sbc a,a
+                push af
+                and 1                   ; el que habla: la pose que dibujara ac_draw (que avanza antes el contador)
+                add a,(ix+45)
                 srl a
                 srl a
                 srl a
                 call ach
-                ld a,(HAVEMSG)
-                call ach
-                ld a,(VAR_TALK_ACTOR)
+                pop af
                 call ach
                 push bc                 ; la paleta del actor (SO_PALETTE) cambia el dibujo
                 push hl
@@ -601,7 +640,155 @@ ach_p:          add a,(hl)
                 call ach
                 ex de,hl
                 ret
-ach:            ld d,h                  ; HL = HL * 31 + A
+; Z si la pagina de la hoja de la ranura ac_n - 1 ya tiene la celda ac_cp (del fondo ac_ppg) con la paleta de ahora; anota la nueva clave. Conserva HL
+; Clave de paleta: 0 sin paleta, $FF gris (luces), actor + 1 con su paleta. Si una paleta de actor ha cambiado (PALEP), se olvida todo
+ac_shc:         push hl
+                ld a,(PALEP)
+                ld hl,PALES
+                cp (hl)
+                jr z,ash_k
+                ld (hl),a
+                ld hl,SHKA
+                ld de,SHKA+1
+                ld bc,2*AC_MAX-1
+                ld (hl),0
+                ldir
+ash_k:          ld a,(ac_pf)
+                or a
+                jr z,ash_p
+                ld a,(VAR_CURRENT_LIGHTS)
+                and 8
+                ld a,$FF
+                jr z,ash_p
+                ld a,(ac_id)
+                inc a
+ash_p:          ld b,a
+                ld a,(ac_ppg)
+                ld c,a
+                ld de,(ac_cp)
+                ld a,(ac_n)
+                dec a
+                add a,a
+                add a,SHKA mod 256
+                ld l,a
+                ld h,SHKA/256
+                ld a,(hl)
+                xor e
+                ld (hl),e
+                inc l
+                ld e,a
+                ld a,(hl)
+                xor d
+                ld (hl),d
+                or e
+                ld e,a
+                ld h,SHKB/256
+                ld a,(hl)
+                xor b
+                ld (hl),b
+                dec l
+                or e
+                ld e,a
+                ld a,(hl)
+                xor c
+                ld (hl),c
+                or e
+                pop hl
+                ret
+
+acd_xsk:        ld a,1                  ; celda fuera por la X: no gasta ranura, pero el actor no puede moverse con la camara sin dibujarse
+                ld (ac_xs),a
+                jp acd_skip
+
+; A = campo 2 que se acaba de escribir en la ranura ac_n - 1: se guarda con el campo 1 (ac_cx) en SX. Conserva HL, DE y BC
+ac_sxs:         push hl
+                push af
+                ld a,(ac_n)
+                dec a
+                add a,a
+                add a,SX mod 256
+                ld l,a
+                ld h,SX/256
+                ld a,(ac_cx)
+                ld (hl),a
+                inc l
+                pop af
+                ld (hl),a
+                pop hl
+                ret
+
+; la camara se ha movido ac_dlt pixeles: C (bit 7 fuera) sprites del actor desde la ranura ac_n pasan a X - ac_dlt (SX y la ventana). Carry si alguno no
+; cabe en los 9 bits de la X: entonces se dibuja entero (acc_miss vuelve a escribir todas sus ranuras). Conserva C
+ac_mvx:         ld a,c
+                and $7F
+                ret z
+                ld b,a
+                ld a,(ac_n)
+amx_l:          push bc
+                push af
+                add a,a
+                add a,SX mod 256
+                ld l,a
+                ld h,SX/256
+                ld e,(hl)
+                inc l
+                ld a,(hl)
+                push af
+                and 1
+                ld d,a                  ; DE = X
+                push hl
+                ex de,hl
+                ld bc,(ac_dlt)
+                or a
+                sbc hl,bc
+                ex de,hl
+                pop hl
+                ld a,d
+                cp 2
+                jr nc,amx_out           ; por debajo de 0 o desde 512
+                pop af
+                and $FE
+                or d
+                ld (hl),a
+                dec l
+                ld (hl),e
+                ld d,a                  ; D = campo 2, E = campo 1
+                pop af
+                push af
+                push de
+                call ac_slot
+                pop de
+                inc hl
+                ld (hl),e
+                inc hl
+                ld (hl),d
+                pop af
+                pop bc
+                inc a
+                djnz amx_l
+                or a
+                ret
+amx_out:        pop af
+                pop af
+                pop bc
+                scf
+                ret
+
+; carry si hay mensaje y lo dice el actor ac_id (VAR_TALK_ACTOR). Conserva BC, DE y HL
+ac_tk:          ld a,(HAVEMSG)
+                or a
+                ret z
+                push hl
+                ld hl,(VAR_TALK_ACTOR)
+                ld a,(ac_id)
+                cp l
+                pop hl
+                scf
+                ret z
+                ccf
+                ret
+
+ach:            ld d,h                 ; HL = HL * 31 + A
                 ld e,l
                 add hl,hl
                 add hl,hl
@@ -798,14 +985,8 @@ aov_c:          ld a,e
 aov_s:          ld (ix+45),a
                 pop bc
                 jp acd_anim
-acd_noov:       ld a,(HAVEMSG)          ; hablando: la animacion 4 + direccion (la boca), si el traje la tiene
-                or a
-                jr z,acd_nt
-                ld a,(ac_id)
-                ld b,a
-                ld a,(VAR_TALK_ACTOR)
-                cp b
-                jr nz,acd_nt
+acd_noov:       call ac_tk              ; hablando: la animacion 4 + direccion (la boca), si el traje la tiene
+                jr nc,acd_nt
                 ld a,c
                 push bc
                 add a,4
@@ -1030,16 +1211,22 @@ acd_nd:         push iy                 ; las referencias del fotograma (u8 cx |
                 jr z,acd_go
                 ld a,MINOR_PX           ; umbral de pixeles de una celda "menor": 4, 8, 16 y 32 hasta que quepa
                 ld (ac_thr),a
-acd_rp:         push bc                 ; pasada de cuenta: cuantas de las celdas son menores (no dibuja nada)
-                xor a
-                ld (ac_minor),a
-                dec a
+                push bc                 ; pasada de cuenta (una sola, no dibuja nada): los pixeles de cada celda a AC_PX (acd_minor)
+                ld a,$FF
                 ld (ac_lpool),a
                 ld hl,AC_RB
                 call acd_cell
                 pop bc
-                ld a,(ac_minor)
-                ld e,a
+acd_rp:         push bc                 ; E = cuantas celdas son menores con el umbral ac_thr
+                ld hl,AC_PX
+                ld a,(ac_thr)
+                ld e,0
+arp_l:          inc hl
+                cp (hl)
+                jr c,arp_n
+                inc e
+arp_n:          djnz arp_l
+                pop bc
                 ld a,(ac_n)
                 add a,b
                 sub e
@@ -1095,6 +1282,7 @@ acd_cell:       ld a,b
                 inc hl
                 ld d,(hl)
                 ld (ac_pool),de
+                ld (ac_ppg),a
                 call map_page
 acd_pok:        pop af
                 pop bc
@@ -1120,11 +1308,7 @@ acd_pok:        pop af
                 call acd_minor          ; C: celda de pocos pixeles
                 ld a,(ac_red)
                 dec a
-                jr nz,acd_r2
-                jp nc,acd_skip          ; pasada de cuenta: no se dibuja nada; solo se cuentan las de pocos pixeles
-                ld hl,ac_minor
-                inc (hl)
-                jp acd_skip
+                jp z,acd_skip           ; pasada de cuenta: no se dibuja nada (acd_minor ha guardado los pixeles)
 acd_r2:         jp c,acd_skip           ; dibujo reducido: las de pocos pixeles no
 acd_nr:         ld a,(ac_pos)
                 ld c,a
@@ -1139,12 +1323,12 @@ acd_nr:         ld a,(ac_pos)
                 ld de,32
                 add hl,de
                 bit 7,h
-                jp nz,acd_skip
+                jp nz,acd_xsk
                 ld (ac_cx),hl
                 ld de,319
                 or a
                 sbc hl,de
-                jp nc,acd_skip
+                jp nc,acd_xsk
                 ld a,c
                 srl a
                 srl a
@@ -1191,6 +1375,8 @@ acd_rw:         ld a,e
                 ld (hl),e
                 inc hl
                 ld (hl),d               ; X bit 8 (el nibble alto, el color transparente, a 0: formato A)
+                ld a,d
+                call ac_sxs
                 inc hl
                 ld a,(ac_cy)
                 ld (hl),a
@@ -1277,6 +1463,7 @@ ab4_t:          ld a,b
                 ld a,(ac_cx+1)
                 or b
                 ld (de),a               ; X bit 8 y transparente
+                call ac_sxs
                 ld a,(ac_n)             ; la pagina de la hoja de esta ranura (bloque 0, POKE 2129 = 0)
                 dec a
                 call ac_shp
@@ -1296,49 +1483,28 @@ ab4_t:          ld a,b
                 ld hl,(ac_cp)
                 inc hl
                 inc hl                  ; los 32 bytes de pixeles
-                ld a,(ac_pf)
+                push de
+                call ac_shc
+                pop de
+                jr nz,ab4_cp
+                ld bc,32                ; la pagina de la ranura ya tiene esta celda con esta paleta: no se copia
+                add hl,bc
+                jr ab4_m
+ab4_cp:         ld a,(ac_pf)
                 or a
                 jr nz,ab4_p
                 ld bc,32
                 ldir
                 jr ab4_m
-ab4_p:          ld b,32                 ; con la paleta del actor: nibble a nibble
-ab4_pl:         push bc
-                ld a,(hl)
-                push hl
-                rrca
-                rrca
-                rrca
-                rrca
-                and 15
-                ld c,a
-                ld b,0
-                ld hl,ac_pm
-                add hl,bc
-                ld a,(hl)
-                rlca
-                rlca
-                rlca
-                rlca
-                ld c,a
-                pop hl
-                ld a,(hl)
-                push hl
-                push bc
-                and 15
-                ld c,a
-                ld b,0
-                ld hl,ac_pm
-                add hl,bc
-                pop bc
-                ld a,(hl)
-                or c
+ab4_p:          ld b,PALT/256           ; con la paleta del actor: por la tabla PALT (DE = la celda en la hoja, alineada a 32)
+ab4_pl:         ld c,(hl)
+                ld a,(bc)
                 ld (de),a
-                pop hl
                 inc hl
                 inc de
-                pop bc
-                djnz ab4_pl
+                ld a,e
+                and 31
+                jr nz,ab4_pl
 ab4_m:          ld de,ac_mt             ; la forma -> mascara (con la de profundidad)
                 ld bc,8
                 ldir
@@ -1349,9 +1515,20 @@ acd_skip:       ld hl,(ac_nx)
                 jp acd_cell
 
 ; C si la celda (ac_cp, ac_fl) es de 4 bpp y su forma tiene ac_thr pixeles o menos (solo se mira con ac_red != 0, cuando el actor no cabe)
-acd_minor:      ld a,(ac_fl)
+; B = celdas que quedan (su indice en AC_PX). En la pasada de cuenta (ac_red 1) los pixeles se cuentan y se guardan ($FF: no es de 4 bpp, nunca es menor);
+; en el dibujo reducido se leen de alli
+acd_minor:      ld hl,AC_PX
+                ld e,b
+                ld d,0
+                add hl,de
+                ld a,(ac_red)
+                dec a
+                jr nz,amn_u
+                push hl
+                ld c,$FF
+                ld a,(ac_fl)
                 and 4
-                ret z
+                jr z,amn_s
                 ld hl,(ac_cp)
                 ld de,34                ; tras las banderas, los 32 bytes de pixeles y luego los 8 de la forma
                 add hl,de
@@ -1367,10 +1544,12 @@ amn_b:          or a
                 inc c
                 jr amn_b
 amn_n:          djnz amn_l
-                ld a,(ac_thr)
+amn_s:          pop hl
+                ld (hl),c
+amn_u:          ld a,(ac_thr)
                 inc a
                 ld e,a
-                ld a,c
+                ld a,(hl)
                 cp e
                 ret
 

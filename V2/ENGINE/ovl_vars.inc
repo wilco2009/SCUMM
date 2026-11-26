@@ -107,7 +107,14 @@ AC_RB           equ $DC85               ; las referencias del fotograma que se d
 WALK_OVL        equ 128                 ; clave de las poses de caminar con overlay: WALK_OVL + 4 * f + dir (TOOLS/costume2.py)
 XD_MARK         equ $5A
 SPRX            equ $0000               ; entradas de los sprites extra en la hoja del bloque 0 (POKE 2129 = 0; entrada j = SPRX + 32 * j; PLAN_TRAJES4.md)
-ac_pm           equ $94EA               ; 16 bytes: la paleta del actor que se dibuja, de codigo Chroma a codigo Chroma (ac_mkpal); dentro de lo libre entre AC_LC y BACKBUF
+PALT            equ $B900               ; 256 bytes alineados: byte de color de celda (dos nibbles) -> el mismo con ac_pm (ac_pt). Bloque del bitmap, bufer de abajo del scroll
+                                        ; vertical ($1900-$19DF, que no usamos) y lo que sigue hasta $19FF; hr_clear lo pone a cero junto con PALK (tabla y clave siguen casando)
+SHKA            equ $D960               ; 2 x AC_MAX: por ranura, la celda que tiene su pagina de la hoja (ac_cp; 0 = ninguna) (bufer de abajo de atributos, sin uso)
+SHKB            equ $DA60               ; 2 x AC_MAX: pagina del fondo y clave de paleta de esa celda (detras de HR_FLAGS). Mismo byte bajo que SHKA
+PALES           equ $DBF0+1             ; el PALEP con el que se lleno la cache de la hoja
+ac_ppg          equ $DBF0+2             ; pagina del fondo de celdas mapeado (ac_pool)
+PALK            equ $B8F0               ; 16 bytes: el ac_pm con el que se hizo PALT (libre: detras de la entrada derecha HR_RBM, $1800-$18BF)
+ac_pm           equ $94EA              ; 16 bytes: la paleta del actor que se dibuja, de codigo Chroma a codigo Chroma (ac_mkpal); dentro de lo libre entre AC_LC y BACKBUF
 ac_pf           equ $94FA               ; 0: el actor lleva la paleta de identidad (no hay que remapear los colores de sus celdas)
 AC_MAX          equ 78                  ; ranuras de sprite de los personajes: 63 normales (el 63 es el cursor) y 15 extra (entradas 0 y 2-15)
 AC_OVF          equ $9490           ; NACTORS bytes: el fotograma de overlay de cada actor (0: ninguno): el ultimo que no es caminar, parado, inicio ni hablar
@@ -119,6 +126,12 @@ AC_LC           equ $94D0           ; NACTORS bytes: su traje la ultima vez
 cm_lx           equ ACSIG+191           ; (fuera de lo que guarda save.asm: no cambia la marca de las partidas) camara: ultima x (celdas, byte bajo) del actor que se sigue; si no cambia, el cursor en el borde mueve la camara (cam.asm)
 ac_rows         equ $DDA0               ; filas visibles de la celda que se escribe (8: entera; menos: recortada por la zona de la interfaz)
 ac_red          equ $DDA1               ; 0: el actor cabe; 1: pasada de cuenta de las celdas de pocos pixeles; 2: se dibuja sin ellas
-ac_minor        equ $DDA2               ; celdas de pocos pixeles contadas
+SX              equ $BE60               ; 2 x AC_MAX: por ranura, los campos 1 y 2 (X y X bit 8 | transparente) tal como se escribieron (la ventana no se puede leer:
+                                        ; el bloque 0 lee el overlay). Detras de HR_DLIST (hasta 84 objetos); mismo byte bajo en todo el rango
+ac_pcam         equ $DDA4               ; palabra: la camara del fotograma anterior
+ac_dlt          equ $DDA6               ; palabra: camara de ahora - ac_pcam
+ac_xs           equ $DDA8
+HU_ST           equ $DDAB               ; tx_on + 2 * hv_top del ultimo hr_ui: si cambia, otra fuente en pantalla               ; 1: en el dibujo del actor alguna celda quedo fuera por la X (mas de 32 px fuera de la pantalla)
+AC_PX           equ $DBB0               ; 1 + 39 bytes: pixeles de cada celda del actor que no cabe (indice = celdas que quedan; acd_minor)
 MINOR_PX        equ 4                   ; primer umbral: una celda con tantos pixeles o menos se omite si el actor no cabe en las ranuras
 ac_thr          equ $DDA3               ; umbral de la pasada de cuenta

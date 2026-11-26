@@ -24,6 +24,20 @@ hu_tk           equ ACSIG+175           ; la tecla T en el fotograma anterior (b
 hr_ui:          push ix
                 call hu_xkey
                 call hu_tkey
+                ld a,(hv_top)           ; sin nada escrito (HU_DRT) y con las mismas fuentes (tx_on, hv_top) no hay nada que comparar
+                add a,a
+                ld hl,tx_on
+                or (hl)
+                ld hl,HU_ST
+                cp (hl)
+                ld (hl),a
+                jr nz,hu_go
+                ld hl,(HU_DRT)
+                ld a,h
+                or l
+                jp z,hu_end
+hu_go:          ld hl,0
+                ld (HU_DRT),hl
                 xor a
                 ld (hu_pass),a
                 ld a,UI_R0

@@ -45,33 +45,6 @@ ui_init:        ld hl,UI_DIRTY
                 ld bc,0+(24-UI_R0)*UI_COLS-1
                 jp ui_fill
 
-; ------------------------------------------------------------------------------------------ cursorCommand
-; ARGS: palabra; el byte alto es el estado de usuario (ver USERSTATE_* de ScummVM)
-ui_cursorcmd:   ld a,(ARGS)             ; el byte bajo, si no es 0, es VAR_CURSORSTATE (variable 21)
-                or a
-                jr z,uc0
-                ld l,a
-                ld h,0
-                ld (VAR_CURSORSTATE),hl
-uc0:            ld a,(ARGS+1)
-                ld b,a
-                bit 2,a                 ; USERSTATE_SET_IFACE
-                jr z,uc1
-                and $E0
-                ld (UI_IFACE),a
-                ld a,7
-                ld hl,UI_DIRTY
-                or (hl)
-                ld (hl),a
-uc1:            bit 1,b                 ; USERSTATE_SET_CURSOR
-                ret z
-                ld a,b
-                and $10
-                jr z,uc2
-                ld a,1
-uc2:            ld (UI_CURSOR),a
-                ret
-
 ; --------------------------------------------------------------------------------------------- verbOps
 ; ARGS: subcodigo; 0: borrar (ranura); $FF: verbo, modo; otro: es el verbo y siguen x, y, ranura, prep y la cadena (STRP)
 ui_verbops:     ld a,(ARGS)
@@ -288,7 +261,8 @@ ui_row:         sub UI_R0
 ui_clear_row:   call ui_row
                 ld a,BLANK
                 ld bc,UI_COLS-1
-ui_fill:        ld (hl),a               ; A en BC + 1 bytes desde HL
+ui_fill:        ld (HU_DRT),hl          ; (H no es 0) hr_ui tiene que mirar: los rellenos de la interfaz pasan todos por aqui
+                ld (hl),a               ; A en BC + 1 bytes desde HL
                 ld d,h
                 ld e,l
                 inc de
@@ -974,38 +948,6 @@ uki_d:          ld a,(UI_INVO)
                 ld (UI_INVO),a
 uki_r:          ld a,(UI_DIRTY)
                 or 4
-                ld (UI_DIRTY),a
-                ret
-
-; cutscene() (A original = $40) y endCutscene() ($C0): el jugador no ve la interfaz ni el cursor durante la cutscene; al acabar vuelve todo
-; y la camara sigue al protagonista (o2_cutscene / o2_endCutscene de ScummVM)
-ui_cutscene:    ld a,c
-                cp $C0
-                jr z,ui_endcut
-                ld a,(UI_IFACE)
-                ld (UI_SIF),a
-                ld a,(UI_CURSOR)
-                ld (UI_SCUR),a
-                ld hl,(VAR_CURSORSTATE)
-                ld (UI_SV21),hl
-                ld hl,200
-                ld (VAR_CURSORSTATE),hl
-                xor a
-                ld (UI_IFACE),a
-                ld (UI_CURSOR),a
-                jr uc_dirty
-ui_endcut:      ld a,(UI_SIF)
-                ld (UI_IFACE),a
-                ld a,(UI_SCUR)
-                ld (UI_CURSOR),a
-                ld hl,(UI_SV21)
-                ld (VAR_CURSORSTATE),hl
-                ld a,2
-                ld (cam_mode),a
-                ld a,$FF
-                ld (cam_fol),a
-uc_dirty:       ld a,(UI_DIRTY)
-                or 7
                 ld (UI_DIRTY),a
                 ret
 

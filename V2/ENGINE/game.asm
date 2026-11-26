@@ -56,6 +56,7 @@ HOSTVEC         equ $EB6F       ; palabra: rutina de las instrucciones que van a
 EVVEC           equ $EB6B       ; palabra: rutina que atiende los sucesos del back-end (vm_init la pone a ev_null)
 TXTSTART        equ $EB6D       ; palabra: donde empieza, en el bufer de texto, lo que escribe display_dialog esta vez
 ACTORS          equ $EF00       ; NACTORS x ASIZE
+PALEP           equ $DBF0       ; sube cada vez que se toca una paleta de actor (ao_palad): la cache de celdas de la hoja (ac_shc, actors.asm) se olvida
 ACTPAL          equ $E830       ; paleta de cada actor (actorOps SO_PALETTE; 8 bytes por actor = 16 nibbles): el nibble del indice i guarda i XOR color, asi 0 = la paleta de identidad (_palette[i] = i)
 ROOMDIR         equ $F400       ; 64 x 16: pagina de entrada, direccion, pagina de salida, direccion, ancho,
                                 ;          pagina, direccion y tamano de los datos de cajas y objetos
@@ -439,7 +440,9 @@ ao_cost:
                 ld a,(ARGS+2)
                 jp set_costume
 ; la paleta del actor (ACTPAL + 8 * actor)
-ao_palad:       ld a,(ARGS)
+ao_palad:       ld hl,PALEP
+                inc (hl)
+                ld a,(ARGS)
                 ld l,a
                 ld h,0
                 add hl,hl
