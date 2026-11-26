@@ -287,7 +287,10 @@ def build(world, game, first_page=16, include_test=False, sounds=None, debug_roo
                 na = max(keymap) + 1
                 dirb = bytes([na]) + b''.join(struct.pack('<BH', *keymap.get(k, (0, 0))) for k in range(na)) + \
                     bytes([len(poolat)]) + b''.join(struct.pack('<BH', *w) for w in poolat)
-                costdir[3 * cid:3 * cid + 3] = struct.pack('<BH', *pk.add(dirb))      # COSTDIR -> directorio: u8 na, na x (pagina, direccion), u8 fondos, fondos x (pagina, direccion)
+                trans = costume2.overlay_combos(cost)[1]       # complementos que se suman (gafas y sombrero): u8 n y n x (actual, fotograma, nuevo); ac_setfr
+                assert len(trans) < 256
+                dirb += bytes([len(trans)]) + b''.join(bytes(t) for t in trans)
+                costdir[3 * cid:3 * cid + 3] = struct.pack('<BH', *pk.add(dirb))      # COSTDIR -> directorio: u8 na, na x (pagina, direccion), u8 fondos, fondos x (pagina, direccion), u8 transiciones, n x 3
     snd_ref = struct.pack('<BH', *pk.add(sound_table(sounds))) if sounds else bytes(3)
     # Las mascaras de profundidad (la de la sala y las de sus objetos, room_mask) van al final: asi no desplazan los scripts, que son a lo que apuntan las
     # partidas guardadas (save.asm). En el sitio donde iban las de antes (solo la de la sala) queda un hueco del mismo tamano.

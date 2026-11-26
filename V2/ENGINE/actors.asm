@@ -238,7 +238,16 @@ act_c:          ld hl,AC_LF
                 jr z,act_s
                 cp 6
                 jr c,act_r              ; parado, hablar: no cambian el overlay
-act_s:          ld (hl),a
+act_s:          push bc                 ; complementos que se suman (las gafas y el sombrero: ScummVM cambia solo los miembros que nombra cada animacion):
+                push hl                 ; el estado nuevo sale de la tabla del traje (TOOLS/costume2.py overlay_combos)
+                ld c,a
+                ld a,(hl)
+                and $7F
+                ld b,a
+                call ac_trans
+                pop hl
+                pop bc
+                ld (hl),a
                 ld (ix+45),0            ; el overlay nuevo empieza su animacion
                 jr act_r
 act_0:          ld a,(hl)               ; caminar / inicio: el overlay queda pendiente de quitar (bit 7); ac_draw lo quita salvo que el traje diga que no lo toca
@@ -247,6 +256,64 @@ act_0:          ld a,(hl)               ; caminar / inicio: el overlay queda pen
                 or $80
                 ld (hl),a
 act_r:          ret
+
+; B = overlay puesto, C = fotograma nuevo, IX = actor -> A = overlay que queda: el de la tabla de transiciones del traje (detras de los fondos en su
+; directorio: u8 n y n x (actual, fotograma, nuevo)) o C si no esta. Deja en la ventana de datos la pagina del script en curso
+ac_trans:       ld a,(ix+5)
+                cp 64
+                jr nc,atr_no
+                ld e,a
+                ld d,0
+                ld hl,COSTDIR
+                add hl,de
+                add hl,de
+                add hl,de
+                ld a,(hl)
+                or a
+                jr z,atr_no
+                inc hl
+                ld e,(hl)
+                inc hl
+                ld d,(hl)
+                push bc
+                call map_page
+                pop bc
+                ex de,hl                ; HL = directorio
+                call atr_skip           ; las animaciones
+                call atr_skip           ; los fondos
+                ld a,(hl)
+                inc hl
+                or a
+                jr z,atr_nf
+                ld d,a
+atr_l:          ld a,b
+                cp (hl)
+                inc hl
+                jr nz,atr_2
+                ld a,c
+                cp (hl)
+                inc hl
+                jr nz,atr_1
+                ld a,(hl)
+                jr atr_f
+atr_2:          inc hl
+atr_1:          inc hl
+                dec d
+                jr nz,atr_l
+atr_nf:         ld a,c
+atr_f:          push af
+                call restore_win
+                pop af
+                ret
+atr_no:         ld a,c
+                ret
+atr_skip:       ld e,(hl)               ; HL = u8 n y n x 3 bytes -> HL detras
+                ld d,0
+                inc hl
+                add hl,de
+                add hl,de
+                add hl,de
+                ret
 
 ; ---------------------------------------------------------------------------------------------------------------------------------
 ;  Cache de sprites: si un actor tiene la misma firma (posicion, traje, pose, direccion, camara, quien habla) y los mismos sprites que en el

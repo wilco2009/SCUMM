@@ -373,13 +373,21 @@ cm_pan:         ld hl,(cam_cx)
                 ld de,(cam_dest)
                 or a
                 sbc hl,de
-                jp z,cm_fin
+                jp z,cp_end
                 jr c,cp_up
                 ld hl,(cam_cx)
                 ld de,8
                 or a
                 sbc hl,de
                 ld (cam_cx),hl
+                jp cm_fin
+; el pan ha llegado: la camara queda quieta y el cursor en el borde puede desplazarla (cm_edge); el destino la acompana. Nuestra ventana (256) es mas estrecha
+; que la pantalla original (320): un script que reanuda el seguimiento al pasar de cierta x (sala 3, x < 656) deja el limite izquierdo de la ventana por encima de esa x
+; y el protagonista no podria llegar a ella nunca
+cp_end:         call cm_edge
+                call cm_clamp
+                ld hl,(cam_cx)
+                ld (cam_dest),hl
                 jp cm_fin
 cp_up:          ld hl,(cam_cx)
                 ld de,8

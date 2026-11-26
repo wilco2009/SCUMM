@@ -77,6 +77,15 @@ no compilar el firmware del STM32 (y no usar el MCU para esto: todo en el Z80); 
 - Pendiente de limpiar: funciones viejas sin uso (scaled_costume, best_costume, walk_pages, walk_blob_fit en pack_data; costume_blob,
   walk_overlay_blob, cells_of con escala, blob4 ya no existe) y `[trajes] escala` de games/zak.cfg.
 
+## Complementos que se suman (23-11-2026, sin commit)
+
+- Gafas y sombrero del ego (script 150: animateActor 1 con Var[164], Var[167] y 68): en ScummVM cada animacion cambia solo los miembros que
+  nombra y los fotogramas se suman; AC_OVF guardaba solo el ultimo (el 17, que no dibuja nada). costume2.overlay_combos: complementos = miembros
+  que no nombran las animaciones 0-23; los estados que no son de un fotograma solo son fotogramas virtuales (desde num_anim // 4 + 1, con poses
+  parado y caminar). El directorio del traje lleva detras de los fondos u8 n y n x (actual, fotograma, nuevo); ac_trans (actors.asm) lo busca
+  en act_s. Zak: 12 virtuales, 118 transiciones; DATA.BIN 159 paginas (antes 141).
+- save.asm: COSTDIR ($FF40) esta en la zona guardada; al cargar se conserva el de la DATA.BIN actual (como ROOMDIR+13).
+
 ## Etapas
 
 1. [hecho] Arnes y render con formato B.

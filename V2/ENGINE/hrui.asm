@@ -18,6 +18,7 @@ hu_n            equ ACSIG+172           ; filas de la pasada
 hu_pv           equ ACSIG+173           ; palabra: lo pintado de la pasada
 hu_bk           equ ACSIG+176           ; la tecla B en el fotograma anterior (bit 4 del puerto $7F)
 hu_xk           equ ACSIG+177           ; teclas U I J K L del fotograma anterior (1 = pulsada): bits 7 6 3 2 1
+hu_dk           equ ACSIG+178           ; la tecla '.' en el fotograma anterior (bit 1 del puerto $7F)
 hu_tk           equ ACSIG+175           ; la tecla T en el fotograma anterior (bit 4 del puerto $FB: 0 = pulsada)
 
 hr_ui:          push ix
@@ -240,7 +241,20 @@ hu_tkey:        ld a,$7F                ; B (flanco): salta el mensaje en pantal
                 push de
                 call kr_esc
                 pop de
-ht_nb:          ld a,$FB
+ht_nb:          ld a,$7F                ; '.' (flanco, la VAR_TALKSTOP_KEY de ScummVM): solo acaba la espera del mensaje (no aborta la cutscene, como la B)
+                in a,(254)
+                and 2
+                ld hl,hu_dk
+                ld c,(hl)
+                ld (hl),a
+                or a
+                jr nz,ht_nd
+                ld a,c
+                or a
+                jr z,ht_nd
+                ld hl,0
+                ld (TALKDLY),hl
+ht_nd:          ld a,$FB
                 in a,(254)
                 and $10
                 ld hl,hu_tk

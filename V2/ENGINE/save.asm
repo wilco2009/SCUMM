@@ -209,7 +209,8 @@ sll_c:          ld a,(de)
                 ld hl,3
                 jp sl_res
 ; Las mascaras de profundidad (y las de los objetos) van al final de DATA.BIN (TOOLS/pack_data.py: asi no mueven los scripts y las partidas de antes valen), pero ROOMDIR
-; esta en la zona que guarda la partida: sin esto la partida cargada traeria los punteros de la compilacion con la que se guardo. Se guardan en BACKBUF y se devuelven.
+; esta en la zona que guarda la partida: sin esto la partida cargada traeria los punteros de la compilacion con la que se guardo. Se guardan en BACKBUF y se devuelven
+; (y detras COSTDIR, por lo mismo: BACKBUF+192, 192 bytes).
 sv_stashmk:     ld hl,ROOMDIR+13
                 ld de,BACKBUF
                 ld a,64
@@ -219,6 +220,9 @@ ssm_l:          ld bc,3
                 add hl,bc
                 dec a
                 jr nz,ssm_l
+                ld hl,COSTDIR           ; y los trajes (COSTDIR, $FF40: tambien en la zona guardada): una partida de otra DATA.BIN traeria los directorios viejos
+                ld bc,64*3
+                ldir
                 ret
 sv_unstashmk:   ld hl,BACKBUF
                 ld de,ROOMDIR+13
@@ -231,6 +235,10 @@ sum_l:          ld bc,3
                 ex de,hl
                 dec a
                 jr nz,sum_l
+                ld hl,BACKBUF+64*3
+                ld de,COSTDIR
+                ld bc,64*3
+                ldir
                 ret
 sll_bad:        ld a,(sv_h)
                 call f_close

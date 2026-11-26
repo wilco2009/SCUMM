@@ -541,6 +541,63 @@ ACD_RMAX = 39         # referencias por fotograma como mucho (el bufer AC_RB del
 CELL4 = 4             # bandera de celda de 4 bpp en el fondo de celdas: 32 bytes de pixeles y 8 de forma
 
 
+def overlay_combos(cost):
+    """Complementos que se suman (las gafas y el sombrero de Zak: script 150, animateActor 1 con Var[164], Var[167] y 68). En ScummVM cada
+    animacion solo cambia los miembros que nombra, asi que varios fotogramas de overlay seguidos se suman; el Z80 guarda uno solo (AC_OVF).
+    Complementos = miembros que no nombran caminar, parado, inicio ni hablar (animaciones 0-23); fotogramas de complemento = los de overlay que
+    solo nombran complementos. Se recorren los estados (miembro -> imagen, por direccion) que salen de ponerlos en cualquier orden; los que no
+    son el de un fotograma solo reciben un fotograma virtual (desde num_anim // 4 + 1; poses en las claves 4 * v + dir y WALK_OVL + 4 * v + dir).
+    Devuelve ({v: [miembros por direccion]}, [(actual, fotograma, nuevo)]): las transiciones cuyo resultado no es el del fotograma solo
+    (el Z80 las busca en ac_setfr; si no esta, AC_OVF = fotograma, como antes)."""
+    base = set()
+    for a in range(min(24, cost.num_anim + 1)):
+        base |= set(cost.anim_limbs(a))
+    named = {}
+    for f in overlay_frames(cost):
+        n = set()
+        for dr in range(4):
+            if 4 * f + dr <= cost.num_anim:
+                n |= set(cost.anim_limbs(4 * f + dr))
+        if n and not n & base:
+            named[f] = n
+    if not named:
+        return {}, []
+
+    def apply(sig, f):
+        out = []
+        for dr in range(4):
+            d = dict(sig[dr])
+            if 4 * f + dr <= cost.num_anim:
+                d.update(cost.anim_limbs(4 * f + dr))
+            out.append(frozenset((k, v) for k, v in d.items() if v is not None))
+        return tuple(out)
+
+    empty = tuple(frozenset() for _ in range(4))
+    ids = {empty: 0}
+    for f in named:                                     # el estado de cada fotograma solo: su propio numero (el primero, si dos dan lo mismo)
+        ids.setdefault(apply(empty, f), f)
+    own = {f: ids[apply(empty, f)] for f in named}
+    virt, todo, trans = {}, [empty] + [apply(empty, f) for f in named], []
+    nxt = cost.num_anim // 4 + 1
+    seen = set()
+    while todo:
+        sig = todo.pop(0)
+        if sig in seen:
+            continue
+        seen.add(sig)
+        for f in named:
+            t = apply(sig, f)
+            if t not in ids:
+                ids[t] = nxt
+                virt[nxt] = [dict(t[dr]) for dr in range(4)]
+                nxt += 1
+            if ids[t] != own[f]:
+                trans.append((ids[sig], f, ids[t]))
+            todo.append(t)
+    assert 4 * (nxt - 1) + 3 < WALK_OVL, 'demasiadas combinaciones de complementos'
+    return virt, trans
+
+
 def poses4(cost):
     """Las poses de un traje para los sprites de 4 bpp, por clave: {clave: [(miembros, posicion, espejo), ...]}. 0-3 caminar (todos los pasos;
     parado = el primero), 4-7 hablar (boca abierta y cerrada), 4 * f + dir el overlay f parado (sobre reposo + TALK_STOP, como costume_blob),
@@ -589,6 +646,21 @@ def poses4(cost):
                     if len(seq) > WALK_OVL_STEPS:                   # caminar con overlay: como mucho WALK_OVL_STEPS pasos, repartidos (si no, no cabe en 255 paginas)
                         seq = [seq[i * len(seq) // WALK_OVL_STEPS] for i in range(WALK_OVL_STEPS)]
                     out[WALK_OVL + anim] = [(l, p, mir) for p in seq]
+    for v, per in overlay_combos(cost)[0].items():          # combinaciones de complementos (overlay_combos): se conservan al caminar (no nombran sus miembros)
+        for dr in range(4):
+            if dr not in out:
+                continue
+            mir = MIRROR_OLD_DIR[dr] if dr < 2 else False
+            l = dict(cost.merged(dr))
+            if 16 + dr <= cost.num_anim:
+                l.update(cost.anim_limbs(16 + dr))
+            l.update(per[dr])
+            l = {k: x for k, x in l.items() if x}
+            out[4 * v + dr] = [(l, cost.steps(l)[0], mir)]
+            l = dict(cost.merged(dr))
+            l.update(per[dr])
+            l = {k: x for k, x in l.items() if x}
+            out[WALK_OVL + 4 * v + dr] = [(l, p, mir) for p in cost.steps(l)]
     assert cost.num_anim < WALK_OVL and max(out, default=0) < 256, 'claves de animacion fuera de rango'
     return out
 
@@ -641,6 +713,7 @@ def costume4(cost, emap, limit=6100):
     ([(claves, bytes)], [bytes de cada fondo]). Fondo: u16 offset de cada celda (desde el principio del fondo) y los registros (cell_rec4)."""
     em = emap_of(cost, emap)
     poses = poses4(cost)
+    virt = overlay_combos(cost)[0]
     order = [k for k in range(4) if k in poses] + [k for k in range(4, 8) if k in poses] + \
         sorted(k for k in poses if 8 <= k < WALK_OVL) + sorted(k for k in poses if k >= WALK_OVL)
     recs, rec_id, keyframes = [], {}, {}
@@ -662,7 +735,7 @@ def costume4(cost, emap, limit=6100):
                     recs.append(rec)
                 refs.append((p, rec_id[rec]))
             frs.append((gx, gy, cw, ch, refs))
-        sticky = 8 <= key < WALK_OVL and overlay_kept(cost, key, key % 4)
+        sticky = 8 <= key < WALK_OVL and (key // 4 in virt or overlay_kept(cost, key, key % 4))
         keyframes[key] = (sticky, frs)
     pools, cell_at, cur, size = [], {}, [], 0                     # fondos de celdas, en orden de primer uso
     for gid, rec in enumerate(recs):
